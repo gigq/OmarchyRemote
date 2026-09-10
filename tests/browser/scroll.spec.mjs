@@ -5,7 +5,7 @@ import {captureTerminals,visibleText,exitShell} from './terminal-helper.mjs';
 async function state(page){return page.evaluate(()=>{const t=window.qaTerms[0],b=t.buffer.active;return{top:b.viewportY,bottom:b.baseY,first:b.getLine(b.viewportY)?.translateToString(true),last:b.getLine(b.length-1)?.translateToString(true)}})}
 async function drag(page,from,to){const cdp=await page.context().newCDPSession(page);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:200,y:from}]});for(let i=1;i<=6;i++){await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:200,y:from+(to-from)*i/6}]});await page.waitForTimeout(20)}await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach()}
 async function stopCoast(page){const cdp=await page.context().newCDPSession(page);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:200,y:400}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach()}
-async function key(page,label){await page.locator('button.touch-key').filter({hasText:new RegExp('^'+label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$')}).click()}
+async function key(page,label){const field=page.locator('.native-input:visible');if(label==='⏎')await field.press('Enter');else await field.pressSequentially(label==='space'?' ':label)}
 
 test('Terminal touch drags read history without opening the keyboard',async({page})=>{
  await captureTerminals(page);await page.goto('/native/');await page.getByText('terminal',{exact:true}).first().click();await expect(page.locator('#remote-terminal-app')).toContainText('HOST · connected');
@@ -13,8 +13,8 @@ test('Terminal touch drags read history without opening the keyboard',async({pag
   await page.evaluate(()=>qaTerms[0].input('seq 1 160\r'));
   await expect.poll(async()=>(await state(page)).bottom).toBeGreaterThan(90);
   await drag(page,300,550);
-  const released=(await state(page)).top;await page.waitForTimeout(180);expect((await state(page)).top).toBeLessThan(released);
-  await stopCoast(page);const stopped=(await state(page)).top;await page.waitForTimeout(250);expect((await state(page)).top).toBe(stopped);
+  await page.waitForTimeout(250);
+  const pixels=await page.locator('.remote-terminal .native-terminal-scroll').evaluate(el=>{const before=el.scrollTop;el.scrollTop=before-5;return {before,after:el.scrollTop}});expect(pixels.before-pixels.after).toBeCloseTo(5,0);
   await expect.poll(async()=>{const s=await state(page);return s.bottom-s.top}).toBeGreaterThan(10);
   await expect(page.locator('#remote-terminal-app')).not.toHaveClass(/with-keyboard/);
   await expect(page.getByRole('button',{name:'↓ Latest'})).toBeVisible();
@@ -45,6 +45,7 @@ test('Herdr touch history stays anchored during updates and typed text is visibl
 
   expect((await state(page)).first).toBe(anchor);
   await page.getByRole('button',{name:'⌨ Keyboard'}).click();
+  await page.getByRole('button',{name:'Switch typing mode'}).click();
   for(const k of ['e','c','h','o','space','h','e','l','l','o'])await key(page,k);
   await expect.poll(async()=>(await state(page)).last).toContain('echo hello');
   await expect.poll(async()=>{const s=await state(page);return s.bottom-s.top}).toBe(0);

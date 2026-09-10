@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 import {captureTerminals,visibleText,exitShell} from './terminal-helper.mjs';
 test.beforeEach(async({page})=>captureTerminals(page));
-const key=async(page,label)=>page.locator('button.touch-key').filter({hasText:new RegExp('^'+label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$')}).click();
+async function key(page,label){const field=page.locator('.native-input:visible');if(label==='⏎')await field.press('Enter');else await field.pressSequentially(label==='space'?' ':label)}
 
 test('custom keyboard drives the real shell and resumes after page reload',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -33,8 +33,8 @@ test('Herdr lists real workspaces and opens output without sending input',async(
  await page.screenshot({path:'artifacts/browser/herdr-list.png'});
  await page.locator('.herdr-pane').first().click();await expect(page.locator('.herdr-detail')).toBeVisible();await expect.poll(()=>visibleText(page)).not.toMatch(/^\s*$/);
  await page.waitForTimeout(600);await page.screenshot({path:'artifacts/browser/herdr-pane.png'});
- const wide=await page.locator('.herdr-output').evaluate(el=>el.scrollWidth>el.clientWidth);
- if(wide){const cdp=await page.context().newCDPSession(page);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:300,y:400}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:100,y:400}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await expect.poll(()=>page.locator('.herdr-output').evaluate(el=>el.scrollLeft)).toBeGreaterThan(0);await cdp.detach()}
+ const wide=await page.locator('.herdr-output .native-terminal-scroll').evaluate(el=>el.scrollWidth>el.clientWidth);
+ if(wide){const cdp=await page.context().newCDPSession(page);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:300,y:400}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:100,y:400}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await expect.poll(()=>page.locator('.herdr-output .native-terminal-scroll').evaluate(el=>el.scrollLeft)).toBeGreaterThan(0);await cdp.detach()}
 
  await page.getByRole('button',{name:'⌨ Keyboard',exact:true}).click();await expect(page.locator('#remote-herdr-app')).toHaveClass(/with-keyboard/);
  await page.getByRole('button',{name:'‹ All panes'}).click();await expect(page.locator('.herdr-list')).toBeVisible();expect(errors).toEqual([]);

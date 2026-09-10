@@ -40,3 +40,15 @@ if (!window.__HYPRLAND_DEV__ && 'serviceWorker' in navigator && window.isSecureC
     });
   });
 }
+
+// iOS shrinks the visual viewport for its keyboard, not the layout viewport.
+function fitNativeKeyboard(){
+  const viewport=window.visualViewport;
+  const scale=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--canvas-scale'))||1;
+  const inset=viewport?Math.max(0,window.innerHeight-viewport.height-viewport.offsetTop):0;
+  document.documentElement.style.setProperty('--keyboard-inset',`${inset/scale}px`);
+}
+window.visualViewport?.addEventListener('resize',fitNativeKeyboard);
+window.visualViewport?.addEventListener('scroll',fitNativeKeyboard);
+window.addEventListener('resize',fitNativeKeyboard);
+fitNativeKeyboard();

@@ -13,69 +13,12 @@
   function terminal(host,readonly=false){
     const t=new Terminal({fontFamily:'"JetBrains Mono", monospace',fontSize:12,lineHeight:1.15,theme,scrollback:3000,cursorBlink:!readonly,disableStdin:readonly,allowProposedApi:false});
     t.open(host);t.textarea?.setAttribute('inputmode','none');t.textarea?.setAttribute('autocapitalize','off');
-    // Use the glyph atlas renderer; fall back to DOM if WebGL is unavailable or lost.
-    let gpu;
-    try{
-      gpu=new WebglAddon.WebglAddon();
-      gpu.onContextLoss(()=>{gpu.dispose();host.dataset.renderer='dom'});
-      t.loadAddon(gpu);host.dataset.renderer='webgl';
-    }catch{gpu?.dispose();host.dataset.renderer='dom'}
     return t;
   }
-  // xterm 6 scrollbars handle wheels, but don't translate iPhone touch drags.
-  // Keep shell edge gestures; drag inside a terminal reads its history instead.
   function touchScroll(host,term,horizontal,onScroll=()=>{},onIdle=()=>{}){
-    let gesture=null,frame=null,ignoreClickUntil=0;
-    let idleFrame=null;
-    const idle=()=>{if(idleFrame===null)idleFrame=requestAnimationFrame(()=>{idleFrame=null;if(!gesture&&frame===null)onIdle()})};
-    const cancel=()=>{if(frame!==null)cancelAnimationFrame(frame);frame=null;gesture=null;idle()};
-    const edge=t=>{const shell=mount('touch-shell')?.getBoundingClientRect();return shell&&(t.clientX<shell.left+shell.width*.08||t.clientX>shell.right-shell.width*.08)};
-    const scroll=(g,dx,dy)=>{
-      g.remainder+=dy/g.cellHeight;const lines=Math.trunc(g.remainder);
-      if(lines){const before=term.buffer.active.viewportY;term.scrollLines(lines);g.remainder-=lines;if(term.buffer.active.viewportY===before){g.vy=0;g.remainder=0}}
-      if(horizontal){const before=host.scrollLeft;host.scrollLeft+=dx/g.scale;if(host.scrollLeft===before&&Math.abs(dx)>1)g.vx=0}
-      else g.vx=0;
-      onScroll();
-    };
-    const coast=g=>{
-      let previous=performance.now();
-      const step=now=>{
-        frame=null;const elapsed=now-previous;previous=now;
-        if(elapsed>120||Math.hypot(g.vx,g.vy)<.06){idle();return}
-        const dt=Math.min(elapsed,40),decay=Math.exp(-dt/220);
-        scroll(g,g.vx*dt,g.vy*dt);g.vx*=decay;g.vy*=decay;
-        if(Math.hypot(g.vx,g.vy)>=.06)frame=requestAnimationFrame(step);else idle();
-      };
-      frame=requestAnimationFrame(step);
-    };
-    const pointer=e=>{if(e.pointerType==='touch'&&!edge(e))e.stopPropagation()};
-    const start=e=>{
-      const stopping=frame!==null;cancel();
-      if(e.touches.length!==1||edge(e.touches[0])){gesture=null;return}
-      // Geometry is stable throughout a drag; avoid forcing layout on every frame.
-      const cellHeight=term.element.querySelector('.xterm-screen').getBoundingClientRect().height/term.rows||18;
-      const scale=host.getBoundingClientRect().width/host.offsetWidth||1;
-      const t=e.touches[0];gesture={cellHeight,scale,x:t.clientX,y:t.clientY,lastX:t.clientX,lastY:t.clientY,remainder:0,drag:false,stopping,vx:0,vy:0,time:performance.now()};e.stopPropagation();
-    };
-    const move=e=>{
-      if(!gesture||e.touches.length!==1)return;const t=e.touches[0],g=gesture;
-      if(!g.drag&&Math.hypot(t.clientX-g.x,t.clientY-g.y)<6)return;
-      g.drag=true;e.preventDefault();e.stopImmediatePropagation();
-      const now=performance.now(),dt=Math.max(8,now-g.time),dx=g.lastX-t.clientX,dy=g.lastY-t.clientY;
-      g.vx=Math.max(-3,Math.min(3,.65*dx/dt+.35*g.vx));g.vy=Math.max(-3,Math.min(3,.65*dy/dt+.35*g.vy));
-      scroll(g,dx,dy);g.lastX=t.clientX;g.lastY=t.clientY;g.time=now;
-    };
-    const end=e=>{
-      const g=gesture;gesture=null;
-      if(g?.drag||g?.stopping){ignoreClickUntil=performance.now()+350;e.preventDefault();e.stopImmediatePropagation()}
-      if(g?.drag&&e.type==='touchend'&&performance.now()-g.time<100)coast(g);else idle();
-    };
-    const click=e=>{if(e.detail!==0&&performance.now()<ignoreClickUntil){e.preventDefault();e.stopImmediatePropagation()}};
-    host.addEventListener('click',click,true);host.addEventListener('wheel',cancel,{capture:true,passive:true});
-    host.addEventListener('pointerdown',pointer,true);host.addEventListener('touchstart',start,{capture:true,passive:true});host.addEventListener('touchmove',move,{capture:true,passive:false});host.addEventListener('touchend',end,{capture:true,passive:false});host.addEventListener('touchcancel',end,true);
-    const resize=term.onResize(cancel);
-    const dispose=()=>{cancel();cancelAnimationFrame(idleFrame);idleFrame=null;resize.dispose();host.removeEventListener('click',click,true);host.removeEventListener('wheel',cancel,true);host.removeEventListener('pointerdown',pointer,true);host.removeEventListener('touchstart',start,true);host.removeEventListener('touchmove',move,true);host.removeEventListener('touchend',end,true);host.removeEventListener('touchcancel',end,true)};
-    dispose.cancel=cancel;dispose.active=()=>!!gesture||frame!==null;return dispose;
+    const view=new NativeTerminalView(host,term,onScroll,onIdle);
+    term.nativeView=view;
+    const dispose=()=>view.dispose();dispose.cancel=()=>view.cancel();dispose.active=()=>view.active();return dispose;
   }
   function keyInput(key,{shift=false,ctrl=false}={}){
     const specials={'space':[' ',''],'⏎':['\r','Enter'],'⌫':['\x7f','Backspace'],'←':['\x1b[D','Left'],'→':['\x1b[C','Right'],'↑':['\x1b[A','Up'],'↓':['\x1b[B','Down'],'home':['\x1b[H','Home'],'end':['\x1b[F','End'],'tab':['\t','Tab'],'esc':['\x1b','Escape']};
@@ -96,6 +39,7 @@
       this.term.onResize(({cols,rows})=>{if(this.ws?.readyState===1)this.ws.send(JSON.stringify({type:'resize',cols,rows}))});
       this.resizeObserver=new ResizeObserver(()=>this.resize());this.resizeObserver.observe(this.host);
       this.host.addEventListener('click',()=>bridge.keyboard());
+      this.nativeInput=bridge.createInput(root,false,(text,enter)=>this.input(text+(enter?'\r':'')));
     }
     resize(){if(!this.host.clientHeight||!this.host.clientWidth)return;try{this.fit.fit()}catch{}}
     async connect(){
@@ -115,8 +59,8 @@
     }
     resume(){if(this.connecting||this.exited||this.disposed)return;const old=this.ws;this.ws=null;this.ready=false;old?.close();this.connect()}
     exit(){this.exited=true;this.ready=false;this.ws?.close();this.status.textContent='Shell exited';this.restart.hidden=false;}
-    input(data){this.stopTouchScroll.cancel();if(this.ready&&this.ws?.readyState===1){this.ws.send(JSON.stringify({type:'input',data}));this.term.scrollToBottom()}else this.status.textContent=this.exited?'Shell exited · start a new shell':'Disconnected · input was not sent';}
-    dispose(){this.disposed=true;clearTimeout(this.retry);this.ws?.close();this.resizeObserver.disconnect();this.stopTouchScroll();this.term.dispose()}
+    input(data){this.stopTouchScroll.cancel();if(this.ready&&this.ws?.readyState===1){this.ws.send(JSON.stringify({type:'input',data}));this.term.scrollToBottom();return true}else this.status.textContent=this.exited?'Shell exited · start a new shell':'Disconnected · input was not sent';return false;}
+    dispose(){this.disposed=true;clearTimeout(this.retry);this.ws?.close();this.resizeObserver.disconnect();this.stopTouchScroll();this.nativeInput.dispose();this.term.dispose()}
   }
   class HerdrApp {
     constructor(root,bridge){
@@ -133,6 +77,7 @@
       this.stopTouchScroll=touchScroll(this.output,this.term,true,()=>this.trackScroll(),()=>this.flushRead());
       this.term.onScroll(()=>{if(!this.rendering)this.trackScroll()});
       this.output.onclick=()=>{this.showLatest();bridge.keyboard()};
+      this.nativeInput=bridge.createInput(root,true,(text,enter)=>this.input({text,keys:enter?['Enter']:[]}));this.nativeInput.select(this.selected);
       this.resizeObserver=new ResizeObserver(()=>{if(this.lastRead)this.renderOutput(this.lastRead,true)});this.resizeObserver.observe(this.output);
     }
     connect(){
@@ -170,7 +115,7 @@
     showDetail(pane){this.list.hidden=true;this.detail.hidden=false;this.title.textContent=`${pane.agent||'shell'} · ${pane.terminal_title_stripped||pane.pane_id}`;}
     select(id){
       this.stopTouchScroll.cancel();
-      this.selected=id;storage.set('omarchy-herdr-pane',id);this.lastRead=null;this.queuedRead=null;this.followOutput=true;this.output.scrollLeft=0;this.term.reset();this.inputStatus.textContent='Tap to type into this pane';
+      this.nativeInput.select(id);this.selected=id;storage.set('omarchy-herdr-pane',id);this.lastRead=null;this.queuedRead=null;this.followOutput=true;this.output.scrollLeft=0;this.term.reset();this.inputStatus.textContent='Tap to type into this pane';
       this.send({type:'select',pane_id:id});
       if(id){const pane=this.snapshot?.panes.find(p=>p.pane_id===id);if(pane)this.showDetail(pane)}else{this.detail.hidden=true;this.list.hidden=false;this.bridge.logic.set({kb:false})}
     }
@@ -193,6 +138,7 @@
       const dimensions=this.fit.proposeDimensions();if(!dimensions)return;
       const scroll=this.term.buffer.active.viewportY;
       const anchor=this.term.buffer.active.getLine(scroll)?.translateToString(true);
+      const fractional=(this.term.nativeView.scroller.scrollTop/this.term.nativeView.height)%1;
       const pane=this.selected;this.rendering=true;
       this.term.resize(Math.max(cols,dimensions.cols),Math.max(4,dimensions.rows));this.term.reset();
       this.term.write(text.replace(/\r?\n/g,'\r\n'),()=>{
@@ -201,7 +147,7 @@
           else{
             let target=scroll,distance=Infinity;
             for(let i=0;i<this.term.buffer.active.length;i++)if(this.term.buffer.active.getLine(i)?.translateToString(true)===anchor&&Math.abs(i-scroll)<distance){target=i;distance=Math.abs(i-scroll)}
-            this.term.scrollToLine(target);
+            this.term.scrollToLine(target);this.term.nativeView.target=target+fractional;this.term.nativeView.schedule();
           }
         }
         this.rendering=false;
@@ -209,13 +155,13 @@
       });
     }
     input(input){
-      if(!this.selected){this.status.textContent='Select a pane to type';return}
-      if(!this.online||this.ws?.readyState!==1){this.inputStatus.textContent='Disconnected · input was not sent';return}
+      if(!this.selected){this.status.textContent='Select a pane to type';return false}
+      if(!this.online||this.ws?.readyState!==1){this.inputStatus.textContent='Disconnected · input was not sent';return false}
       this.showLatest();
       const id=crypto.randomUUID();this.pending.add(id);this.inputStatus.textContent='Sending…';
-      this.send({type:'input',id,pane_id:this.selected,text:input.text,keys:input.keys});
+      return this.send({type:'input',id,pane_id:this.selected,text:input.text,keys:input.keys});
     }
-    dispose(){this.disposed=true;clearTimeout(this.retry);this.ws?.close();this.resizeObserver.disconnect();this.stopTouchScroll();this.term.dispose()}
+    dispose(){this.disposed=true;clearTimeout(this.retry);this.ws?.close();this.resizeObserver.disconnect();this.stopTouchScroll();this.nativeInput.dispose();this.term.dispose()}
   }
   class HostBridge {
     constructor(logic){
@@ -223,15 +169,21 @@
       this.foreground=()=>{if(!document.hidden){this.terminal?.resume();this.herdr?.resume()}};
       document.addEventListener('visibilitychange',this.foreground);window.addEventListener('online',this.foreground);this.update();
     }
-    keyboard(){if(!this.logic.state.ov)this.logic.set({kb:true,sup:false})}
+    createInput(root,message,send){return new NativeInput(root,{message,send,key:(key,mods)=>this.key(key,mods),focus:()=>{if(!this.logic.state.kb)this.logic.set({kb:true,sup:false})},hide:()=>this.logic.set({kb:false,sup:false})})}
+    keyboard(){if(!this.logic.state.ov){this.logic.set({kb:true,sup:false});this.currentInput()?.focus()}}
+    currentInput(){return(this.logic.cur()==='terminal'?this.terminal:this.logic.cur()==='herd'?this.herdr:null)?.nativeInput}
     update(){
       const current=this.logic.cur(),kb=this.logic.state.kb;
-      for(const id of ['remote-terminal-app','remote-herdr-app']){const root=mount(id);if(root)root.classList.toggle('with-keyboard',kb&&!this.logic.state.ov)}
+      const native=['terminal','herd'].includes(current)&&!this.logic.state.launch&&!this.logic.state.sup;
+      mount('touch-shell')?.classList.toggle('use-native-input',native);
+      for(const id of ['remote-terminal-app','remote-herdr-app']){const root=mount(id);if(root)root.classList.toggle('with-keyboard',kb&&!this.logic.state.ov);if(root)root.classList.toggle('native-typing',native)}
       if(location.protocol==='file:'){for(const id of ['remote-terminal-app','remote-herdr-app']){const root=mount(id);if(root&&!root.textContent)root.append(node('p','remote-empty','Connect to HOST to use this app.'))}return}
       if(current==='terminal'&&!this.terminal){this.terminal=new TerminalApp(mount('remote-terminal-app'),this);this.terminal.connect()}
       if(current==='herd'&&!this.herdr){this.herdr=new HerdrApp(mount('remote-herdr-app'),this);this.herdr.connect()}
       if(current!=='terminal'||this.logic.state.ov)this.terminal?.stopTouchScroll.cancel();
       if(current!=='herd'||this.logic.state.ov)this.herdr?.stopTouchScroll.cancel();
+      for(const app of [this.terminal,this.herdr])if(app)app.nativeInput.show(native&&app.nativeInput===this.currentInput()&&kb&&!this.logic.state.ov);
+      const input=this.currentInput();if(native&&kb&&!this.logic.state.ov&&input&&document.activeElement!==input.field)input.focus();
       this.terminal?.resize();
     }
     key(key,mods){const input=keyInput(key,mods);if(!input)return;if(this.logic.cur()==='terminal')this.terminal?.input(input.data);else if(this.logic.cur()==='herd')this.herdr?.input(input)}

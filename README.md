@@ -24,11 +24,11 @@ Run `python -m unittest discover -s scripts -p 'test_native_bundle.py'` to check
 
 ## Terminal and Herdr
 
-Terminal opens a real interactive HOST shell through the shared Rust backend. Tap its output to use the custom keyboard. Return, Backspace, arrows, Tab, Escape, Shift, and Control send real terminal input. **123** exposes numbers, symbols and navigation; hold Backspace to repeat. Control stays armed when switching back to **abc**, so Control+C can interrupt a command. The shell survives live reload and reconnection; `exit` ends it, then **New shell** opens another.
+Terminal opens a real interactive HOST shell through the shared Rust backend. Tap its output to open the system keyboard. **Keys** mode sends input immediately, with autocorrect disabled for commands and paths. The accessory row provides Esc, Tab, arrows and Ctrl; Ctrl applies to the next letter. The shell survives live reload and reconnection; `exit` ends it, then **New shell** opens another.
 
-Herdr shows the local running Herdr's workspaces, agents, statuses and panes. Tap a pane to view its live ANSI output; scroll sideways for wide desktop terminal content, or vertically for recent output. **Keyboard** sends input to the selected pane. **All panes** returns to the list. Existing panes are not focused/resized on the desktop. No input is replayed after a disconnect.
+Herdr shows the local running Herdr's workspaces, agents, statuses and panes. Tap a pane to view live ANSI output. **Keyboard** opens **Message** mode: edit a local draft using the iPhone's predictions, autocorrect, dictation or swipe typing, then tap **Send** or Return to send it with Enter. Switch to **Keys** for immediate input to interactive programs. Drafts stay with their pane while switching panes, but do not survive a page reload. **All panes** returns to the list. Existing panes are not focused/resized on the desktop. No input is replayed after a disconnect.
 
-Drag vertically through history in either view; flick to coast and touch again to stop. **↓ Latest** returns to the live prompt, and typing follows the latest output. Herdr keeps your reading position during live updates and uses measured terminal rows so input remains visible above the keyboard.
+Both output views use native browser overflow scrolling, including smooth pixel movement and the system's momentum. Scroll sideways in Herdr for wide desktop content. **↓ Latest** returns to live output; direct typing and sending a message also follow it. Keyboard resizing preserves the prompt at the bottom, or your history position when reading older output. Hide the keyboard with **⌄**. The original custom keyboard remains available for the launcher and SUPER shortcuts.
 
 Both apps need HOST. If the backend or Herdr is unavailable, the app shows a connection error and retries. The native bundled offline UI cannot connect to these local APIs. Other OS mockup apps remain simulated.
 

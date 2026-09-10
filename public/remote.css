@@ -31,3 +31,28 @@
 .remote-app .xterm-viewport { overscroll-behavior:contain; }
 
 .remote-app .xterm-viewport { background:#15131f !important; }
+
+/* xterm retains parsing and measurement; its native overflow view owns scrolling. */
+.remote-terminal,.herdr-output { position:relative; overflow:hidden; }
+.terminal-parser { visibility:hidden; pointer-events:none; position:absolute !important; inset:0; }
+.native-terminal-scroll { position:absolute; inset:0; overflow:auto; overscroll-behavior:contain; touch-action:pan-x pan-y; -webkit-overflow-scrolling:touch; overflow-anchor:none; background:#15131f; }
+.native-terminal-content { position:relative; min-width:100%; }
+.native-terminal-row { position:absolute; left:0; font:12px 'JetBrains Mono',monospace; white-space:pre; }
+.native-terminal-row span { display:inline-block; height:100%; vertical-align:top; }
+
+.use-native-input .custom-keyboard { display:none; }
+.remote-app.native-typing.with-keyboard { bottom:calc(var(--keyboard-inset, 0px) + 8px); }
+.native-input-panel { flex:none; padding-top:6px; }
+.native-input-tools { display:flex; overflow-x:auto; gap:3px; touch-action:pan-x; }
+.native-input-tools button,.native-send { flex:none; min-width:44px; min-height:44px; border:1px solid #403d52; border-radius:8px; color:#e0def4; background:#26233a; font:13px system-ui; }
+.native-input-tools button[aria-pressed=true] { background:#c4a7e7; color:#191724; }
+.native-input-row { display:flex; gap:6px; margin-top:5px; align-items:stretch; }
+.native-input { box-sizing:border-box; width:100%; min-width:0; min-height:44px; resize:none; border:1px solid #403d52; border-radius:10px; padding:10px; background:#1f1d2e; color:#e0def4; font:16px/22px system-ui; -webkit-user-select:text; user-select:text; -webkit-touch-callout:default; touch-action:auto; }
+.native-input:focus { outline:1px solid #9ccfd8; }
+.native-send { padding:0 10px; }
+.native-input-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
+.native-input-header button { min-height:36px; min-width:44px; border:0; border-radius:8px; background:#26233a; color:#e0def4; padding:0 10px; font:13px system-ui; }
+.native-input-tools button { flex:1; }
+.native-scroll-edge { position:absolute; top:0; bottom:0; width:20px; z-index:1; touch-action:none; }
+.native-scroll-edge.left { left:0; }
+.native-scroll-edge.right { right:0; }

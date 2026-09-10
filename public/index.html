@@ -11,7 +11,8 @@
 <link rel="stylesheet" href="/remote.css">
 <script src="/assets/xterm/xterm.js"></script>
 <script src="/assets/xterm/addon-fit.js"></script>
-<script src="/assets/xterm/addon-webgl.js"></script>
+<script src="/native-terminal.js"></script>
+<script src="/native-input.js"></script>
 <script src="/remote.js"></script>
 <title>Hyprland Touch</title>
 <meta name="description" content="A Rosé Pine mobile OS prototype with touch workspaces, launcher, and SUPER keyboard.">
@@ -473,7 +474,7 @@
     </div>
   </div>
 
-  <div style="position:absolute;left:0;right:0;bottom:0;z-index:10;background:#1f1d2e;border-top:1px solid #403d52;padding:8px 6px 46px;transform: {{ kbTf }};transition: {{ tr }}">
+  <div class="custom-keyboard" style="position:absolute;left:0;right:0;bottom:0;z-index:10;background:#1f1d2e;border-top:1px solid #403d52;padding:8px 6px 46px;transform: {{ kbTf }};transition: {{ tr }}">
     <div style="display:flex;justify-content:space-between;align-items:center;height:22px;padding:0 6px 4px;font-size:10px"><span style="color: {{ supC }}">{{ supMsg }}</span><span sc-camel-on-click="{{ kbOff }}" style="color:#908caa;cursor:pointer;font-size:12px;padding:0 6px">⌄</span></div>
     <sc-for list="{{ kbRows }}" as="r" hint-placeholder-count="4"><div style="display:flex;gap:5px;margin-bottom:6px"><sc-for list="{{ r.keys }}" as="k" hint-placeholder-count="10"><button type="button" class="touch-key" aria-label="{{ k.l }}" sc-camel-on-pointer-down="{{ k.down }}" sc-camel-on-pointer-up="{{ keyEnd }}" sc-camel-on-pointer-cancel="{{ keyEnd }}" sc-camel-on-lost-pointer-capture="{{ keyEnd }}" sc-camel-on-click="{{ k.click }}" style="border:0;padding:0;min-width:0;font-family:inherit;touch-action:none;flex: {{ k.w }};height:42px;border-radius:8px;display:grid;place-items:center;font-size: {{ k.fs }};background: {{ k.bg }};color: {{ k.c }};cursor:pointer;transition:background .2s,color .2s">{{ k.l }}</button></sc-for></div></sc-for>
   </div>
