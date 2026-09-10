@@ -33,3 +33,20 @@ test('held delete repeats and pointer cancellation stops it',async()=>{
 });
 
 test('shifted symbols are inserted and shift resets',()=>{const c=terminal();c.type('⇧');c.type('1');c.type('2');assert.equal(c.state.input,'!2');c.type('⇧');c.type('/');assert.equal(c.state.input,'!2?')});
+
+test('bottom swipes favor expo while keyboard stays in the outer corners',()=>{
+  for(const width of [375,402,440]){
+    for(const fraction of [.15,.25,.33,.5,.67,.75,.85]){
+      const c=terminal();c.set({kb:false});
+      c.ptr={x:width*fraction,y:870,cx:width*fraction,cy:870,w:width,h:874};
+      c.up({clientX:width*.5,clientY:700});
+      assert.equal(c.state.ov,true,'expo at '+fraction);assert.equal(c.state.kb,false);
+    }
+    for(const fraction of [.10,.90]){
+      const c=terminal();c.set({kb:false});
+      c.ptr={x:width*fraction,y:870,cx:width*fraction,cy:870,w:width,h:874};
+      c.up({clientX:width*fraction,clientY:700});
+      assert.equal(c.state.kb,true);assert.equal(c.state.sup,fraction>.5);assert.equal(c.state.ov,false);
+    }
+  }
+});

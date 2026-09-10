@@ -6,7 +6,7 @@ An installable version of `Hyprland Touch Prototype.html`, the original Claude D
 
 Open the deployed HTTPS URL in Safari, sign in if prompted, then Share → Add to Home Screen. Leave **Open as Web App** enabled if shown. Launch Hyprland from its new icon. Open it online once to install the offline cache.
 
-Start edge gestures inside the app's visible content, above the home indicator and below the system status area. Left/right edges switch workspaces. Swipe down from the top left/middle/right for notifications/launcher/quick settings. Swipe up from the bottom left/middle/right for keyboard/expo/SUPER keyboard. Tapping the active workspace pill also toggles expo.
+Start edge gestures inside the app's visible content, above the home indicator and below the system status area. Left/right edges switch workspaces. Swipe down from the top left/middle/right for notifications/launcher/quick settings. Swipe up from the bottom corners (outer 15% each) for keyboard/SUPER keyboard; the middle 70% opens expo. Tapping the active workspace pill also toggles expo.
 
 This is a simulated operating system UI. Apps, Wi-Fi controls, agents, weather, time, and battery values are mock data; they do not control iOS or connect to remote services. State resets when the page reloads. A PWA cannot defer iOS system gestures; use the native app below for that experience.
 
