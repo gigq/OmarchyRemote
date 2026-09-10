@@ -13,20 +13,27 @@
   function terminal(host,readonly=false){
     const t=new Terminal({fontFamily:'"JetBrains Mono", monospace',fontSize:12,lineHeight:1.15,theme,scrollback:3000,cursorBlink:!readonly,disableStdin:readonly,allowProposedApi:false});
     t.open(host);t.textarea?.setAttribute('inputmode','none');t.textarea?.setAttribute('autocapitalize','off');
+    // Use the glyph atlas renderer; fall back to DOM if WebGL is unavailable or lost.
+    let gpu;
+    try{
+      gpu=new WebglAddon.WebglAddon();
+      gpu.onContextLoss(()=>{gpu.dispose();host.dataset.renderer='dom'});
+      t.loadAddon(gpu);host.dataset.renderer='webgl';
+    }catch{gpu?.dispose();host.dataset.renderer='dom'}
     return t;
   }
   // xterm 6 scrollbars handle wheels, but don't translate iPhone touch drags.
   // Keep shell edge gestures; drag inside a terminal reads its history instead.
-  function touchScroll(host,term,horizontal,onScroll=()=>{}){
+  function touchScroll(host,term,horizontal,onScroll=()=>{},onIdle=()=>{}){
     let gesture=null,frame=null,ignoreClickUntil=0;
-    const cancel=()=>{if(frame!==null)cancelAnimationFrame(frame);frame=null};
+    let idleFrame=null;
+    const idle=()=>{if(idleFrame===null)idleFrame=requestAnimationFrame(()=>{idleFrame=null;if(!gesture&&frame===null)onIdle()})};
+    const cancel=()=>{if(frame!==null)cancelAnimationFrame(frame);frame=null;gesture=null;idle()};
     const edge=t=>{const shell=mount('touch-shell')?.getBoundingClientRect();return shell&&(t.clientX<shell.left+shell.width*.08||t.clientX>shell.right-shell.width*.08)};
     const scroll=(g,dx,dy)=>{
-      const screen=term.element.querySelector('.xterm-screen');
-      const cellHeight=screen.getBoundingClientRect().height/term.rows||18;
-      g.remainder+=dy/cellHeight;const lines=Math.trunc(g.remainder);
+      g.remainder+=dy/g.cellHeight;const lines=Math.trunc(g.remainder);
       if(lines){const before=term.buffer.active.viewportY;term.scrollLines(lines);g.remainder-=lines;if(term.buffer.active.viewportY===before){g.vy=0;g.remainder=0}}
-      if(horizontal){const before=host.scrollLeft,scale=host.getBoundingClientRect().width/host.offsetWidth||1;host.scrollLeft+=dx/scale;if(host.scrollLeft===before&&Math.abs(dx)>1)g.vx=0}
+      if(horizontal){const before=host.scrollLeft;host.scrollLeft+=dx/g.scale;if(host.scrollLeft===before&&Math.abs(dx)>1)g.vx=0}
       else g.vx=0;
       onScroll();
     };
@@ -34,10 +41,10 @@
       let previous=performance.now();
       const step=now=>{
         frame=null;const elapsed=now-previous;previous=now;
-        if(elapsed>120||Math.hypot(g.vx,g.vy)<.06)return;
+        if(elapsed>120||Math.hypot(g.vx,g.vy)<.06){idle();return}
         const dt=Math.min(elapsed,40),decay=Math.exp(-dt/220);
         scroll(g,g.vx*dt,g.vy*dt);g.vx*=decay;g.vy*=decay;
-        if(Math.hypot(g.vx,g.vy)>=.06)frame=requestAnimationFrame(step);
+        if(Math.hypot(g.vx,g.vy)>=.06)frame=requestAnimationFrame(step);else idle();
       };
       frame=requestAnimationFrame(step);
     };
@@ -45,7 +52,10 @@
     const start=e=>{
       const stopping=frame!==null;cancel();
       if(e.touches.length!==1||edge(e.touches[0])){gesture=null;return}
-      const t=e.touches[0];gesture={x:t.clientX,y:t.clientY,lastX:t.clientX,lastY:t.clientY,remainder:0,drag:false,stopping,vx:0,vy:0,time:performance.now()};e.stopPropagation();
+      // Geometry is stable throughout a drag; avoid forcing layout on every frame.
+      const cellHeight=term.element.querySelector('.xterm-screen').getBoundingClientRect().height/term.rows||18;
+      const scale=host.getBoundingClientRect().width/host.offsetWidth||1;
+      const t=e.touches[0];gesture={cellHeight,scale,x:t.clientX,y:t.clientY,lastX:t.clientX,lastY:t.clientY,remainder:0,drag:false,stopping,vx:0,vy:0,time:performance.now()};e.stopPropagation();
     };
     const move=e=>{
       if(!gesture||e.touches.length!==1)return;const t=e.touches[0],g=gesture;
@@ -58,13 +68,14 @@
     const end=e=>{
       const g=gesture;gesture=null;
       if(g?.drag||g?.stopping){ignoreClickUntil=performance.now()+350;e.preventDefault();e.stopImmediatePropagation()}
-      if(g?.drag&&e.type==='touchend'&&performance.now()-g.time<100)coast(g);
+      if(g?.drag&&e.type==='touchend'&&performance.now()-g.time<100)coast(g);else idle();
     };
     const click=e=>{if(e.detail!==0&&performance.now()<ignoreClickUntil){e.preventDefault();e.stopImmediatePropagation()}};
     host.addEventListener('click',click,true);host.addEventListener('wheel',cancel,{capture:true,passive:true});
     host.addEventListener('pointerdown',pointer,true);host.addEventListener('touchstart',start,{capture:true,passive:true});host.addEventListener('touchmove',move,{capture:true,passive:false});host.addEventListener('touchend',end,{capture:true,passive:false});host.addEventListener('touchcancel',end,true);
-    const dispose=()=>{cancel();host.removeEventListener('click',click,true);host.removeEventListener('wheel',cancel,true);host.removeEventListener('pointerdown',pointer,true);host.removeEventListener('touchstart',start,true);host.removeEventListener('touchmove',move,true);host.removeEventListener('touchend',end,true);host.removeEventListener('touchcancel',end,true)};
-    dispose.cancel=cancel;return dispose;
+    const resize=term.onResize(cancel);
+    const dispose=()=>{cancel();cancelAnimationFrame(idleFrame);idleFrame=null;resize.dispose();host.removeEventListener('click',click,true);host.removeEventListener('wheel',cancel,true);host.removeEventListener('pointerdown',pointer,true);host.removeEventListener('touchstart',start,true);host.removeEventListener('touchmove',move,true);host.removeEventListener('touchend',end,true);host.removeEventListener('touchcancel',end,true)};
+    dispose.cancel=cancel;dispose.active=()=>!!gesture||frame!==null;return dispose;
   }
   function keyInput(key,{shift=false,ctrl=false}={}){
     const specials={'space':[' ',''],'⏎':['\r','Enter'],'⌫':['\x7f','Backspace'],'←':['\x1b[D','Left'],'→':['\x1b[C','Right'],'↑':['\x1b[A','Up'],'↓':['\x1b[B','Down'],'home':['\x1b[H','Home'],'end':['\x1b[F','End'],'tab':['\t','Tab'],'esc':['\x1b','Escape']};
@@ -119,7 +130,7 @@
       this.inputStatus=node('span','remote-status','Tap to type into this pane');
       const inputBar=node('div','herdr-input-bar');inputBar.append(button('⌨ Keyboard',()=>{this.showLatest();bridge.keyboard()}),this.latest,this.inputStatus);
       this.detail.append(this.detailBar,this.output,inputBar);this.term=terminal(this.canvas,true);this.fit=new FitAddon.FitAddon();this.term.loadAddon(this.fit);
-      this.stopTouchScroll=touchScroll(this.output,this.term,true,()=>this.trackScroll());
+      this.stopTouchScroll=touchScroll(this.output,this.term,true,()=>this.trackScroll(),()=>this.flushRead());
       this.term.onScroll(()=>{if(!this.rendering)this.trackScroll()});
       this.output.onclick=()=>{this.showLatest();bridge.keyboard()};
       this.resizeObserver=new ResizeObserver(()=>{if(this.lastRead)this.renderOutput(this.lastRead,true)});this.resizeObserver.observe(this.output);
@@ -166,10 +177,12 @@
     move(delta){const panes=this.snapshot?.panes||[];const i=panes.findIndex(p=>p.pane_id===this.selected);if(i>=0&&panes[i+delta])this.select(panes[i+delta].pane_id)}
     trackScroll(){this.followOutput=this.term.buffer.active.viewportY>=this.term.buffer.active.baseY;this.latest.hidden=this.followOutput;}
     showLatest(){this.stopTouchScroll.cancel();this.followOutput=true;this.term.scrollToBottom();this.output.scrollLeft=0;this.latest.hidden=true;}
+    flushRead(){const queued=this.queuedRead;this.queuedRead=null;if(queued)this.renderOutput(queued.read,queued.force)}
     renderOutput(read,force=false){
       if(read.pane_id!==this.selected)return;
       if(!this.output.clientHeight)return;const text=read.text||'';if(!force&&text===this.lastRead?.text)return;
-      if(this.rendering){this.queuedRead={read,force};return}
+      // Retain only the latest snapshot while a finger or momentum owns the view.
+      if(this.rendering||this.stopTouchScroll.active()){this.queuedRead={read,force};return}
       const previous=this.lastRead;this.lastRead=read;
       const plain=text.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g,'').replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g,'');
       const cols=Math.max(40,Math.min(300,Math.max(...plain.split(/\r?\n/).map(l=>Array.from(l).length))));
@@ -192,7 +205,7 @@
           }
         }
         this.rendering=false;
-        const queued=this.queuedRead;this.queuedRead=null;if(queued)this.renderOutput(queued.read,queued.force);
+        this.flushRead();
       });
     }
     input(input){
