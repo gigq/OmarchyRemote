@@ -22,6 +22,12 @@ On a Mac, select the scheme and a paired iPhone to build and run. From HOST, use
 
 Run `python -m unittest discover -s scripts -p 'test_native_bundle.py'` to check native asset packaging. `python scripts/prepare-native.py` also generates a local inspection copy in ignored `ios/Generated/Web`.
 
+## Terminal keyboard test
+
+Open Terminal and tap the prompt to show the custom touch keyboard. Type `echo hello` and press Return, or type `help` to see the available test commands. `clear`, `pwd`, and `date` also work locally; other input is acknowledged. This is a keyboard test, not a remote shell.
+
+Shift applies to the next character. **123** switches to numbers, punctuation, arrows, and Control; Shift on that layer exposes more symbols. Hold Backspace to delete repeatedly. Left/right move the cursor, up/down recall command history, and Home/End move within the prompt. Control stays armed when switching back to **abc**: A/E move to start/end, U/K delete before/after the cursor, C cancels, and L clears output. Hiding the keyboard preserves the draft; page reloads reset it. The terminal scrolls to keep the cursor above the keyboard.
+
 ## Development
 
 The HOST development server is already running as the enabled user service `hyprland-touch-dev.service`. It survives this session and restarts after failure. Tailscale Serve exposes it privately on HTTPS port 12443; its HTTP listener binds only to `127.0.0.1:4187`.

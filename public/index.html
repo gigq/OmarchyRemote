@@ -418,7 +418,7 @@
     </div>
 
     <div sc-camel-on-click="{{ cTerminal.tap }}" style="position:absolute;inset:0;transform: {{ cTerminal.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cTerminal.bd }};border-radius: {{ rad }};overflow:hidden;background:#15131f;opacity: {{ cTerminal.op }};pointer-events: {{ cTerminal.pe }};box-sizing:border-box">
-      <div sc-camel-on-click="{{ kbOn }}" style="padding:64px 20px 20px;font-size:12.5px;line-height:1.75;box-sizing:border-box;height:100%;cursor:text">
+      <div id="terminal-scroll" sc-camel-on-click="{{ kbOn }}" style="overflow-y:auto;overscroll-behavior:contain;padding:64px 20px 20px;font-size:12.5px;line-height:1.75;box-sizing:border-box;height: {{ terminalHeight }};cursor:text">
         <div><span style="color:#9ccfd8">~</span> <span style="color:#ebbcba">❯</span> fastfetch</div>
         <div style="color:#908caa;padding-left:8px"><span style="color:#c4a7e7">os</span>       Arch Linux aarch64</div>
         <div style="color:#908caa;padding-left:8px"><span style="color:#c4a7e7">host</span>     iPhone 17 Pro · hyprland-touch</div>
@@ -428,7 +428,8 @@
         <div style="color:#908caa;padding-left:8px"><span style="color:#c4a7e7">theme</span>    rosé pine</div>
         <div style="color:#908caa;padding-left:8px"><span style="color:#c4a7e7">uptime</span>   3h 12m</div>
         <div style="color:#908caa;padding-left:8px"><span style="color:#c4a7e7">pkgs</span>     1204 (pacman)</div>
-        <div style="margin-top:10px"><span style="color:#9ccfd8">~</span> <span style="color:#ebbcba">❯</span> <span style="display:inline-block;width:8px;height:15px;background:#e0def4;vertical-align:-3px"></span></div>
+        <sc-for list="{{ terminalLines }}" as="line"><div style="white-space:pre-wrap;overflow-wrap:anywhere">{{ line }}</div></sc-for>
+        <div id="terminal-prompt" style="margin-top:10px;white-space:pre-wrap;overflow-wrap:anywhere"><span style="color:#9ccfd8">~</span> <span style="color:#ebbcba">❯</span> <span>{{ terminalBefore }}</span><span id="terminal-caret" style="display:inline-block;min-width:8px;height:17px;background:#e0def4;color:#15131f;vertical-align:-3px;line-height:17px">{{ terminalCursor }}</span><span>{{ terminalAfter }}</span></div>
       </div>
       <div style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:#e0def4;background:linear-gradient(#15131f 60%,transparent);opacity: {{ cTerminal.lab }};transition: {{ tr }};pointer-events:none">terminal</div>
     </div>
@@ -497,7 +498,7 @@
 
   <div style="position:absolute;left:0;right:0;bottom:0;z-index:10;background:#1f1d2e;border-top:1px solid #403d52;padding:8px 6px 46px;transform: {{ kbTf }};transition: {{ tr }}">
     <div style="display:flex;justify-content:space-between;align-items:center;height:22px;padding:0 6px 4px;font-size:10px"><span style="color: {{ supC }}">{{ supMsg }}</span><span sc-camel-on-click="{{ kbOff }}" style="color:#908caa;cursor:pointer;font-size:12px;padding:0 6px">⌄</span></div>
-    <sc-for list="{{ kbRows }}" as="r" hint-placeholder-count="4"><div style="display:flex;gap:5px;margin-bottom:6px"><sc-for list="{{ r.keys }}" as="k" hint-placeholder-count="10"><div sc-camel-on-click="{{ k.on }}" style="flex: {{ k.w }};height:42px;border-radius:8px;display:grid;place-items:center;font-size: {{ k.fs }};background: {{ k.bg }};color: {{ k.c }};cursor:pointer;transition:background .2s,color .2s">{{ k.l }}</div></sc-for></div></sc-for>
+    <sc-for list="{{ kbRows }}" as="r" hint-placeholder-count="4"><div style="display:flex;gap:5px;margin-bottom:6px"><sc-for list="{{ r.keys }}" as="k" hint-placeholder-count="10"><button type="button" class="touch-key" sc-camel-on-pointer-down="{{ k.down }}" sc-camel-on-pointer-up="{{ keyEnd }}" sc-camel-on-pointer-cancel="{{ keyEnd }}" sc-camel-on-lost-pointer-capture="{{ keyEnd }}" sc-camel-on-click="{{ k.click }}" style="border:0;padding:0;min-width:0;font-family:inherit;touch-action:none;flex: {{ k.w }};height:42px;border-radius:8px;display:grid;place-items:center;font-size: {{ k.fs }};background: {{ k.bg }};color: {{ k.c }};cursor:pointer;transition:background .2s,color .2s">{{ k.l }}</button></sc-for></div></sc-for>
   </div>
 
   <div style="position:absolute;left:0;right:0;top:52px;z-index:14;background:rgba(31,29,46,.96);border:1px solid #403d52;border-top:0;border-radius:0 0 28px 28px;transform: {{ launchTf }};transition: {{ tr }};padding:12px 14px 14px;display:flex;flex-direction:column;gap:6px">
@@ -557,7 +558,7 @@ class Component extends DCLogic {
     {g:'md',n:'README.md',s:'3.1K',t:'tue',perm:'-rw-r--r--',meta:'markdown · 96 lines',prev:[['# hyprland-touch','#ebbcba'],['Arch + Hyprland on a phone.','#908caa'],['## install','#ebbcba'],['./install.sh','#908caa']]},
     {g:'js',n:'waybar.jsonc',s:'1.8K',t:'tue',perm:'-rw-r--r--',meta:'jsonc · 64 lines',prev:[['{ "layer": "top",','#908caa'],['  "modules-left": ["hyprland/workspaces"],','#908caa'],['  "modules-right": ["network","battery"],','#908caa'],['  "height": 52 }','#908caa']]},
     {g:'png',n:'fastfetch.png',s:'218K',t:'12:41',perm:'-rw-r--r--',meta:'png · 1206×2622',prev:[['image preview · 1206×2622','#6e6a86'],['sRGB · 8-bit','#6e6a86']]}];
-  state = { ws:0, open:['home','terminal','firefox','phone'], ov:false, kb:false, sup:false, term:false, ctl:false, shade:null, launch:false, map:false, query:'', fileSel:5, herdView:'list', herdG:0, pane:0, wifi:true, qs:{bluetooth:true,dnd:false,rotate:false,airplane:false,torch:false}, notifsCleared:false,
+  state = { ws:0, open:['home','terminal','firefox','phone'], ov:false, kb:false, sup:false, term:false, ctl:false, shade:null, launch:false, map:false, query:'', input:'', cursor:0, transcript:[], history:[], historyIndex:-1, draft:'', shift:false, fileSel:5, herdView:'list', herdG:0, pane:0, wifi:true, qs:{bluetooth:true,dnd:false,rotate:false,airplane:false,torch:false}, notifsCleared:false,
     agents:[
       {ws:'mobile-hypr',m:'local',a:'claude',s:'working',t:'wiring edge gestures',tail:'▸ editing src/gestures.rs',el:'12m',lines:[['~/src/mobile-hypr ❯ claude','#908caa'],['› wire the edge gestures to hyprctl dispatch','#e0def4'],['',''],['● Read src/gestures.rs (212 lines)','#908caa'],['● Read src/main.rs (88 lines)','#908caa'],['● Update src/gestures.rs +38 −4','#908caa'],['● Bash cargo check ✓ 0 warnings','#908caa'],['● Update src/gestures.rs +12 −0','#908caa'],['',''],['✻ Wiring the bottom-right zone to exec hyprctl dispatch…','#9ccfd8'],['12m 04s · 48.2k tokens · esc to interrupt','#6e6a86']]},
       {ws:'mobile-hypr',m:'local',a:'codex',s:'blocked',t:'waybar battery module',tail:'allow write to waybar/battery.rs?',el:'3m',ans:[{k:'n',l:'deny'},{k:'y',l:'allow once'},{k:'a',l:'allow always',p:true}],lines:[['~/src/mobile-hypr ❯ codex','#908caa'],['› add a battery module to waybar that reads /sys/class/power_supply','#e0def4'],['',''],['• read waybar/config.jsonc','#908caa'],['• read waybar/modules/mod.rs','#908caa'],['• plan: battery.rs → register module → style.css','#908caa'],['',''],['┌ edit waybar/battery.rs','#908caa'],['│ + use std::fs;','#9ccfd8'],['│ + const SYS_BAT: &str = "/sys/class/power_supply/BAT0";','#9ccfd8'],['│ + pub fn read_capacity() -> u8 {','#9ccfd8'],['│ +     fs::read_to_string(format!("{SYS_BAT}/capacity"))','#9ccfd8'],['│ +         .map(|s| s.trim().parse().unwrap_or(0))','#9ccfd8'],['│ − // TODO battery','#eb6f92'],['└ 6 lines','#6e6a86'],['',''],['? Allow write to waybar/battery.rs? [y/n/a]','#f6c177']]},
@@ -588,7 +589,58 @@ class Component extends DCLogic {
   groups(){ const g=[]; this.state.agents.forEach((a,i)=>{ let x=g.find(q=>q.ws===a.ws); if(!x){ x={ws:a.ws,m:a.m,list:[]}; g.push(x) } x.list.push({...a,i}) }); return g }
   paneList(){ return (this.groups()[this.state.herdG]||{list:[]}).list }
   answer(i,k){ const agents=this.state.agents.map((a,j)=>j!==i?a:{...a,s:'working',tail:'▸ continuing after "'+k+'"',el:'now',ans:null,lines:[...a.lines,['› '+k,'#c4a7e7'],['● applying…','#908caa']]}); this.set({agents}) }
-  type(l){ const s=this.state; if(!s.launch) return; if(l==='⌫') return this.set({query:s.query.slice(0,-1)}); if(l==='space') return this.set({query:s.query+' '}); if(l==='⏎'){ const m=this.matches(); if(m[0]) this.openApp(m[0]); return } if(l.length===1) this.set({query:s.query+l}) }
+  scrollPrompt(){ requestAnimationFrame(()=>{ const el=document.getElementById('terminal-scroll'), caret=document.getElementById('terminal-caret'); if(el&&caret){ const r=el.getBoundingClientRect(), c=caret.getBoundingClientRect(); if(c.bottom>r.bottom-20) el.scrollTop+=c.bottom-r.bottom+20; else if(c.top<r.top+20) el.scrollTop-=r.top+20-c.top } }) }
+  edit(input,cursor){ this.set({input,cursor,historyIndex:-1}); this.scrollPrompt() }
+  keyEnd=e=>{ if(e) e.stopPropagation(); clearTimeout(this.repeatDelay); clearInterval(this.repeatTimer); this.repeatDelay=null; this.repeatTimer=null };
+  pressKey(e,on,repeat){
+    if(e.button!==0) return;
+    e.preventDefault(); e.stopPropagation(); this.ptr=null; this.keyEnd();
+    e.currentTarget.setPointerCapture(e.pointerId); on();
+    if(repeat) this.repeatDelay=setTimeout(()=>{ this.repeatTimer=setInterval(()=>{ if(this.state.kb) on(); else this.keyEnd() },65) },400);
+  }
+  shifted(l){ return ({'1':'!','2':'@','3':'#','4':'$','5':'%','6':'^','7':'&','8':'*','9':'(','0':')','-':'_','/':'?',':':';',';':':','(':'[',')':']','$':'~','&':'|','@':'`','"':"'",'.':','})[l]||l.toUpperCase() }
+  type(l){
+    const s=this.state;
+    if(l==='⇧') return this.set({shift:!s.shift});
+    if(l==='esc') return this.set({kb:false,launch:false,sup:false,ctl:false});
+    if(s.launch){
+      if(l==='⌫') return this.set({query:Array.from(s.query).slice(0,-1).join('')});
+      if(l==='⏎'){ const m=this.matches(); if(m[0]) this.openApp(m[0]); return }
+      if(l==='space'||Array.from(l).length===1) this.set({query:s.query+(l==='space'?' ':s.shift?this.shifted(l):l),shift:false});
+      return;
+    }
+    if(this.cur()!=='terminal') return;
+    const chars=Array.from(s.input), pos=s.cursor;
+    if(s.ctl){
+      this.set({ctl:false});
+      if(l==='a') return this.set({cursor:0});
+      if(l==='e') return this.set({cursor:chars.length});
+      if(l==='u') return this.edit(chars.slice(pos).join(''),0);
+      if(l==='k') return this.edit(chars.slice(0,pos).join(''),pos);
+      if(l==='l') { this.set({transcript:[]}); return }
+      if(l==='c') { this.set({transcript:[...s.transcript,'~ ❯ '+s.input+'^C'].slice(-200)}); return this.edit('',0) }
+      return;
+    }
+    if(l==='←'||l==='→'||l==='home'||l==='end'){ this.set({cursor:l==='home'?0:l==='end'?chars.length:Math.max(0,Math.min(chars.length,pos+(l==='←'?-1:1)))}); this.scrollPrompt(); return }
+    if(l==='↑'||l==='↓'){
+      if(!s.history.length) return;
+      const i=l==='↑'?Math.min(s.history.length-1,s.historyIndex+1):Math.max(-1,s.historyIndex-1);
+      const input=i<0?s.draft:s.history[s.history.length-1-i];
+      this.set({input,cursor:Array.from(input).length,historyIndex:i,...(s.historyIndex<0&&i>=0?{draft:s.input}:{})}); this.scrollPrompt(); return;
+    }
+    if(l==='⌫'){ if(pos){ chars.splice(pos-1,1); this.edit(chars.join(''),pos-1) } return }
+    if(l==='⏎'){
+      const cmd=s.input.trim(); let output=[];
+      if(cmd==='help') output=['Keyboard test · local demo','Try: echo hello, clear, pwd, date','↑/↓ history · ←/→ cursor · hold ⌫ to delete','ctrl + a/e/u/k/c/l · Shift for uppercase'];
+      else if(cmd==='pwd') output=['/home/mobile'];
+      else if(cmd==='date') output=[new Date().toLocaleString()];
+      else if(cmd==='echo'||cmd.startsWith('echo ')) output=[cmd.slice(5)];
+      else if(cmd&&cmd!=='clear') output=['Input received: '+s.input];
+      this.set({transcript:cmd==='clear'?[]:[...s.transcript,'~ ❯ '+s.input,...output].slice(-200),history:cmd?[...s.history, s.input].slice(-100):s.history,draft:''});
+      this.edit('',0); return;
+    }
+    if(l==='space'||l==='tab'||Array.from(l).length===1){ const text=l==='space'?' ':l==='tab'?'  ':s.shift?this.shifted(l):l; chars.splice(pos,0,...Array.from(text)); this.edit(chars.join(''),pos+Array.from(text).length); this.set({shift:false}) }
+  }
   matches(){ const q=this.state.query.trim().toLowerCase(); return Object.keys(this.APPS).filter(k=>k!=='home' && (this.APPS[k].n.includes(q)||this.APPS[k].d.includes(q))) }
   renderVals(){
     const s=this.state, P=this.props, T=this.T, A=this.APPS, cur=this.cur();
@@ -606,16 +658,16 @@ class Component extends DCLogic {
     const act={q:()=>this.closeWs(),w:()=>this.openApp('firefox'),e:()=>this.openApp('files'),s:()=>this.openApp('settings'),a:()=>this.openApp('herd'),t:()=>this.openApp('terminal'),'⏎':()=>this.openApp('terminal'),p:()=>this.openApp('phone'),h:()=>this.go(s.ws-1),l:()=>this.go(s.ws+1),'←':()=>this.go(s.ws-1),'→':()=>this.go(s.ws+1),'↑':()=>this.set({ov:true,kb:false,sup:false}),'↓':()=>this.go(0),space:()=>this.set({launch:true,sup:false})};
     const R=(str,w)=>str.split(' ').map(l=>({l,w:w||1}));
     const key=x=>{ if(x.l==='SUPER') return {l:'super',w:1.5,fs:'11px',bg:s.sup?T.rose:T.bd,c:s.sup?T.bg:T.fg,on:()=>this.set({sup:!this.state.sup})};
-      if(x.l==='LAYER') return {l:s.term?'abc':'>_',w:1.5,fs:'11px',bg:T.bd,c:T.iris,on:()=>this.set({term:!this.state.term})};
+      if(x.l==='LAYER') return {l:s.term?'abc':'123',w:1.5,fs:'11px',bg:T.bd,c:T.iris,on:()=>this.set({term:!this.state.term})};
       if(x.l==='CTRL') return {l:'ctrl',w:1,fs:'10px',bg:s.ctl?T.iris:T.bg,c:s.ctl?T.bg:T.rose,on:()=>this.set({ctl:!this.state.ctl})};
       if(x.l==='⌄') return {l:'⌄',w:1,fs:'13px',bg:T.sf2,c:T.fg,on:()=>this.set({kb:false,launch:false,sup:false,ctl:false,query:''})};
       const bd=bind[x.l];
       if(s.sup) return {l:bd||x.l,w:x.w||1,fs:bd?'10px':(x.fs||'13px'),bg:bd?T.bg:T.sf2,c:bd?T.rose:T.mu,on:()=>{ const f=act[x.l]; if(f){ f(); this.set({sup:false}) } else this.set({sup:false}) }};
-      if(s.ctl && /^[a-z]$/.test(x.l)) return {l:'^'+x.l,w:1,fs:'12px',bg:T.sf2,c:T.iris,on:()=>this.set({ctl:false})};
-      return {l:x.l,w:x.w||1,fs:x.fs||'13px',bg:x.mod?T.bg:T.sf2,c:x.mod?T.rose:T.fg,on:()=>this.type(x.l)} };
-    const termRows=[R('esc tab CTRL alt | ~').map(x=>({...x,mod:true,fs:'10px'})),R('← ↓ ↑ →').concat(R('home end pgup pgdn').map(x=>({...x,mod:true,fs:'9px'}))),R("` ' \" : ; _ { } [ ]")];
+      if(s.ctl && /^[a-z]$/.test(x.l)) return {l:'^'+x.l,w:1,fs:'12px',bg:T.sf2,c:T.iris,on:()=>this.type(x.l)};
+      return {l:s.shift&&Array.from(x.l).length===1?this.shifted(x.l):x.l,w:x.w||1,fs:x.fs||'13px',bg:x.l==='⇧'&&s.shift?T.iris:x.mod?T.bg:T.sf2,c:x.mod?T.rose:T.fg,on:()=>this.type(x.l)} };
+    const termRows=[R('1 2 3 4 5 6 7 8 9 0'),R('- / : ; ( ) $ & @ "'),R('CTRL ← ↓ ↑ → ⇧ home end tab ⌫').map(x=>({...x,fs:'10px'}))];
     const abcRows=[R('q w e r t y u i o p'),R('a s d f g h j k l'),[{l:'⇧',w:1.5},...R('z x c v b n m'),{l:'⌫',w:1.5}]];
-    const kbRows=[...(s.term?termRows:abcRows),[{l:'SUPER'},{l:'LAYER'},{l:'⌄'},{l:'space',w:3},{l:'.'},{l:'⏎',w:1.5}]].map(r=>({keys:r.map(key)}));
+    const kbRows=[...(s.term?termRows:abcRows),[{l:'SUPER'},{l:'LAYER'},{l:'⌄'},{l:'space',w:3},{l:'.'},{l:'⏎',w:1.5}]].map(r=>({keys:r.map(x=>{const k=key(x); return {...k,down:e=>this.pressKey(e,k.on,!s.sup&&['⌫','←','→'].includes(x.l)),click:e=>{e.stopPropagation();if(e.detail===0)k.on()}}})}));
     // launcher
     const m=this.matches();
     const launchResults=m.slice(0,4).map((k,i)=>({g:A[k].g,n:A[k].n,d:A[k].d,c:A[k].c,bg:i===0?T.sf2:'transparent',hint:i===0?'⏎':(s.open.includes(k)?'ws '+(s.open.indexOf(k)+1):'open'),on:()=>this.openApp(k)}));
@@ -640,7 +692,7 @@ class Component extends DCLogic {
     const themes=[['rosé pine',['#191724','#ebbcba','#9ccfd8','#c4a7e7'],true],['tokyo night',['#1a1b26','#7aa2f7','#bb9af7','#9ece6a']],['gruvbox',['#282828','#fabd2f','#fe8019','#b8bb26']],['nord',['#2e3440','#88c0d0','#81a1c1','#a3be8c']]].map(([n,c,on])=>({n,a:c[0],b:c[1],c:c[2],d:c[3],bd:on?'#3e8fb0':T.bd,lc:on?T.fg:T.dim}));
     const homeKeys=['firefox','terminal','phone','files','settings','herd'];
     return {
-      down:this.down, up:this.up, cancel:this.cancel, tr, rad:s.ov?'28px':'0px', ovOp:s.ov?1:0, openCount:n,
+      keyEnd:this.keyEnd, terminalHeight:s.kb&&!s.ov?'calc(100% - 273px)':'100%', terminalLines:s.transcript, terminalBefore:Array.from(s.input).slice(0,s.cursor).join(''), terminalCursor:Array.from(s.input)[s.cursor]||' ', terminalAfter:Array.from(s.input).slice(s.cursor+1).join(''), down:this.down, up:this.up, cancel:this.cancel, tr, rad:s.ov?'28px':'0px', ovOp:s.ov?1:0, openCount:n,
       pills, isWifi:net==='wifi', isCell:!['wifi','offline'].includes(net), isOff:net==='offline', netLabel:net,
       barW:barW+'px', prevC:wsC(s.ws-1), prevOp:s.ws>0?barOp:0, prevGlow:s.ws>0&&glow>0?`0 0 ${glow}px ${wsC(s.ws-1)}`:'none', nextC:wsC(s.ws+1), nextOp:s.ws<n-1?barOp:0, nextGlow:s.ws<n-1&&glow>0?`0 0 ${glow}px ${wsC(s.ws+1)}`:'none',
       cHome:cards.home, cTerminal:cards.terminal, cFirefox:cards.firefox, cPhone:cards.phone, cFiles:cards.files, cSettings:cards.settings, cHerd:cards.herd,
@@ -650,8 +702,8 @@ class Component extends DCLogic {
       aDown:this.aDown, aUp:this.aUp, appsTf:`translateX(${-(s.appPage||0)*(100/3)}%)`, appDots:[0,1,2].map(i=>({w:i===(s.appPage||0)?'16px':'5px',c:i===(s.appPage||0)?T.rose:T.bd,on:()=>this.set({appPage:i})})), wDown:this.wDown, wUp:this.wUp, widgetTf:`translateX(${-(s.widget||0)*(100/3)}%)`, widgetDots:['weather','btop','tailscale'].map((nm,i)=>({w:i===(s.widget||0)?'16px':'5px',c:i===(s.widget||0)?T.rose:T.bd,on:()=>this.set({widget:i})})),
       forecast:[['14h',17,'#908caa'],['15h',18,'#f6c177'],['16h',19,'#f6c177'],['17h',18,'#908caa'],['18h',16,'#908caa'],['19h',14,'#9ccfd8']].map(([hh,t,c])=>({h:hh,t:t+'°',bar:Math.round((t-10)/10*100)+'%',c})),
       openLaunch:()=>this.set({launch:true,kb:true,sup:false,ov:false,shade:null}), dial:'1 2 3 4 5 6 7 8 9 * 0 #'.split(' ').map(l=>({l})),
-      kbOn:()=>this.set({kb:true,sup:false,ov:false}), kbOff:()=>this.set({kb:false,launch:false,sup:false,ctl:false,query:''}),
-      kbTf:s.kb?'translateY(0)':'translateY(105%)', kbRows, supC:s.sup?T.rose:(s.ctl?T.iris:T.mu), supMsg:s.sup?'SUPER · tap a key to run its binding':(s.ctl?'CTRL held · tap a letter':(s.launch?'typing into the launcher':'rosé pine · touch keyboard')),
+      kbOn:()=>{if(!this.state.ov){this.set({kb:true,sup:false});this.scrollPrompt()}}, kbOff:()=>this.set({kb:false,launch:false,sup:false,ctl:false,query:''}),
+      kbTf:s.kb?'translateY(0)':'translateY(105%)', kbRows, supC:s.sup?T.rose:(s.ctl?T.iris:T.mu), supMsg:s.sup?'SUPER · tap a key to run its binding':(s.ctl?'CTRL held · tap a letter':(s.launch?'typing into the launcher':(cur==='terminal'?'terminal · type help ↵':'rosé pine · touch keyboard'))),
       launchTf:s.launch?'translateY(0)':'translateY(-104%)', query:s.query, matchCount:m.length, launchResults, closeAll:()=>this.set({launch:false,kb:false,shade:null,query:''}),
       shadeNTf:s.shade==='notif'?'translateY(0)':'translateY(-104%)', shadeQTf:s.shade==='qs'?'translateY(0)':'translateY(-104%)', notifs, notifCount:notifs.length, clearNotifs:()=>this.set({notifsCleared:true}),
       qsToggles, openSettings:()=>this.openApp('settings'), mapOp:s.map?1:0,
