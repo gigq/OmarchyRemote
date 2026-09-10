@@ -28,6 +28,8 @@ Terminal opens a real interactive HOST shell through the shared Rust backend. Ta
 
 Herdr shows the local running Herdr's workspaces, agents, statuses and panes. Tap a pane to view its live ANSI output; scroll sideways for wide desktop terminal content, or vertically for recent output. **Keyboard** sends input to the selected pane. **All panes** returns to the list. Existing panes are not focused/resized on the desktop. No input is replayed after a disconnect.
 
+Drag vertically through history in either view; flick to coast and touch again to stop. **↓ Latest** returns to the live prompt, and typing follows the latest output. Herdr keeps your reading position during live updates and uses measured terminal rows so input remains visible above the keyboard.
+
 Both apps need HOST. If the backend or Herdr is unavailable, the app shows a connection error and retries. The native bundled offline UI cannot connect to these local APIs. Other OS mockup apps remain simulated.
 
 The enabled **omarchy-remote.service** runs one Rust host backend, with separate Terminal/Herdr adapters and shared transport for future apps. See [backend architecture and API](backend/README.md). Restarting the Rust backend ends its shells; reloading HTML preserves them. Herdr sessions are owned by Herdr and survive a backend restart.
