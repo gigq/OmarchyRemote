@@ -1,3 +1,10 @@
 dist/
 node_modules/
 *.tar.gz
+ios/Generated/
+ios/build/
+DerivedData/
+**/xcuserdata/
+*.xcuserstate
+artifacts/
+__pycache__/

@@ -1,0 +1,5 @@
+/* The app fills the display. Only the custom status widgets avoid the camera. */
+.native-shell .prototype-layout { padding: 0 !important; }
+.native-shell #touch-shell > div:first-child { padding: 7px 22px 0 22px !important; }
+.native-shell #touch-shell > div:first-child > div:first-child { width: 112px !important; }
+.native-shell #touch-shell > div:first-child > div:last-child { gap: 5px !important; font-size: 10px; }
