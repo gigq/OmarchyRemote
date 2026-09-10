@@ -1,0 +1,13 @@
+:root { color-scheme: dark; background: #191724; --canvas-scale: 1; --canvas-height: 874px; }
+html, body { margin: 0; min-height: 100%; overscroll-behavior: none; }
+.prototype-layout { display: flex; gap: 44px; align-items: flex-start; justify-content: center; padding: 36px 40px; flex-wrap: wrap; }
+.prototype-column { display: flex; flex-direction: column; gap: 14px; align-items: center; }
+#phone-viewport { width: 402px; height: 874px; position: relative; overflow: hidden; background: #191724; }
+#touch-shell { transform: scale(var(--canvas-scale)); transform-origin: top left; -webkit-user-select: none; -webkit-touch-callout: none; }
+@media (max-width: 600px), (pointer: coarse) {
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #191724 !important; }
+  .prototype-layout { position: fixed; inset: 0; height: 100dvh; box-sizing: border-box; display: block; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  .prototype-column { width: 100%; height: 100%; display: block; }
+  #phone-viewport { width: 100%; height: 100%; }
+  .demo-controls, .prototype-notes { display: none !important; }
+}
