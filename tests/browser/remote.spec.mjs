@@ -36,6 +36,6 @@ test('Herdr lists real workspaces and opens output without sending input',async(
  const wide=await page.locator('.herdr-output .native-terminal-scroll').evaluate(el=>el.scrollWidth>el.clientWidth);
  if(wide){const cdp=await page.context().newCDPSession(page);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:300,y:400}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:100,y:400}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await expect.poll(()=>page.locator('.herdr-output .native-terminal-scroll').evaluate(el=>el.scrollLeft)).toBeGreaterThan(0);await cdp.detach()}
 
- await page.getByRole('button',{name:'⌨ Keyboard',exact:true}).click();await expect(page.locator('#remote-herdr-app')).toHaveClass(/with-keyboard/);
+ await page.waitForTimeout(250);await page.locator('.herdr-output .native-terminal-scroll').tap();await expect(page.locator('#remote-herdr-app')).toHaveClass(/with-keyboard/);
  await page.getByRole('button',{name:'‹ All panes'}).click();await expect(page.locator('.herdr-list')).toBeVisible();expect(errors).toEqual([]);
 });

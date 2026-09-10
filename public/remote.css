@@ -56,3 +56,5 @@
 .native-scroll-edge { position:absolute; top:0; bottom:0; width:20px; z-index:1; touch-action:none; }
 .native-scroll-edge.left { left:0; }
 .native-scroll-edge.right { right:0; }
+
+.herdr-input-bar:not(:has(button:not([hidden]), .remote-status:not(:empty))) { display:none; }

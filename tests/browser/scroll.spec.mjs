@@ -44,7 +44,7 @@ test('Herdr touch history stays anchored during updates and typed text is visibl
   await expect.poll(async()=>(await state(page)).bottom).toBeGreaterThan(heldBottom);
 
   expect((await state(page)).first).toBe(anchor);
-  await page.getByRole('button',{name:'⌨ Keyboard'}).click();
+  await page.waitForTimeout(250);await page.locator('.herdr-output .native-terminal-scroll').tap();
   await page.getByRole('button',{name:'Switch typing mode'}).click();
   for(const k of ['e','c','h','o','space','h','e','l','l','o'])await key(page,k);
   await expect.poll(async()=>(await state(page)).last).toContain('echo hello');

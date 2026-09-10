@@ -73,8 +73,8 @@
       this.detailBar.append(button('‹ All panes',()=>this.select(null)),this.title,this.fitButton);
       this.output=node('div','herdr-output');this.canvas=node('div','herdr-canvas');this.output.append(this.canvas);
       this.followOutput=true;this.latest=button('↓ Latest',()=>this.showLatest());this.latest.hidden=true;
-      this.inputStatus=node('span','remote-status','Tap to type into this pane');
-      const inputBar=node('div','herdr-input-bar');inputBar.append(button('⌨ Keyboard',()=>{this.showLatest();bridge.keyboard()}),this.latest,this.inputStatus);
+      this.inputStatus=node('span','remote-status','');this.inputStatus.setAttribute('role','status');
+      const inputBar=node('div','herdr-input-bar');inputBar.append(this.latest,this.inputStatus);
       this.detail.append(this.detailBar,this.output,inputBar);this.term=terminal(this.canvas,true);this.fit=new FitAddon.FitAddon();this.term.loadAddon(this.fit);
       this.stopTouchScroll=touchScroll(this.output,this.term,true,()=>this.trackScroll(),()=>this.flushRead());this.applyFit();
       this.term.onScroll(()=>{if(!this.rendering)this.trackScroll()});
@@ -89,7 +89,7 @@
       ws.onmessage=event=>{const m=JSON.parse(event.data);
         if(m.type==='snapshot'){this.online=true;this.snapshot=m.snapshot;this.status.textContent=`HOST · ${m.snapshot.panes.length} panes`;this.renderList();if(this.selected){const pane=this.snapshot.panes.find(p=>p.pane_id===this.selected);if(pane)this.showDetail(pane);else this.select(null)}}
         else if(m.type==='pane'&&m.pane_id===this.selected){this.online=true;this.renderOutput(m.read);}
-        else if(m.type==='ack'){this.pending.delete(m.id);this.inputStatus.textContent=this.pending.size?'Sending…':'Input sent'}
+        else if(m.type==='ack'){this.pending.delete(m.id);this.inputStatus.textContent=''}
         else if(m.type==='input_error'){this.pending.delete(m.id);this.inputStatus.textContent=m.message||'Input failed'}
         else if(m.type==='pane_error'){this.inputStatus.textContent='Pane unavailable · return to all panes';this.online=false}
         else if(m.type==='error'){this.online=false;this.status.textContent='Herdr unavailable · retrying…'}
@@ -117,7 +117,7 @@
     showDetail(pane){this.list.hidden=true;this.detail.hidden=false;this.title.textContent=`${pane.agent||'shell'} · ${pane.terminal_title_stripped||pane.pane_id}`;}
     select(id){
       this.stopTouchScroll.cancel();
-      this.nativeInput.select(id);this.selected=id;storage.set('omarchy-herdr-pane',id);this.lastRead=null;this.queuedRead=null;this.followOutput=true;this.output.scrollLeft=0;this.term.reset();this.inputStatus.textContent='Tap to type into this pane';
+      this.nativeInput.select(id);this.selected=id;storage.set('omarchy-herdr-pane',id);this.lastRead=null;this.queuedRead=null;this.followOutput=true;this.output.scrollLeft=0;this.term.reset();this.inputStatus.textContent='';
       this.send({type:'select',pane_id:id});
       if(id){const pane=this.snapshot?.panes.find(p=>p.pane_id===id);if(pane)this.showDetail(pane)}else{this.detail.hidden=true;this.list.hidden=false;this.bridge.logic.set({kb:false})}
     }
@@ -160,7 +160,7 @@
       if(!this.selected){this.status.textContent='Select a pane to type';return false}
       if(!this.online||this.ws?.readyState!==1){this.inputStatus.textContent='Disconnected · input was not sent';return false}
       this.showLatest();
-      const id=crypto.randomUUID();this.pending.add(id);this.inputStatus.textContent='Sending…';
+      const id=crypto.randomUUID();this.pending.add(id);this.inputStatus.textContent='';
       return this.send({type:'input',id,pane_id:this.selected,text:input.text,keys:input.keys});
     }
     dispose(){this.disposed=true;clearTimeout(this.retry);this.ws?.close();this.resizeObserver.disconnect();this.stopTouchScroll();this.nativeInput.dispose();this.term.dispose()}
