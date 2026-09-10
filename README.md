@@ -8,7 +8,7 @@ Open the deployed HTTPS URL in Safari, sign in if prompted, then Share → Add t
 
 Start edge gestures inside the app's visible content, above the home indicator and below the system status area. Left/right edges switch workspaces. Swipe down from the top left/middle/right for notifications/launcher/quick settings. Swipe up from the bottom corners (outer 15% each) for keyboard/SUPER keyboard; the middle 70% opens expo. Tapping the active workspace pill also toggles expo.
 
-This is a simulated operating system UI. Apps, Wi-Fi controls, agents, weather, time, and battery values are mock data; they do not control iOS or connect to remote services. State resets when the page reloads. A PWA cannot defer iOS system gestures; use the native app below for that experience.
+This is a simulated operating system UI. Apps, Wi-Fi controls, agents, weather, time, and battery values are mock data; they do not control iOS. Terminal and Herdr connect to HOST as described below. Shell UI workspace state resets when the page reloads. A PWA cannot defer iOS system gestures; use the native app below for that experience.
 
 ## Native iPhone app
 
@@ -22,17 +22,21 @@ On a Mac, select the scheme and a paired iPhone to build and run. From HOST, use
 
 Run `python -m unittest discover -s scripts -p 'test_native_bundle.py'` to check native asset packaging. `python scripts/prepare-native.py` also generates a local inspection copy in ignored `ios/Generated/Web`.
 
-## Terminal keyboard test
+## Terminal and Herdr
 
-Open Terminal and tap the prompt to show the custom touch keyboard. Type `echo hello` and press Return, or type `help` to see the available test commands. `clear`, `pwd`, and `date` also work locally; other input is acknowledged. This is a keyboard test, not a remote shell.
+Terminal opens a real interactive HOST shell through the shared Rust backend. Tap its output to use the custom keyboard. Return, Backspace, arrows, Tab, Escape, Shift, and Control send real terminal input. **123** exposes numbers, symbols and navigation; hold Backspace to repeat. Control stays armed when switching back to **abc**, so Control+C can interrupt a command. The shell survives live reload and reconnection; `exit` ends it, then **New shell** opens another.
 
-Shift applies to the next character. **123** switches to numbers, punctuation, arrows, and Control; Shift on that layer exposes more symbols. Hold Backspace to delete repeatedly. Left/right move the cursor, up/down recall command history, and Home/End move within the prompt. Control stays armed when switching back to **abc**: A/E move to start/end, U/K delete before/after the cursor, C cancels, and L clears output. Hiding the keyboard preserves the draft; page reloads reset it. The terminal scrolls to keep the cursor above the keyboard.
+Herdr shows the local running Herdr's workspaces, agents, statuses and panes. Tap a pane to view its live ANSI output; scroll sideways for wide desktop terminal content, or vertically for recent output. **Keyboard** sends input to the selected pane. **All panes** returns to the list. Existing panes are not focused/resized on the desktop. No input is replayed after a disconnect.
+
+Both apps need HOST. If the backend or Herdr is unavailable, the app shows a connection error and retries. The native bundled offline UI cannot connect to these local APIs. Other OS mockup apps remain simulated.
+
+The enabled **omarchy-remote.service** runs one Rust host backend, with separate Terminal/Herdr adapters and shared transport for future apps. See [backend architecture and API](backend/README.md). Restarting the Rust backend ends its shells; reloading HTML preserves them. Herdr sessions are owned by Herdr and survive a backend restart.
 
 ## Development
 
 The HOST development server is already running as the enabled user service `hyprland-touch-dev.service`. It survives this session and restarts after failure. Tailscale Serve exposes it privately on HTTPS port 12443; its HTTP listener binds only to `127.0.0.1:4187`.
 
-Edit **`public/index.html`** for the prototype's markup and interaction logic, **`public/pwa.css`** / **`public/pwa.js`** for shared layout and behavior, and **`ios/WebOverrides/native.css`** for native-only layout. Saves trigger a full page reload in connected apps, usually within a second. A reload resets the mockup's in-memory workspace state. Reconnection and foregrounding compare the current server version so changes made while the app was suspended are picked up too. No iPhone rebuild or reinstall is needed for these web changes; Swift changes still require one.
+Edit **`public/index.html`** for the prototype's markup and interaction logic, **`public/pwa.css`** / **`public/pwa.js`** for shared layout and behavior, and **`ios/WebOverrides/native.css`** for native-only layout. Saves trigger a full page reload in connected apps, usually within a second. A reload resets the shell UI's in-memory workspace state; the real terminal session and selected Herdr pane reconnect. Reconnection and foregrounding compare the current server version so changes made while the app was suspended are picked up too. No iPhone rebuild or reinstall is needed for these web changes; Swift changes still require one.
 
 Hold **two fingers for about a second** to open the native source menu: **Live from HOST**, **Bundled offline copy**, or **Reload**. Choosing the bundled source persists until you select live again.
 
@@ -44,7 +48,7 @@ Useful commands:
 - `npm run test:live` with the development server running
 - `npm run build && npm test` for the standalone PWA
 
-The service definition is tracked in `deploy/hyprland-touch-dev.service`. Local development requires Node (with recursive `fs.watch` support) and Python 3. For a separate foreground preview, use `PORT=4188 npm run dev`; the app's configured Tailscale address continues to use the persistent service on 4187. `GET /__dev/status` reports the current revision and live connection count; `/__dev/events` is the reload stream. No public hosting or ChatGPT sign-in is involved in this loop.
+The service definition is tracked in `deploy/hyprland-touch-dev.service`. Local development requires Rust/Cargo, Node (with recursive `fs.watch` support), and Python 3. The Rust API occupies port 4188; the preview/proxy uses 4187. For a separate foreground preview, use `PORT=4190 npm run dev`; the app's configured Tailscale address continues to use the persistent service on 4187. `GET /__dev/status` reports the current revision and live connection count; `/__dev/events` is the reload stream. No public hosting or ChatGPT sign-in is involved in this loop.
 
 To remove the background development setup: stop and disable `hyprland-touch-dev.service`, then remove only its Tailscale listener with `sudo tailscale serve --https=12443 off`. Other Tailscale services are independent.
 
@@ -54,4 +58,4 @@ The Sites project ID is in `.openai/hosting.json`. Use the Sites packaging and p
 
 ## Validation
 
-Automated checks cover manifest and icons, all precache URLs, offline shell delivery, and HTTP routing. The exported React runtime and launcher/settings/map/reset controls were also exercised in a DOM environment without runtime errors. Physical iPhone layout, installation, and gesture behavior still need device verification.
+Automated checks cover manifest and icons, all precache URLs, offline shell delivery, and HTTP routing. The exported React runtime and launcher/settings/map/reset controls were also exercised in a DOM environment without runtime errors. Native simulator results are recorded in `ios/VALIDATION.md`.

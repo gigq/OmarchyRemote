@@ -7,6 +7,11 @@
 <script src="/assets/0de3c380-5f28-4c7d-ae96-8da6e27b0691.js"></script>
 
 
+<link rel="stylesheet" href="/assets/xterm/xterm.css">
+<link rel="stylesheet" href="/remote.css">
+<script src="/assets/xterm/xterm.js"></script>
+<script src="/assets/xterm/addon-fit.js"></script>
+<script src="/remote.js"></script>
 <title>Hyprland Touch</title>
 <meta name="description" content="A Rosé Pine mobile OS prototype with touch workspaces, launcher, and SUPER keyboard.">
 <meta name="theme-color" content="#191724">
@@ -417,19 +422,7 @@
     </div>
 
     <div sc-camel-on-click="{{ cTerminal.tap }}" style="position:absolute;inset:0;transform: {{ cTerminal.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cTerminal.bd }};border-radius: {{ rad }};overflow:hidden;background:#15131f;opacity: {{ cTerminal.op }};pointer-events: {{ cTerminal.pe }};box-sizing:border-box">
-      <div id="terminal-scroll" sc-camel-on-click="{{ kbOn }}" style="overflow-y:auto;overscroll-behavior:contain;padding:64px 20px 20px;font-size:12.5px;line-height:1.75;box-sizing:border-box;height: {{ terminalHeight }};cursor:text">
-        <div><span style="color:#9ccfd8">~</span> <span style="color:#ebbcba">❯</span> fastfetch</div>
-        <div style="color:#908caa;padding-left:8px"><span style="color:#c4a7e7">os</span>       Arch Linux aarch64</div>
-        <div style="color:#908caa;padding-left:8px"><span style="color:#c4a7e7">host</span>     iPhone 17 Pro · hyprland-touch</div>
-        <div style="color:#908caa;padding-left:8px"><span style="color:#c4a7e7">wm</span>       Hyprland 0.52 · touch</div>
-        <div style="color:#908caa;padding-left:8px"><span style="color:#c4a7e7">shell</span>    zsh 5.9</div>
-        <div style="color:#908caa;padding-left:8px"><span style="color:#c4a7e7">term</span>     alacritty</div>
-        <div style="color:#908caa;padding-left:8px"><span style="color:#c4a7e7">theme</span>    rosé pine</div>
-        <div style="color:#908caa;padding-left:8px"><span style="color:#c4a7e7">uptime</span>   3h 12m</div>
-        <div style="color:#908caa;padding-left:8px"><span style="color:#c4a7e7">pkgs</span>     1204 (pacman)</div>
-        <sc-for list="{{ terminalLines }}" as="line"><div style="white-space:pre-wrap;overflow-wrap:anywhere">{{ line }}</div></sc-for>
-        <div id="terminal-prompt" style="margin-top:10px;white-space:pre-wrap;overflow-wrap:anywhere"><span style="color:#9ccfd8">~</span> <span style="color:#ebbcba">❯</span> <span>{{ terminalBefore }}</span><span id="terminal-caret" style="display:inline-block;min-width:8px;height:17px;background:#e0def4;color:#15131f;vertical-align:-3px;line-height:17px">{{ terminalCursor }}</span><span>{{ terminalAfter }}</span></div>
-      </div>
+      <div id="remote-terminal-app" class="remote-app"></div>
       <div style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:#e0def4;background:linear-gradient(#15131f 60%,transparent);opacity: {{ cTerminal.lab }};transition: {{ tr }};pointer-events:none">terminal</div>
     </div>
 
@@ -474,23 +467,7 @@
     </div>
 
     <div sc-camel-on-click="{{ cHerd.tap }}" style="position:absolute;inset:0;transform: {{ cHerd.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cHerd.bd }};border-radius: {{ rad }};overflow:hidden;background:#191724;opacity: {{ cHerd.op }};pointer-events: {{ cHerd.pe }};box-sizing:border-box">
-      <div style="position:absolute;inset:0;transform: {{ herdListTf }};opacity: {{ herdListOp }};transition: {{ tr }}">
-        <div style="display:flex;align-items:baseline;justify-content:space-between;padding:68px 18px 12px;font-size:12px"><span style="color:#56949f;font-weight:600">herd</span><span style="font-size:10px;color:#6e6a86">{{ herdCount }} agents · 2 machines</span></div>
-        <div style="display:flex;gap:6px;padding:0 14px 12px"><sc-for list="{{ herdSummary }}" as="hs" hint-placeholder-count="4"><div style="flex:1;padding:8px 10px;border-radius:10px;background:#1f1d2e;border:1px solid #403d52;display:flex;align-items:baseline;gap:6px"><span style="font-size:16px;font-weight:600;color: {{ hs.c }}">{{ hs.n }}</span><span style="font-size:9px;color:#908caa">{{ hs.l }}</span></div></sc-for></div>
-        <div style="display:flex;flex-direction:column;gap:10px;padding:0 14px">
-          <sc-for list="{{ herdGroups }}" as="g" hint-placeholder-count="3"><div style="border-radius:14px;background:#1f1d2e;border:1px solid {{ g.bd }};overflow:hidden"><div style="display:flex;align-items:center;gap:8px;padding:10px 12px;font-size:11px"><span style="color:#e0def4;font-weight:600">{{ g.ws }}</span><span style="font-size:9px;padding:2px 6px;border-radius:5px;background:#26233a;color: {{ g.mc }}">{{ g.m }}</span><span style="flex:1"></span><span style="font-size:10px;color:#6e6a86">{{ g.count }} panes</span></div><sc-for list="{{ g.list }}" as="a" hint-placeholder-count="2"><div sc-camel-on-click="{{ a.on }}" style="display:flex;align-items:center;gap:12px;height:54px;padding:0 12px;border-top:1px solid #26233a;cursor:pointer" style-hover="background:#26233a"><div style="width:8px;height:8px;border-radius:50%;background: {{ a.c }};flex:none"></div><div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:8px;font-size:12.5px"><span style="color: {{ a.nc }}">{{ a.a }}</span><span style="color:#6e6a86">·</span><span style="color:#908caa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ a.t }}</span></div><div style="font-size:10px;color: {{ a.tc }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">{{ a.tail }}</div></div><div style="font-size:10px;color:#6e6a86">{{ a.el }}</div></div></sc-for></div></sc-for>
-        </div>
-        <div style="position:absolute;left:14px;right:14px;bottom:44px;display:flex;gap:6px"><div style="flex:1;height:34px;border-radius:9px;display:grid;place-items:center;font-size:11px;background:#26233a;color:#e0def4">new agent</div><div style="flex:1;height:34px;border-radius:9px;display:grid;place-items:center;font-size:11px;background:#26233a;color:#e0def4">new workspace</div><div style="flex:1;height:34px;border-radius:9px;display:grid;place-items:center;font-size:11px;background:#26233a;color:#e0def4">attach hetzner-1</div></div>
-      </div>
-      <div style="position:absolute;inset:0;transform: {{ herdPaneTf }};opacity: {{ herdPaneOp }};transition: {{ tr }};pointer-events: {{ herdPanePe }}">
-        <div style="display:flex;align-items:center;gap:10px;padding:62px 14px 0;font-size:11px"><div sc-camel-on-click="{{ herdBack }}" style="display:flex;align-items:center;gap:6px;color:#56949f;padding:6px 10px 6px 6px;border-radius:9px;background:#1f1d2e;cursor:pointer"><span style="font-size:14px;line-height:1">‹</span><span>herd</span></div><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><div style="display:flex;align-items:center;gap:6px;font-size:12.5px"><span style="font-weight:600">{{ paneAgent }}</span><span style="color:#6e6a86">in</span><span style="color:#908caa">{{ paneWs }}</span></div><div style="display:flex;gap:6px;font-size:10px;color:#6e6a86"><span>{{ paneM }}</span><span>·</span><span>agents tab</span><span>·</span><span>pane {{ paneIdx }}/{{ paneCount }}</span></div></div><div style="display:flex;align-items:center;gap:6px;padding:5px 9px;border-radius:7px;background:#1f1d2e;font-size:10px;color: {{ paneStateC }};white-space:nowrap"><div style="width:6px;height:6px;border-radius:50%;background: {{ paneStateC }};flex:none"></div>{{ paneStateL }}</div></div>
-        <div style="display:flex;gap:5px;justify-content:center;align-items:center;padding:8px 0 2px"><sc-for list="{{ paneDots }}" as="pd" hint-placeholder-count="2"><div sc-camel-on-click="{{ pd.on }}" style="padding:10px 6px;margin:-8px 0;cursor:pointer"><div style="width: {{ pd.w }};height:5px;border-radius:3px;background: {{ pd.c }};transition:width .3s,background .3s"></div></div></sc-for></div>
-        <div style="position:absolute;left:12px;right:12px;top:118px;bottom: {{ paneBottom }};overflow:hidden;border-radius:14px;transition: {{ tr }}"><div style="display:flex;height:100%;width: {{ paneStripW }};transform: {{ paneTf }};transition:transform .45s cubic-bezier(.22,.9,.24,1)"><sc-for list="{{ panes }}" as="pn" hint-placeholder-count="2"><div style="flex:1;min-width:0;padding:14px 14px 12px;border-radius:14px;background:#15131f;border:1px solid {{ pn.c }};font-size:11px;line-height:1.7;overflow:hidden;box-sizing:border-box;height:100%"><sc-for list="{{ pn.lines }}" as="ln" hint-placeholder-count="6"><div style="color: {{ ln.c }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ ln.t }}</div></sc-for></div></sc-for></div></div>
-        <div style="position:absolute;left:12px;right:12px;bottom:44px;display:flex;flex-direction:column;gap:8px">
-          <div style="display:flex;gap:6px;opacity: {{ paneAnsOp }};transform: {{ paneAnsTf }};transition:opacity .35s,transform .45s cubic-bezier(.22,.9,.24,1);pointer-events: {{ paneAnsPe }}"><sc-for list="{{ paneAns }}" as="an" hint-placeholder-count="3"><div sc-camel-on-click="{{ an.on }}" style="flex:1;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:11px;background: {{ an.bg }};color: {{ an.c }};font-weight: {{ an.fw }};cursor:pointer"><span style="padding:1px 5px;border-radius:4px;background: {{ an.kbg }};color: {{ an.kc }};font-size:10px">{{ an.k }}</span>{{ an.l }}</div></sc-for></div>
-          <div sc-camel-on-click="{{ kbOn }}" style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:12px;background:#1f1d2e;border:1px solid #403d52;font-size:12px;cursor:text"><span style="color:#56949f">❯</span><span style="color:#908caa">{{ paneReply }}</span><span style="flex:1"></span><span style="font-size:10px;color:#6e6a86">⌨</span></div>
-        </div>
-      </div>
+      <div id="remote-herdr-app" class="remote-app"></div>
       <div style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:#e0def4;background:linear-gradient(#191724 60%,transparent);opacity: {{ cHerd.lab }};transition: {{ tr }};pointer-events:none">herd</div>
     </div>
   </div>
@@ -545,7 +522,7 @@
 </x-dc>
 <script type="text/x-dc" data-dc-script="" data-props="{&quot;network&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;wifi&quot;,&quot;5G&quot;,&quot;LTE&quot;,&quot;3G&quot;,&quot;offline&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Status bar&quot;},&quot;barWidth&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:2,&quot;min&quot;:1,&quot;max&quot;:12,&quot;step&quot;:1,&quot;unit&quot;:&quot;px&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Edge bars&quot;},&quot;barGlow&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0,&quot;min&quot;:0,&quot;max&quot;:40,&quot;step&quot;:1,&quot;unit&quot;:&quot;px&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Edge bars&quot;},&quot;barOpacity&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0.75,&quot;min&quot;:0.2,&quot;max&quot;:1,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Edge bars&quot;},&quot;slowMotion&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Demo&quot;}}">
 class Component extends DCLogic {
-  APPS = { home:{n:'home',c:'#ebbcba',g:'hm',d:'launcher'}, terminal:{n:'terminal',c:'#9ccfd8',g:'>_',d:'alacritty · zsh'}, firefox:{n:'firefox',c:'#f6c177',g:'ff',d:'web browser'}, phone:{n:'phone',c:'#c4a7e7',g:'ph',d:'calls & contacts'}, files:{n:'files',c:'#eb6f92',g:'fm',d:'yazi'}, settings:{n:'settings',c:'#3e8fb0',g:'st',d:'hyprctl · nmtui'}, herd:{n:'herd',c:'#56949f',g:'hd',d:'agents · herdr'} };
+  APPS = { home:{n:'home',c:'#ebbcba',g:'hm',d:'launcher'}, terminal:{n:'terminal',c:'#9ccfd8',g:'>_',d:'live HOST shell'}, firefox:{n:'firefox',c:'#f6c177',g:'ff',d:'web browser'}, phone:{n:'phone',c:'#c4a7e7',g:'ph',d:'calls & contacts'}, files:{n:'files',c:'#eb6f92',g:'fm',d:'yazi'}, settings:{n:'settings',c:'#3e8fb0',g:'st',d:'hyprctl · nmtui'}, herd:{n:'herd',c:'#56949f',g:'hd',d:'agents · herdr'} };
   T = {bg:'#191724',sf:'#1f1d2e',sf2:'#26233a',bd:'#403d52',fg:'#e0def4',mu:'#908caa',dim:'#6e6a86',love:'#eb6f92',gold:'#f6c177',rose:'#ebbcba',foam:'#9ccfd8',iris:'#c4a7e7'};
   FILES = [
     {g:'dir',n:'config',s:'12 items',t:'13:02',dir:true,prev:[['hypr/','#e0def4'],['waybar/','#e0def4'],['walker/','#e0def4'],['alacritty/','#e0def4']]},
@@ -564,6 +541,9 @@ class Component extends DCLogic {
       {ws:'herdr-ios',m:'hetzner-1',a:'claude',s:'done',t:'swift bridge for socket api',tail:'+124 −31 · 3 files · tests pass',el:'41m',lines:[['~/src/herdr-ios ❯ claude','#908caa'],['› bridge the herdr socket api to swift','#e0def4'],['',''],['● Write Sources/HerdrKit/Socket.swift +124','#908caa'],['● Update Package.swift +3 −1','#908caa'],['● Bash swift test ✓ 14 passed','#908caa'],['',''],['Done. Socket API bridged; ready to commit.','#c4a7e7']]},
       {ws:'herdr-ios',m:'hetzner-1',a:'amp',s:'idle',t:'docs: agent guide',tail:'❯',el:'2h',lines:[['~/src/herdr-ios ❯ amp','#908caa'],['› draft docs/agent-guide.md','#e0def4'],['● Write docs/agent-guide.md +212','#908caa'],['',''],['❯','#e0def4']]},
       {ws:'dotfiles',m:'local',a:'claude',s:'blocked',t:'migrate to rosé pine',tail:'which variant? 1 main · 2 moon · 3 dawn',el:'1m',ans:[{k:'1',l:'main',p:true},{k:'2',l:'moon'},{k:'3',l:'dawn'}],lines:[['~/dotfiles ❯ claude','#908caa'],['› migrate the terminal theme to rosé pine','#e0def4'],['',''],['● Read alacritty/alacritty.toml','#908caa'],['● Read nvim/lua/theme.lua','#908caa'],['',''],['? Which Rosé Pine variant for the terminal?','#f6c177'],['  1 main   2 moon   3 dawn','#908caa']]}] };
+  componentDidMount(){ this.remote=window.HyprlandRemote?.attach(this) }
+  componentDidUpdate(){ this.remote?.update() }
+  componentWillUnmount(){ this.keyEnd();this.remote?.dispose() }
   ptr = null; wx = null;
   cancel=()=>{ this.ptr=null; this.ax=null; this.wx=null };
   aDown=e=>{ this.ax=e.clientX };
@@ -609,6 +589,7 @@ class Component extends DCLogic {
   type(l){
     const s=this.state;
     if(l==='⇧') return this.set({shift:!s.shift});
+    if(!s.launch&&this.remote&&['terminal','herd'].includes(this.cur())){this.remote.key(l,{shift:s.shift,ctrl:s.ctl});if(Array.from(l).length===1)this.set({shift:false,ctl:false});return}
     if(l==='esc') return this.set({kb:false,launch:false,sup:false,ctl:false});
     if(s.launch){
       if(l==='⌫') return this.set({query:Array.from(s.query).slice(0,-1).join('')});
@@ -674,7 +655,7 @@ class Component extends DCLogic {
       return {l:s.shift&&Array.from(x.l).length===1?this.shifted(x.l):x.l,w:x.w||1,fs:x.fs||'13px',bg:x.l==='⇧'&&s.shift?T.iris:x.mod?T.bg:T.sf2,c:x.mod?T.rose:T.fg,on:()=>this.type(x.l)} };
     const termRows=[R('1 2 3 4 5 6 7 8 9 0'),R('- / : ; ( ) $ & @ "'),R('CTRL ← ↓ ↑ → ⇧ home end tab ⌫').map(x=>({...x,fs:'10px'}))];
     const abcRows=[R('q w e r t y u i o p'),R('a s d f g h j k l'),[{l:'⇧',w:1.5},...R('z x c v b n m'),{l:'⌫',w:1.5}]];
-    const kbRows=[...(s.term?termRows:abcRows),[{l:'SUPER'},{l:'LAYER'},{l:'⌄'},{l:'space',w:3},{l:'.'},{l:'⏎',w:1.5}]].map(r=>({keys:r.map(x=>{const k=key(x); return {...k,down:e=>{if(e.button===0)this.showKey(e,k.l);this.pressKey(e,k.on,!s.sup&&['⌫','←','→'].includes(x.l))},click:e=>{e.stopPropagation();if(e.detail===0){this.showKey(e,k.l);k.on();this.keyEnd(e)}}}})}));
+    const kbRows=[...(s.term?termRows:abcRows),[{l:'SUPER'},{l:'LAYER'},{l:'esc'},{l:'space',w:3},{l:'.'},{l:'⏎',w:1.5}]].map(r=>({keys:r.map(x=>{const k=key(x); return {...k,down:e=>{if(e.button===0)this.showKey(e,k.l);this.pressKey(e,k.on,!s.sup&&['⌫','←','→'].includes(x.l))},click:e=>{e.stopPropagation();if(e.detail===0){this.showKey(e,k.l);k.on();this.keyEnd(e)}}}})}));
     // launcher
     const m=this.matches();
     const launchResults=m.slice(0,4).map((k,i)=>({g:A[k].g,n:A[k].n,d:A[k].d,c:A[k].c,bg:i===0?T.sf2:'transparent',hint:i===0?'⏎':(s.open.includes(k)?'ws '+(s.open.indexOf(k)+1):'open'),on:()=>this.openApp(k)}));
@@ -689,7 +670,7 @@ class Component extends DCLogic {
     const herdSummary=[['blocked',T.gold],['working',T.foam],['done',T.iris],['idle',T.dim]].map(([k,c])=>({n:cnt(k),l:k==='blocked'?'need you':k,c}));
     const panes=this.paneList(), pa=panes[s.pane]||panes[0]||{s:'idle',a:'',ws:'',m:'',lines:[]}, g=groups[s.herdG]||{ws:'',m:''};
     const paneAns=(pa.ans||[]).map(o=>({k:o.k,l:o.l,bg:o.p?T.gold:T.sf2,c:o.p?T.bg:T.fg,fw:o.p?600:400,kbg:o.p?'rgba(25,23,36,.18)':T.bg,kc:o.p?T.bg:T.mu,on:()=>this.answer(pa.i,o.k)}));
-    const blockedCodex=s.agents[1].s==='blocked';
+    const blockedCodex=false;
     const notifsAll=[ blockedCodex?{g:'cx',bg:T.gold,app:'herdr · codex',t:'3m',title:'codex needs you',body:'allow write to waybar/battery.rs?',on:()=>{ this.set({shade:null,herdView:'pane',herdG:0,pane:1}); this.openApp('herd') }}:null,
       {g:'pk',bg:T.foam,app:'pacman',t:'12m',title:'12 updates available',body:'linux-mobile 6.12.4 · hyprland 0.52.1 · firefox 143',on:()=>this.openApp('settings')},
       {g:'sg',bg:T.iris,app:'signal',t:'now',title:'maya',body:'did you get the fastfetch theme working?',on:()=>{}} ].filter(Boolean);
@@ -710,7 +691,7 @@ class Component extends DCLogic {
       forecast:[['14h',17,'#908caa'],['15h',18,'#f6c177'],['16h',19,'#f6c177'],['17h',18,'#908caa'],['18h',16,'#908caa'],['19h',14,'#9ccfd8']].map(([hh,t,c])=>({h:hh,t:t+'°',bar:Math.round((t-10)/10*100)+'%',c})),
       openLaunch:()=>this.set({launch:true,kb:true,sup:false,ov:false,shade:null}), dial:'1 2 3 4 5 6 7 8 9 * 0 #'.split(' ').map(l=>({l})),
       kbOn:()=>{if(!this.state.ov){this.set({kb:true,sup:false});this.scrollPrompt()}}, kbOff:()=>this.set({kb:false,launch:false,sup:false,ctl:false,query:''}),
-      kbTf:s.kb?'translateY(0)':'translateY(105%)', kbRows, supC:s.sup?T.rose:(s.ctl?T.iris:T.mu), supMsg:s.sup?'SUPER · tap a key to run its binding':(s.ctl?'CTRL held · tap a letter':(s.launch?'typing into the launcher':(cur==='terminal'?'terminal · type help ↵':'rosé pine · touch keyboard'))),
+      kbTf:s.kb?'translateY(0)':'translateY(105%)', kbRows, supC:s.sup?T.rose:(s.ctl?T.iris:T.mu), supMsg:s.sup?'SUPER · tap a key to run its binding':(s.ctl?'CTRL held · tap a letter':(s.launch?'typing into the launcher':(['terminal','herd'].includes(cur)?'HOST · '+(cur==='terminal'?'terminal':'selected Herdr pane'):'rosé pine · touch keyboard'))),
       launchTf:s.launch?'translateY(0)':'translateY(-104%)', query:s.query, matchCount:m.length, launchResults, closeAll:()=>this.set({launch:false,kb:false,shade:null,query:''}),
       shadeNTf:s.shade==='notif'?'translateY(0)':'translateY(-104%)', shadeQTf:s.shade==='qs'?'translateY(0)':'translateY(-104%)', notifs, notifCount:notifs.length, clearNotifs:()=>this.set({notifsCleared:true}),
       qsToggles, openSettings:()=>this.openApp('settings'), mapOp:s.map?1:0,

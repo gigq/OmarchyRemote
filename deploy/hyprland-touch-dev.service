@@ -6,6 +6,7 @@ After=network.target
 Type=simple
 WorkingDirectory=/home/user/git/OmarchyRemote
 ExecStart=/home/user/.local/share/mise/installs/node/latest/bin/node /home/user/git/OmarchyRemote/scripts/serve.mjs
+EnvironmentFile=%h/.config/omarchy-remote/backend.env
 Environment=PORT=4187
 Environment=PYTHON=/usr/bin/python3
 Restart=on-failure

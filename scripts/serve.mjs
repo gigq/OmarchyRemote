@@ -9,6 +9,24 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const publicRoot = path.join(root, 'public');
 const nativeRoot = path.join(root, 'ios/Generated/Web');
 const clients = new Set();
+const apiPort = Number(process.env.OMARCHY_API_PORT || 4188);
+const proxyToken = process.env.OMARCHY_PROXY_TOKEN;
+const allowedHosts = new Set((process.env.OMARCHY_ORIGINS || 'https://your-host.your-tailnet.ts.net:12443,http://127.0.0.1:4187,http://localhost:4187').split(',').map(origin => new URL(origin).host));
+function apiHeaders(req) {
+  const headers = { ...req.headers, 'x-omarchy-proxy': proxyToken };
+  delete headers['transfer-encoding'];
+  return headers;
+}
+function proxyApi(req, res) {
+  if (!proxyToken || !allowedHosts.has(req.headers.host)) { res.writeHead(403); res.end('Host not allowed'); return; }
+  const upstream = http.request({ hostname: '127.0.0.1', port: apiPort, path: req.url, method: req.method, headers: apiHeaders(req) }, response => {
+    res.writeHead(response.statusCode, response.headers); response.pipe(res);
+  });
+  upstream.on('error', () => { if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify({ error: 'Host backend unavailable' })); });
+  upstream.setTimeout(10000, () => upstream.destroy());
+  res.on('close', () => upstream.destroy());
+  req.pipe(upstream);
+}
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff2': 'font/woff2', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
 let version = `${Date.now()}`;
 let refreshTimer;
@@ -35,6 +53,7 @@ const liveScript = readFileSync(path.join(root, 'scripts/live-reload.js'), 'utf8
 const server = http.createServer(async (req, res) => {
   const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
   try {
+    if (req.url.startsWith('/api/')) { proxyApi(req, res); return; }
     if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405, { ...headers, Allow: 'GET, HEAD' }); res.end(); return; }
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname === '/__dev/events' && req.method === 'GET') {
@@ -77,6 +96,22 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(error instanceof URIError ? 400 : 500, headers);
     res.end(error instanceof URIError ? 'Invalid path' : 'Could not load preview');
   }
+});
+server.on('upgrade', (req, socket, head) => {
+  if (!req.url.startsWith('/api/') || !proxyToken || !allowedHosts.has(req.headers.host)) { socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); return; }
+  const upstream = http.request({ hostname: '127.0.0.1', port: apiPort, path: req.url, headers: apiHeaders(req) });
+  upstream.on('upgrade', (response, peer, peerHead) => {
+    socket.write('HTTP/1.1 101 Switching Protocols\r\n' + Object.entries(response.headers).map(([key, value]) => `${key}: ${value}\r\n`).join('') + '\r\n');
+    if (head.length) peer.write(head);
+    if (peerHead.length) socket.write(peerHead);
+    peer.pipe(socket); socket.pipe(peer);
+    peer.on('error', () => socket.destroy()); socket.on('error', () => peer.destroy());
+    peer.on('close', () => socket.destroy()); socket.on('close', () => peer.destroy());
+  });
+  upstream.on('response', response => { socket.end(`HTTP/1.1 ${response.statusCode} Rejected\r\nConnection: close\r\n\r\n`); response.resume(); });
+  upstream.on('error', () => socket.destroy());
+  socket.on('error', () => upstream.destroy());
+  upstream.end();
 });
 const port = Number(process.env.PORT || 4187);
 server.listen(port, '127.0.0.1', () => console.log(`Hyprland live preview: http://127.0.0.1:${port}/native/`));

@@ -8,3 +8,4 @@ DerivedData/
 *.xcuserstate
 artifacts/
 __pycache__/
+/backend/target/

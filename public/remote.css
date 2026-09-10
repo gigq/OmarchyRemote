@@ -1,0 +1,33 @@
+.remote-app { position:absolute; inset:58px 10px 40px; display:flex; flex-direction:column; min-height:0; }
+.remote-app.with-keyboard { bottom:281px; }
+.remote-bar { min-height:30px; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:0 4px 8px; font-size:13px; }
+.remote-status { font-size:10px; color:#908caa; overflow-wrap:anywhere; }
+.remote-terminal { flex:1; min-height:0; overflow:hidden; }
+.remote-button { font:inherit; border:1px solid #403d52; border-radius:8px; color:#e0def4; background:#26233a; padding:9px 10px; cursor:pointer; }
+.remote-button:active,.herdr-pane:active { background:#403d52; }
+.remote-app [hidden] { display:none !important; }
+.remote-empty { padding:30px 12px; font-size:13px; color:#908caa; }
+.herdr-list { flex:1; overflow-y:auto; overscroll-behavior:contain; padding:0 2px 10px; }
+.herdr-group { border:1px solid #403d52; border-radius:14px; margin:0 0 12px; padding:10px; background:#1f1d2e; }
+.herdr-group-title { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12px; color:#9ccfd8; padding:2px 2px 8px; }
+.herdr-pane { width:100%; display:flex; align-items:center; text-align:left; gap:8px; border:0; border-top:1px solid #26233a; padding:12px 0; background:transparent; color:#e0def4; font:inherit; cursor:pointer; }
+.herdr-agent-icon { flex:none; width:38px; font-size:10px; color:#c4a7e7; }
+.herdr-pane-info { min-width:0; flex:1; display:flex; flex-direction:column; gap:5px; }
+.herdr-pane-info strong { font-size:11px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.herdr-pane-info .remote-status { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.herdr-state { font-size:9px; color:#908caa; }
+.herdr-state[data-state="working"] { color:#9ccfd8; }
+.herdr-state[data-state="blocked"] { color:#f6c177; }
+.herdr-state[data-state="done"] { color:#c4a7e7; }
+.herdr-detail { display:flex; flex-direction:column; flex:1; min-height:0; }
+.herdr-detail-bar { display:flex; align-items:center; gap:10px; padding:0 0 10px; }
+.herdr-detail-bar button { white-space:nowrap; font-size:11px; }
+.herdr-pane-title { min-width:0; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.herdr-output { flex:1; min-height:0; overflow-x:auto; overflow-y:hidden; background:#15131f; border:1px solid #403d52; border-radius:10px; overscroll-behavior:contain; }
+.herdr-canvas { height:100%; }
+.herdr-input-bar { display:flex; align-items:center; gap:10px; padding-top:8px; }
+.herdr-input-bar button { font-size:11px; white-space:nowrap; }
+.remote-app .xterm { height:100%; }
+.remote-app .xterm-viewport { overscroll-behavior:contain; }
+
+.remote-app .xterm-viewport { background:#15131f !important; }

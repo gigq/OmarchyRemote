@@ -1,0 +1,17 @@
+[Unit]
+Description=Omarchy host backend (Terminal and Herdr)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/user/git/OmarchyRemote
+ExecStart=/home/user/git/OmarchyRemote/backend/target/release/omarchy-remote
+EnvironmentFile=%h/.config/omarchy-remote/backend.env
+Environment=SHELL=/bin/bash
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=5
+KillMode=control-group
+
+[Install]
+WantedBy=default.target
