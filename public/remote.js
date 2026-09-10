@@ -68,13 +68,15 @@
       this.status=node('div','remote-status','Herdr · connecting…');this.list=node('div','herdr-list');this.detail=node('div','herdr-detail');this.detail.hidden=true;
       const bar=node('div','remote-bar');bar.append(node('strong','', 'herdr'),this.status);root.append(bar,this.list,this.detail);
       this.detailBar=node('div','herdr-detail-bar');this.title=node('div','herdr-pane-title');
-      this.detailBar.append(button('‹ All panes',()=>this.select(null)),this.title);
+      this.fitOutput=storage.get('omarchy-herdr-fit')!=='false';
+      this.fitButton=button('',()=>{this.stopTouchScroll.cancel();this.fitOutput=!this.fitOutput;storage.set('omarchy-herdr-fit',String(this.fitOutput));this.applyFit()});
+      this.detailBar.append(button('‹ All panes',()=>this.select(null)),this.title,this.fitButton);
       this.output=node('div','herdr-output');this.canvas=node('div','herdr-canvas');this.output.append(this.canvas);
       this.followOutput=true;this.latest=button('↓ Latest',()=>this.showLatest());this.latest.hidden=true;
       this.inputStatus=node('span','remote-status','Tap to type into this pane');
       const inputBar=node('div','herdr-input-bar');inputBar.append(button('⌨ Keyboard',()=>{this.showLatest();bridge.keyboard()}),this.latest,this.inputStatus);
       this.detail.append(this.detailBar,this.output,inputBar);this.term=terminal(this.canvas,true);this.fit=new FitAddon.FitAddon();this.term.loadAddon(this.fit);
-      this.stopTouchScroll=touchScroll(this.output,this.term,true,()=>this.trackScroll(),()=>this.flushRead());
+      this.stopTouchScroll=touchScroll(this.output,this.term,true,()=>this.trackScroll(),()=>this.flushRead());this.applyFit();
       this.term.onScroll(()=>{if(!this.rendering)this.trackScroll()});
       this.output.onclick=()=>{this.showLatest();bridge.keyboard()};
       this.nativeInput=bridge.createInput(root,true,(text,enter)=>this.input({text,keys:enter?['Enter']:[]}));this.nativeInput.select(this.selected);
@@ -120,7 +122,8 @@
       if(id){const pane=this.snapshot?.panes.find(p=>p.pane_id===id);if(pane)this.showDetail(pane)}else{this.detail.hidden=true;this.list.hidden=false;this.bridge.logic.set({kb:false})}
     }
     move(delta){const panes=this.snapshot?.panes||[];const i=panes.findIndex(p=>p.pane_id===this.selected);if(i>=0&&panes[i+delta])this.select(panes[i+delta].pane_id)}
-    trackScroll(){this.followOutput=this.term.buffer.active.viewportY>=this.term.buffer.active.baseY;this.latest.hidden=this.followOutput;}
+    applyFit(){this.fitButton.textContent=this.fitOutput?'Fit to Phone':'Original Columns';this.fitButton.setAttribute('aria-pressed',String(this.fitOutput));this.fitButton.setAttribute('aria-label','Fit to Phone');this.term.nativeView.setFit(this.fitOutput)}
+    trackScroll(){this.followOutput=this.term.nativeView.follow;this.latest.hidden=this.followOutput;}
     showLatest(){this.stopTouchScroll.cancel();this.followOutput=true;this.term.scrollToBottom();this.output.scrollLeft=0;this.latest.hidden=true;}
     flushRead(){const queued=this.queuedRead;this.queuedRead=null;if(queued)this.renderOutput(queued.read,queued.force)}
     renderOutput(read,force=false){
@@ -136,9 +139,8 @@
       this.canvas.style.width=`${Math.max(this.output.clientWidth,cols*cellWidth+16)}px`;
       // Use xterm's measured font metrics, not an assumed pixel height per row.
       const dimensions=this.fit.proposeDimensions();if(!dimensions)return;
-      const scroll=this.term.buffer.active.viewportY;
+      const viewAnchor=this.term.nativeView.anchor(),scroll=viewAnchor.source;
       const anchor=this.term.buffer.active.getLine(scroll)?.translateToString(true);
-      const fractional=(this.term.nativeView.scroller.scrollTop/this.term.nativeView.height)%1;
       const pane=this.selected;this.rendering=true;
       this.term.resize(Math.max(cols,dimensions.cols),Math.max(4,dimensions.rows));this.term.reset();
       this.term.write(text.replace(/\r?\n/g,'\r\n'),()=>{
@@ -147,7 +149,7 @@
           else{
             let target=scroll,distance=Infinity;
             for(let i=0;i<this.term.buffer.active.length;i++)if(this.term.buffer.active.getLine(i)?.translateToString(true)===anchor&&Math.abs(i-scroll)<distance){target=i;distance=Math.abs(i-scroll)}
-            this.term.scrollToLine(target);this.term.nativeView.target=target+fractional;this.term.nativeView.schedule();
+            this.term.scrollToLine(target);this.term.nativeView.restore({...viewAnchor,follow:false},target);
           }
         }
         this.rendering=false;

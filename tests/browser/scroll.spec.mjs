@@ -52,6 +52,12 @@ test('Herdr touch history stays anchored during updates and typed text is visibl
   expect(await page.locator('.herdr-output').evaluate(el=>el.querySelector('.xterm-screen').getBoundingClientRect().bottom<=el.getBoundingClientRect().bottom)).toBe(true);
   await expect.poll(()=>visibleText(page)).toContain('echo hello');
   await key(page,'⏎');await expect.poll(async()=>{const r=await herdr('pane.read',{pane_id:pane,source:'recent',lines:5,format:'text'});return r.read.text}).toContain('\nhello');
+  const fitting=page.getByRole('button',{name:'Fit to Phone',exact:true});
+  await expect(fitting).toHaveAttribute('aria-pressed','true');
+  await fitting.click();await expect(fitting).toHaveText('Original Columns');
+  expect(await page.evaluate(()=>localStorage.getItem('omarchy-herdr-fit'))).toBe('false');
+  await fitting.click();await expect(fitting).toHaveText('Fit to Phone');
+  expect(await page.evaluate(()=>localStorage.getItem('omarchy-herdr-fit'))).toBe('true');
   await page.screenshot({path:'artifacts/browser/herdr-input-visible.png'});
  }finally{if(workspace)await herdr('workspace.close',{workspace_id:workspace})}
 });

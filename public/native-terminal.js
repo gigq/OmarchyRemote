@@ -11,7 +11,7 @@
   class NativeTerminalView {
     constructor(host,term,onScroll=()=>{},onIdle=()=>{}){
       this.host=host;this.term=term;this.onScroll=onScroll;this.onIdle=onIdle;
-      this.height=18;this.width=7.2;this.frame=null;this.rows=new Map();this.syncing=false;this.busy=false;this.finger=false;this.follow=true;this.dirty=true;this.cursorVisible=true;
+      this.height=18;this.width=7.2;this.frame=null;this.rows=new Map();this.syncing=false;this.busy=false;this.finger=false;this.follow=true;this.dirty=true;this.cursorVisible=true;this.fit=false;this.layout=[];this.sourceRows=[];
       this.scroller=document.createElement('div');this.scroller.className='native-terminal-scroll';this.scroller.tabIndex=0;this.scroller.setAttribute('aria-label','Terminal output');
       this.content=document.createElement('div');this.content.className='native-terminal-content';this.scroller.append(this.content);host.append(this.scroller);
       this.edges=['left','right'].map(side=>{const edge=document.createElement('div');edge.className='native-scroll-edge '+side;edge.setAttribute('aria-hidden','true');host.append(edge);return edge});
@@ -22,7 +22,7 @@
         if(this.viewportHeight!==this.scroller.clientHeight){this.schedule();return}
         this.follow=this.scroller.scrollTop>=this.scroller.scrollHeight-this.scroller.clientHeight-1;
         this.busy=true;clearTimeout(this.idleTimer);this.idleTimer=setTimeout(()=>this.idle(),160);
-        this.syncing=true;term.scrollToLine(Math.floor(this.scroller.scrollTop/this.height));this.syncing=false;
+        this.syncing=true;term.scrollToLine(this.layout[Math.floor(this.scroller.scrollTop/this.height)]?.source||0);this.syncing=false;
         this.schedule();onScroll();
       },{passive:true});
       listen('scrollend',()=>this.idle(),{passive:true});
@@ -39,6 +39,27 @@
       this.listeners.push(term.buffer.onBufferChange(()=>{this.target=term.buffer.active.viewportY;this.follow=this.target>=term.buffer.active.baseY;this.schedule(true)}));
       this.resize=new ResizeObserver(()=>this.schedule());this.resize.observe(host);this.schedule();
     }
+    setFit(fit){this.savedAnchor=this.anchor();this.fit=fit;this.scroller.scrollLeft=0;this.schedule(true)}
+    anchor(){const visual=Math.floor(this.scroller.scrollTop/this.height),entry=this.layout[visual];return {source:entry?.source||0,column:entry?.start||0,pixel:this.scroller.scrollTop%this.height,follow:this.follow}}
+    restore(anchor,source=anchor.source){this.savedAnchor={...anchor,source};this.follow=anchor.follow;this.schedule()}
+    buildLayout(buffer,columns){
+      this.layout=[];this.sourceRows=[];
+      for(let source=0;source<buffer.length;source++){
+        this.sourceRows[source]=this.layout.length;
+        const line=buffer.getLine(source);let end=this.term.cols;
+        if(this.fit){while(end>0&&!line.getCell(end-1)?.getChars().trim())end--;if(end>0)end=Math.min(this.term.cols,end-1+line.getCell(end-1).getWidth())}
+        for(let start=0;start<Math.max(1,end);){
+          let stop=this.fit?Math.min(end,start+columns):end;
+          if(stop<end){
+            if(line.getCell(stop)?.getWidth()===0)stop--;
+            if(stop<=start)stop=Math.min(end,start+2);
+            let space=-1;for(let x=start;x<stop;x++)if(/^\s+$/.test(line.getCell(x)?.getChars()||' '))space=x;
+            if(space>start&&line.translateToString(true,start,space).trim())stop=space+1;
+          }
+          this.layout.push({source,start,end:Math.max(start+1,stop)});start=Math.max(start+1,stop);
+        }
+      }
+    }
     idle(){if(this.finger)return;this.busy=false;clearTimeout(this.idleTimer);this.onIdle()}
     active(){return this.busy||this.finger}
     cancel(){this.scroller.scrollTo({top:this.scroller.scrollTop,left:this.scroller.scrollLeft,behavior:'instant'});this.finger=false;this.idle()}
@@ -50,25 +71,39 @@
       this.height=parseFloat(screen.style.height)/term.rows||18;this.width=parseFloat(screen.style.width)/term.cols||7.2;
       dirty ||= oldHeight!==this.height||oldWidth!==this.width;
       const b=term.buffer.active;
+      const columns=Math.max(2,Math.floor(scroller.clientWidth/this.width));
+      if(columns!==this.columns&&!this.follow&&!this.savedAnchor&&this.layout.length)this.savedAnchor=this.anchor();
+      if(dirty||columns!==this.columns||!this.layout.length){this.columns=columns;this.buildLayout(b,columns);dirty=true}
+
       if(this.viewportHeight!==scroller.clientHeight&&this.follow)this.target=b.baseY;
       this.viewportHeight=scroller.clientHeight;
-      content.style.height=`${Math.max(b.length*this.height,b.baseY*this.height+scroller.clientHeight)}px`;
-      content.style.width=`${term.cols*this.width}px`;
-      if(this.target!==undefined){this.expected=Math.min(this.target*this.height,content.offsetHeight-scroller.clientHeight);scroller.scrollTop=this.expected;this.target=undefined}
+      content.style.height=`${this.fit?Math.max(this.layout.length*this.height,scroller.clientHeight):Math.max(b.length*this.height,b.baseY*this.height+scroller.clientHeight)}px`;
+      content.style.width=this.fit?'100%':`${term.cols*this.width}px`;
+      if(this.savedAnchor){
+        const a=this.savedAnchor;this.savedAnchor=null;this.follow=a.follow;
+        let visual=this.sourceRows[a.source]||0;
+        while(this.layout[visual+1]?.source===a.source&&this.layout[visual+1].start<=a.column)visual++;
+        this.expected=a.follow?content.offsetHeight-scroller.clientHeight:visual*this.height+a.pixel;
+        scroller.scrollTop=this.expected;this.target=undefined;
+      }else if(this.target!==undefined){
+        const source=Math.floor(this.target),fraction=this.target-source;
+        this.expected=this.fit&&this.follow?content.offsetHeight-scroller.clientHeight:Math.min(((this.sourceRows[source]||0)+fraction)*this.height,content.offsetHeight-scroller.clientHeight);
+        scroller.scrollTop=this.expected;this.target=undefined;
+      }
       // Overscan allows the compositor to keep moving existing text between JS updates.
-      const top=Math.max(0,Math.floor(scroller.scrollTop/this.height)-80),end=Math.min(b.length,Math.ceil((scroller.scrollTop+scroller.clientHeight)/this.height)+80);
+      const top=Math.max(0,Math.floor(scroller.scrollTop/this.height)-80),end=Math.min(this.layout.length,Math.ceil((scroller.scrollTop+scroller.clientHeight)/this.height)+80);
       for(const [i,row] of this.rows)if(i<top||i>=end){row.remove();this.rows.delete(i)}
       const cell=b.getNullCell();
       for(let y=top;y<end;y++){
-        const line=b.getLine(y);if(!line)continue;
+        const entry=this.layout[y],line=b.getLine(entry.source);if(!line)continue;
         let row=this.rows.get(y);if(row&&!dirty)continue;if(!row){row=document.createElement('div');row.className='native-terminal-row';row.dataset.line=y;content.append(row);this.rows.set(y,row)}
         row.style.top=`${y*this.height}px`;row.style.height=row.style.lineHeight=`${this.height}px`;
         const runs=[];let run;
-        for(let x=0;x<term.cols;x++){
+        for(let x=entry.start;x<entry.end;x++){
           const c=line.getCell(x,cell);if(!c||!c.getWidth())continue;
           let fg=c.isFgDefault()?'#e0def4':color(c.getFgColor(),c.isFgRGB()),bg=c.isBgDefault()?'transparent':color(c.getBgColor(),c.isBgRGB());
           if(c.isInverse())[fg,bg]=[bg==='transparent'?'#15131f':bg,fg];
-          const cursor=this.cursorVisible&&!term.options.disableStdin&&y===b.baseY+b.cursorY&&x===b.cursorX;
+          const cursor=this.cursorVisible&&!term.options.disableStdin&&entry.source===b.baseY+b.cursorY&&x===b.cursorX;
           const decoration=[c.isUnderline()?'underline':'',c.isStrikethrough()?'line-through':'',c.isOverline()?'overline':''].filter(Boolean).join(' ')||'none';
           const style=`color:${fg};background:${bg};font-weight:${c.isBold()?700:400};font-style:${c.isItalic()?'italic':'normal'};opacity:${c.isDim()?.5:1};text-decoration:${decoration};${cursor?'box-shadow:inset 0 0 0 1px #ebbcba;':''}`;
           const chars=c.isInvisible()?' '.repeat(c.getWidth()):(c.getChars()||' ');
