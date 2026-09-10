@@ -498,7 +498,7 @@
 
   <div style="position:absolute;left:0;right:0;bottom:0;z-index:10;background:#1f1d2e;border-top:1px solid #403d52;padding:8px 6px 46px;transform: {{ kbTf }};transition: {{ tr }}">
     <div style="display:flex;justify-content:space-between;align-items:center;height:22px;padding:0 6px 4px;font-size:10px"><span style="color: {{ supC }}">{{ supMsg }}</span><span sc-camel-on-click="{{ kbOff }}" style="color:#908caa;cursor:pointer;font-size:12px;padding:0 6px">⌄</span></div>
-    <sc-for list="{{ kbRows }}" as="r" hint-placeholder-count="4"><div style="display:flex;gap:5px;margin-bottom:6px"><sc-for list="{{ r.keys }}" as="k" hint-placeholder-count="10"><button type="button" class="touch-key" sc-camel-on-pointer-down="{{ k.down }}" sc-camel-on-pointer-up="{{ keyEnd }}" sc-camel-on-pointer-cancel="{{ keyEnd }}" sc-camel-on-lost-pointer-capture="{{ keyEnd }}" sc-camel-on-click="{{ k.click }}" style="border:0;padding:0;min-width:0;font-family:inherit;touch-action:none;flex: {{ k.w }};height:42px;border-radius:8px;display:grid;place-items:center;font-size: {{ k.fs }};background: {{ k.bg }};color: {{ k.c }};cursor:pointer;transition:background .2s,color .2s">{{ k.l }}</button></sc-for></div></sc-for>
+    <sc-for list="{{ kbRows }}" as="r" hint-placeholder-count="4"><div style="display:flex;gap:5px;margin-bottom:6px"><sc-for list="{{ r.keys }}" as="k" hint-placeholder-count="10"><button type="button" class="touch-key" aria-label="{{ k.l }}" sc-camel-on-pointer-down="{{ k.down }}" sc-camel-on-pointer-up="{{ keyEnd }}" sc-camel-on-pointer-cancel="{{ keyEnd }}" sc-camel-on-lost-pointer-capture="{{ keyEnd }}" sc-camel-on-click="{{ k.click }}" style="border:0;padding:0;min-width:0;font-family:inherit;touch-action:none;flex: {{ k.w }};height:42px;border-radius:8px;display:grid;place-items:center;font-size: {{ k.fs }};background: {{ k.bg }};color: {{ k.c }};cursor:pointer;transition:background .2s,color .2s">{{ k.l }}</button></sc-for></div></sc-for>
   </div>
 
   <div style="position:absolute;left:0;right:0;top:52px;z-index:14;background:rgba(31,29,46,.96);border:1px solid #403d52;border-top:0;border-radius:0 0 28px 28px;transform: {{ launchTf }};transition: {{ tr }};padding:12px 14px 14px;display:flex;flex-direction:column;gap:6px">
@@ -591,7 +591,15 @@ class Component extends DCLogic {
   answer(i,k){ const agents=this.state.agents.map((a,j)=>j!==i?a:{...a,s:'working',tail:'▸ continuing after "'+k+'"',el:'now',ans:null,lines:[...a.lines,['› '+k,'#c4a7e7'],['● applying…','#908caa']]}); this.set({agents}) }
   scrollPrompt(){ requestAnimationFrame(()=>{ const el=document.getElementById('terminal-scroll'), caret=document.getElementById('terminal-caret'); if(el&&caret){ const r=el.getBoundingClientRect(), c=caret.getBoundingClientRect(); if(c.bottom>r.bottom-20) el.scrollTop+=c.bottom-r.bottom+20; else if(c.top<r.top+20) el.scrollTop-=r.top+20-c.top } }) }
   edit(input,cursor){ this.set({input,cursor,historyIndex:-1}); this.scrollPrompt() }
-  keyEnd=e=>{ if(e) e.stopPropagation(); clearTimeout(this.repeatDelay); clearInterval(this.repeatTimer); this.repeatDelay=null; this.repeatTimer=null };
+  showKey(e,label){
+    clearTimeout(this.previewTimer);
+    this.previewKey?.classList.remove('key-pressed');
+    const el=e.currentTarget;
+    el.dataset.preview=label==='space'?'␣':label;
+    el.dataset.previewSize=Array.from(label).length>2?'word':'character';
+    el.classList.add('key-pressed'); this.previewKey=el;
+  }
+  keyEnd=e=>{ if(e){ e.stopPropagation(); clearTimeout(this.previewTimer); const el=this.previewKey; this.previewTimer=setTimeout(()=>{el?.classList.remove('key-pressed');if(this.previewKey===el)this.previewKey=null},e.type==='pointercancel'?0:140) } clearTimeout(this.repeatDelay); clearInterval(this.repeatTimer); this.repeatDelay=null; this.repeatTimer=null };
   pressKey(e,on,repeat){
     if(e.button!==0) return;
     e.preventDefault(); e.stopPropagation(); this.ptr=null; this.keyEnd();
@@ -667,7 +675,7 @@ class Component extends DCLogic {
       return {l:s.shift&&Array.from(x.l).length===1?this.shifted(x.l):x.l,w:x.w||1,fs:x.fs||'13px',bg:x.l==='⇧'&&s.shift?T.iris:x.mod?T.bg:T.sf2,c:x.mod?T.rose:T.fg,on:()=>this.type(x.l)} };
     const termRows=[R('1 2 3 4 5 6 7 8 9 0'),R('- / : ; ( ) $ & @ "'),R('CTRL ← ↓ ↑ → ⇧ home end tab ⌫').map(x=>({...x,fs:'10px'}))];
     const abcRows=[R('q w e r t y u i o p'),R('a s d f g h j k l'),[{l:'⇧',w:1.5},...R('z x c v b n m'),{l:'⌫',w:1.5}]];
-    const kbRows=[...(s.term?termRows:abcRows),[{l:'SUPER'},{l:'LAYER'},{l:'⌄'},{l:'space',w:3},{l:'.'},{l:'⏎',w:1.5}]].map(r=>({keys:r.map(x=>{const k=key(x); return {...k,down:e=>this.pressKey(e,k.on,!s.sup&&['⌫','←','→'].includes(x.l)),click:e=>{e.stopPropagation();if(e.detail===0)k.on()}}})}));
+    const kbRows=[...(s.term?termRows:abcRows),[{l:'SUPER'},{l:'LAYER'},{l:'⌄'},{l:'space',w:3},{l:'.'},{l:'⏎',w:1.5}]].map(r=>({keys:r.map(x=>{const k=key(x); return {...k,down:e=>{if(e.button===0)this.showKey(e,k.l);this.pressKey(e,k.on,!s.sup&&['⌫','←','→'].includes(x.l))},click:e=>{e.stopPropagation();if(e.detail===0){this.showKey(e,k.l);k.on();this.keyEnd(e)}}}})}));
     // launcher
     const m=this.matches();
     const launchResults=m.slice(0,4).map((k,i)=>({g:A[k].g,n:A[k].n,d:A[k].d,c:A[k].c,bg:i===0?T.sf2:'transparent',hint:i===0?'⏎':(s.open.includes(k)?'ws '+(s.open.indexOf(k)+1):'open'),on:()=>this.openApp(k)}));
