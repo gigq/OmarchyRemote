@@ -33,7 +33,7 @@ document.addEventListener('click', event => {
 }, true);
 document.addEventListener('pointercancel', () => { touch = null; }, true);
 
-if ('serviceWorker' in navigator && window.isSecureContext) {
+if (!window.__HYPRLAND_DEV__ && 'serviceWorker' in navigator && window.isSecureContext) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(error => {
       console.warn('Offline support could not be installed:', error);

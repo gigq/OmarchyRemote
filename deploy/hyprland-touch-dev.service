@@ -1,0 +1,15 @@
+[Unit]
+Description=Hyprland Touch live development server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/user/git/OmarchyRemote
+ExecStart=/home/user/.local/share/mise/installs/node/latest/bin/node /home/user/git/OmarchyRemote/scripts/serve.mjs
+Environment=PORT=4187
+Environment=PYTHON=/usr/bin/python3
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

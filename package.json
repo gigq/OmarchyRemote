@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "node scripts/serve.mjs",
     "build": "node scripts/build.mjs",
-    "test": "node --test scripts/worker.test.mjs"
+    "test": "node --test scripts/worker.test.mjs",
+    "test:live": "node --test scripts/live-server.test.mjs"
   }
 }

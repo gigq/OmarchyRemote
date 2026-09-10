@@ -14,7 +14,7 @@ This is a simulated operating system UI. Apps, Wi-Fi controls, agents, weather, 
 
 `ios/HyprlandTouch.xcodeproj` contains a UIKit/WKWebView app with the shared **HyprlandTouch** scheme. It supports iPhone on iOS 18 or later and uses automatic development signing. The bundle identifier is `com.example.HyprlandTouch`.
 
-The native app loads the prototype directly from its bundle, without a website login, server, service worker, or network connection. Every build runs `scripts/prepare-native.py` to package the current `public/` files into `HyprlandTouch.app/Web` and convert root-relative asset URLs for file loading. `ios/WebOverrides/native.css` removes outer safe-area padding and arranges the custom status widgets beside the Dynamic Island. The PWA source remains unchanged.
+Debug builds now load the live prototype from **https://your-host.your-tailnet.ts.net:12443/native/** by default. Connect Tailscale on the iPhone, then open Hyprland. If HOST is unreachable, the app loads its bundled offline copy and shows **Offline copy · Retry HOST**. It also retries when returning to the foreground. Release builds use the bundled copy only. Every build runs `scripts/prepare-native.py` to package the current `public/` files into `HyprlandTouch.app/Web` and convert root-relative asset URLs for file loading. `ios/WebOverrides/native.css` removes outer safe-area padding and arranges the custom status widgets beside the Dynamic Island. The hosted PWA remains separate; native live pages disable service-worker caching.
 
 The root controller hides the iOS status bar, pins the web view to all four view edges, disables automatic scroll insets, and requests top/bottom system-gesture deferral. Start the prototype's swipes at the display edge. iOS retains the escape gesture; a repeated edge swipe can invoke the system. The home indicator remains system-controlled and is intentionally not set to auto-hide while bottom gesture deferral is active. The camera cutout is physical and remains visible.
 
@@ -24,7 +24,23 @@ Run `python -m unittest discover -s scripts -p 'test_native_bundle.py'` to check
 
 ## Development
 
-Node is the only build dependency. Run `npm run dev` (http://localhost:4187), `npm run build`, and `npm test`. Restart the development server after edits. Set `PORT` to use another port. Plain HTTP on a LAN IP is insufficient for service workers on iPhone; use the deployed HTTPS site.
+The HOST development server is already running as the enabled user service `hyprland-touch-dev.service`. It survives this session and restarts after failure. Tailscale Serve exposes it privately on HTTPS port 12443; its HTTP listener binds only to `127.0.0.1:4187`.
+
+Edit **`public/index.html`** for the prototype's markup and interaction logic, **`public/pwa.css`** / **`public/pwa.js`** for shared layout and behavior, and **`ios/WebOverrides/native.css`** for native-only layout. Saves trigger a full page reload in connected apps, usually within a second. A reload resets the mockup's in-memory workspace state. Reconnection and foregrounding compare the current server version so changes made while the app was suspended are picked up too. No iPhone rebuild or reinstall is needed for these web changes; Swift changes still require one.
+
+Hold **two fingers for about a second** to open the native source menu: **Live from HOST**, **Bundled offline copy**, or **Reload**. Choosing the bundled source persists until you select live again.
+
+Useful commands:
+
+- `systemctl --user status hyprland-touch-dev.service`
+- `systemctl --user restart hyprland-touch-dev.service` after changing server code in `scripts/serve.mjs` or `scripts/live-reload.js`
+- `journalctl --user -u hyprland-touch-dev.service -f`
+- `npm run test:live` with the development server running
+- `npm run build && npm test` for the standalone PWA
+
+The service definition is tracked in `deploy/hyprland-touch-dev.service`. Local development requires Node (with recursive `fs.watch` support) and Python 3. For a separate foreground preview, use `PORT=4188 npm run dev`; the app's configured Tailscale address continues to use the persistent service on 4187. `GET /__dev/status` reports the current revision and live connection count; `/__dev/events` is the reload stream. No public hosting or ChatGPT sign-in is involved in this loop.
+
+To remove the background development setup: stop and disable `hyprland-touch-dev.service`, then remove only its Tailscale listener with `sudo tailscale serve --https=12443 off`. Other Tailscale services are independent.
 
 `scripts/build.mjs` produces a portable Cloudflare Worker in `dist/server/index.js`, static files in `dist/client`, and a content-versioned service worker. The worker embeds the small static asset set, so no external asset binding is required. The service worker caches only known app files, rejects redirected install responses, and activates a new version after old app windows close. Close all app windows and reopen to pick up an update.
 

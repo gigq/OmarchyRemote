@@ -13,6 +13,11 @@ def prepare(output):
     if output.name != "Web":
         raise ValueError("Output directory must be named Web")
     output.mkdir(parents=True, exist_ok=True)
+    expected = {file.relative_to(ROOT / "public") for file in (ROOT / "public").rglob("*") if file.is_file()}
+    expected.add(Path("native.css"))
+    for previous in output.rglob("*"):
+        if previous.is_file() and previous.relative_to(output) not in expected:
+            previous.unlink()
     shutil.copytree(ROOT / "public", output, dirs_exist_ok=True)
     page = (output / "index.html").read_text()
     page = re.sub(r'((?:src|href)=")/(?!/)', r'\1./', page)
@@ -22,7 +27,7 @@ def prepare(output):
     page = page.replace('<script src="./pwa.js" defer></script>', '<script>window.__HYPRLAND_NATIVE__ = true;</script>\n<script src="./pwa.js" defer></script>\n<link rel="stylesheet" href="./native.css">')
     page = page.replace('PWA · start swipes inside the screen', 'swipe again at the edge → iOS')
     (output / "index.html").write_text(page)
-    pwa = (output / "pwa.js").read_text().replace("if ('serviceWorker' in navigator", "if (!window.__HYPRLAND_NATIVE__ && 'serviceWorker' in navigator")
+    pwa = (output / "pwa.js").read_text().replace("if (!window.__HYPRLAND_DEV__", "if (!window.__HYPRLAND_NATIVE__ && !window.__HYPRLAND_DEV__")
     (output / "pwa.js").write_text(pwa)
     shutil.copyfile(ROOT / "ios/WebOverrides/native.css", output / "native.css")
     print(f"Prepared bundled web assets at {output}")
