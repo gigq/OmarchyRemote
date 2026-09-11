@@ -321,7 +321,7 @@
       }
       for(const [key,app] of Object.entries(this.apps)){
         const focused=key===current&&!ov;
-        app.show?.(visible.includes(key)&&!ov);
+        app.show?.(visible.includes(key)&&!ov,{covered:!!(s.launch||s.shade||s.map)});
         if(!focused){app.stopTouchScroll?.cancel();app.blur?.()}
         app.nativeInput?.show(native&&focused&&kb);
         app.placeLatest?.();

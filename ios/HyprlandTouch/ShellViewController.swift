@@ -2,7 +2,6 @@ import UIKit
 import WebKit
 import OSLog
 import CoreLocation
-import SafariServices
 
 /// Where the live shell comes from: the `OmarchyRemoteURL` Info.plist key (the address the
 /// backend is published at, for example a Tailscale Serve URL). Debug builds load it and
@@ -102,33 +101,125 @@ private final class WeatherDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
 }
 
 @MainActor
-private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithReply {
+private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegate, WKUIDelegate, UIGestureRecognizerDelegate {
     weak var presenter: UIViewController?
+    weak var shell: WKWebView?
+    private var page: WKWebView?
+    private var observations: [NSKeyValueObservation] = []
+    private var requestedVisible = false
+
+    func reset() {
+        observations.removeAll()
+        page?.stopLoading()
+        page?.removeFromSuperview()
+        page = nil
+        requestedVisible = false
+    }
+    private func ensurePage() -> WKWebView? {
+        if let page { return page }
+        guard let presenter else { return nil }
+        let configuration = WKWebViewConfiguration()
+        // Independent persistent website storage, with NO shell scripts or message handlers.
+        configuration.websiteDataStore = .default()
+        let browser = WKWebView(frame: .zero, configuration: configuration)
+        browser.navigationDelegate = self
+        browser.uiDelegate = self
+        browser.isHidden = true
+        browser.layer.cornerRadius = 12
+        browser.clipsToBounds = true
+        browser.scrollView.contentInsetAdjustmentBehavior = .never
+        browser.allowsBackForwardNavigationGestures = true
+        browser.accessibilityIdentifier = "hyprland.browser.page"
+        let focus = UITapGestureRecognizer()
+        focus.delegate = self
+        browser.addGestureRecognizer(focus)
+        presenter.view.addSubview(browser)
+        page = browser
+        observations = [browser.observe(\.url, options: [.new]) { [weak self] _, _ in Task { @MainActor in self?.publish() } },
+                        browser.observe(\.isLoading, options: [.new]) { [weak self] _, _ in Task { @MainActor in self?.publish() } }]
+        return browser
+    }
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        publish(focused: true)
+        return false // Observe focus without recognizing or cancelling website touches.
+    }
+    private func publish(error: String? = nil, preview: String? = nil, focused: Bool = false) {
+        guard let page else { return }
+        var state: [String: Any] = ["url": page.url?.absoluteString ?? "", "back": page.canGoBack, "forward": page.canGoForward, "loading": page.isLoading]
+        if focused { state["focused"] = true }
+        if let error { state["error"] = error }
+        if let preview { state["preview"] = preview }
+        shell?.callAsyncJavaScript("window.dispatchEvent(new CustomEvent('host-browser-state', {detail: state}))", arguments: ["state": state], in: nil, in: .page, completionHandler: nil)
+    }
+    private func snapshot() {
+        guard let page, !page.isHidden, !page.isLoading, !page.bounds.isEmpty else { return }
+        let capturedURL = page.url
+        let config = WKSnapshotConfiguration()
+        config.snapshotWidth = 600
+        page.takeSnapshot(with: config) { [weak self, weak page] image, _ in
+            guard let self, let page, self.page === page, !page.isHidden, page.url == capturedURL, let data = image?.jpegData(compressionQuality: 0.65) else { return }
+            self.publish(preview: "data:image/jpeg;base64," + data.base64EncodedString())
+        }
+    }
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage, replyHandler: @escaping @MainActor @Sendable (Any?, String?) -> Void) {
-        let origin = message.frameInfo.securityOrigin
-        guard message.frameInfo.isMainFrame,
-              ShellSource.trusts(origin) || message.frameInfo.request.url?.isFileURL == true,
-              let body = message.body as? [String: Any],
-              let raw = body["url"] as? String, let url = URL(string: raw),
-              ["https", "http"].contains(url.scheme?.lowercased() ?? ""), url.host != nil,
-              let presenter, presenter.presentedViewController == nil else {
-            replyHandler(nil, "Cannot open this page")
+        guard message.webView === shell, message.frameInfo.isMainFrame,
+              ShellSource.trusts(message.frameInfo.securityOrigin) || message.frameInfo.request.url?.isFileURL == true,
+              let body = message.body as? [String: Any] else { replyHandler(nil, "Unsupported page"); return }
+        let action = body["action"] as? String ?? "open"
+        if action == "capabilities" { replyHandler(["embedded": true], nil); return }
+        if action == "close" { reset(); replyHandler(["closed": true], nil); return }
+        if action == "layout" {
+            guard let page, let presenter else { replyHandler(["visible": false], nil); return }
+            let visible = body["visible"] as? Bool == true
+            if !visible {
+                requestedVisible = false
+                page.endEditing(true)
+                page.isHidden = true
+                replyHandler(["visible": false], nil)
+                return
+            }
+            guard let rect = body["rect"] as? [Double], rect.count == 4, rect.allSatisfy({ $0.isFinite }),
+                  let viewport = body["viewport"] as? Double, viewport.isFinite, viewport > 0,
+                  rect[2] > 0, rect[3] > 0 else { page.isHidden = true; replyHandler(nil, "Invalid bounds"); return }
+            let scale = presenter.view.bounds.width / viewport
+            let frame = CGRect(x: rect[0] * scale, y: rect[1] * scale, width: rect[2] * scale, height: rect[3] * scale).intersection(presenter.view.bounds)
+            page.frame = frame
+            requestedVisible = !frame.isEmpty && !frame.isNull
+            page.isHidden = !requestedVisible
+            if let rgb = body["background"] as? [Double], rgb.count == 3, rgb.allSatisfy({ $0.isFinite && (0...255).contains($0) }) {
+                let color = UIColor(red: rgb[0]/255, green: rgb[1]/255, blue: rgb[2]/255, alpha: 1)
+                page.underPageBackgroundColor = color
+                page.backgroundColor = color
+            }
+            replyHandler(["visible": requestedVisible], nil)
             return
         }
-        // Untrusted websites run in Safari's isolated view, without shell message handlers.
-        let browser = SFSafariViewController(url: url)
-        func color(_ key: String) -> UIColor? {
-            guard let rgb = body[key] as? [Double], rgb.count == 3,
-                  rgb.allSatisfy({ $0.isFinite && (0...255).contains($0) }) else { return nil }
-            return UIColor(red: rgb[0] / 255, green: rgb[1] / 255, blue: rgb[2] / 255, alpha: 1)
+        guard let page = ensurePage() else { replyHandler(nil, "Browser unavailable"); return }
+        switch action {
+        case "open":
+            guard let raw = body["url"] as? String, let url = URL(string: raw), ["https", "http"].contains(url.scheme?.lowercased() ?? ""), url.host != nil else { replyHandler(nil, "Use an http or https URL"); return }
+            page.load(URLRequest(url: url))
+        case "snapshot": snapshot()
+        case "back": page.goBack()
+        case "forward": page.goForward()
+        case "reload": page.reload()
+        default: replyHandler(nil, "Unknown browser action"); return
         }
-        browser.preferredBarTintColor = color("background")
-        browser.preferredControlTintColor = color("accent")
-        browser.dismissButtonStyle = .close
-        browser.modalPresentationStyle = .fullScreen
-        presenter.present(browser, animated: true)
         replyHandler(["opened": true], nil)
     }
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        let allowed = ["http", "https", "about"].contains(navigationAction.request.url?.scheme?.lowercased() ?? "")
+        if !allowed { publish(error: "This link requires an external app.") }
+        decisionHandler(allowed ? .allow : .cancel)
+    }
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if let url = navigationAction.request.url, ["http", "https"].contains(url.scheme?.lowercased() ?? "") { webView.load(navigationAction.request) }
+        return nil
+    }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { publish(); snapshot() }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { if (error as NSError).code != NSURLErrorCancelled { publish(error: error.localizedDescription) } }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { if (error as NSError).code != NSURLErrorCancelled { publish(error: error.localizedDescription) } }
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { publish(error: "Page stopped. Tap Reload to restore it.") }
 }
 
 @MainActor
@@ -192,6 +283,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         webView.isInspectable = true
         #endif
         view.addSubview(webView)
+        browserDevice.shell = webView
         // Deliberately use the view edges, not the safe-area guide.
         NSLayoutConstraint.activate([
             webView.topAnchor.constraint(equalTo: view.topAnchor),
@@ -315,6 +407,8 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         menu.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         present(menu, animated: true)
     }
+
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { browserDevice.reset() }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         retryButton.isHidden = true

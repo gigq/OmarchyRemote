@@ -14,3 +14,60 @@ test('Browser groups every instance/window/workspace, opens native URLs and clos
 test('Disconnected Browser explains setup and failed close keeps the tab',async({page:p})=>{
  let snapshot={instances:[]};await p.route('**/api/browser/snapshot',r=>r.fulfill({json:snapshot}));await p.route('**/api/browser/action',r=>r.fulfill({status:400,json:{error:'Browser disconnected'}}));await p.goto('/native/');await p.getByText('browser',{exact:true}).first().click();await expect(p.locator('#remote-browser-app')).toContainText('Connect Vivaldi');snapshot=data();await p.getByRole('button',{name:'Refresh tabs'}).click();await p.getByRole('button',{name:'Close Example Domain on desktop'}).click();await expect(p.locator('#remote-browser-app')).toContainText('Browser disconnected');await expect(p.getByRole('link',{name:'Open Example Domain on phone'})).toBeVisible();
 });
+
+test('Embedded page stays in its frame, hides for Expo and retains navigation state',async({page:p})=>{
+ await p.route('**/api/browser/snapshot',r=>r.fulfill({json:data()}));
+ await p.addInitScript(()=>{window.browserCommands=[];window.webkit={messageHandlers:{browserDevice:{postMessage:async q=>{window.browserCommands.push(q);return q.action==='capabilities'?{embedded:true}:{}}}}}});
+ await p.goto('/native/');await p.getByText('browser',{exact:true}).first().click();
+ await p.getByRole('link',{name:'Open Example Domain on phone'}).click();
+ await expect(p.getByRole('textbox',{name:'Page address'})).toHaveValue('https://example.com/');
+ await expect.poll(()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1)?.visible)).toBe(true);
+ const frame=await p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1));
+ expect(frame.rect[0]).toBeGreaterThan(0);expect(frame.rect[1]).toBeGreaterThan(0);expect(frame.rect[0]+frame.rect[2]).toBeLessThanOrEqual(402);expect(frame.rect[1]+frame.rect[3]).toBeLessThan(874);
+ await p.evaluate(()=>window.dispatchEvent(new CustomEvent('host-browser-state',{detail:{url:'https://example.org/',back:true,forward:false,loading:false}})));
+ await expect(p.getByRole('textbox',{name:'Page address'})).toHaveValue('https://example.org/');
+ await p.getByRole('button',{name:'Back',exact:true}).click();
+ expect(await p.evaluate(()=>window.browserCommands.some(q=>q.action==='back'))).toBe(true);
+ await p.getByRole('button',{name:'Desktop tabs',exact:true}).click();
+ await expect(p.getByRole('searchbox',{name:'Find a tab'})).toBeVisible();
+ await expect.poll(()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1)?.visible)).toBe(false);
+ await p.getByRole('button',{name:'Return to page'}).click();
+ await expect.poll(()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1)?.visible)).toBe(true);
+ // A desk modal must cover native content even though Browser remains active.
+ await p.evaluate(()=>{const d=document.createElement('div');d.className='desk-sheet';document.body.append(d)});
+ await expect.poll(()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1)?.visible)).toBe(false);
+ await p.evaluate(()=>document.querySelector('.desk-sheet').remove());
+ await expect.poll(()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1)?.visible)).toBe(true);
+ await p.locator('#touch-shell > div').first().locator('[data-dc-tpl="10"]').last().click();
+ await expect(p.locator('#touch-shell')).toHaveClass(/expo-mode/);
+ await expect.poll(()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1)?.visible)).toBe(false);
+ await p.locator('[data-workspace="browser"]').last().click();
+ await expect(p.locator('#touch-shell')).not.toHaveClass(/expo-mode/);
+ await p.getByRole('textbox',{name:'Page address'}).fill('example.net');
+ await p.getByRole('textbox',{name:'Page address'}).press('Enter');
+ await expect.poll(()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='open').at(-1)?.url)).toBe('https://example.net/');
+});
+
+test('Embedded iPad page follows tiling, fullscreen, rotation and app disposal',async({page:p})=>{
+ await p.setViewportSize({width:1194,height:834});
+ await p.route('**/api/**',r=>r.abort());
+ await p.route('**/api/browser/snapshot',r=>r.fulfill({json:data()}));
+ await p.addInitScript(()=>{window.browserCommands=[];window.webkit={messageHandlers:{browserDevice:{postMessage:async q=>{window.browserCommands.push(q);return q.action==='capabilities'?{embedded:true}:{}}}}}});
+ await p.goto('/native/');await p.keyboard.press('Meta+Shift+Enter');
+ await p.getByRole('link',{name:'Open Example Domain on phone'}).click();
+ const layout=()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1));
+ await expect.poll(async()=>(await layout())?.visible).toBe(true);
+ await p.keyboard.press('Meta+Comma');await p.waitForTimeout(600);
+ const tiled=await layout();expect(tiled.rect[2]).toBeLessThan(600);
+ await p.evaluate(()=>window.dispatchEvent(new CustomEvent('host-browser-state',{detail:{focused:true}})));
+ await expect(p.locator('.desk-ws-label:visible')).toContainText('browser ·');
+ await p.keyboard.press('Meta+ArrowRight');
+ await p.keyboard.press('Meta+f');
+ await expect.poll(async()=>(await layout())?.visible).toBe(false);
+ await p.keyboard.press('Meta+f');
+ await expect.poll(async()=>(await layout())?.visible).toBe(true);
+ await p.setViewportSize({width:834,height:1194});await p.waitForTimeout(600);
+ const portrait=await layout();expect(portrait.viewport).toBe(834);expect(portrait.rect[0]+portrait.rect[2]).toBeLessThanOrEqual(834);expect(portrait.rect[1]+portrait.rect[3]).toBeLessThan(1194);
+ await p.keyboard.press('Meta+ArrowUp');await p.keyboard.press('Meta+w');
+ await expect.poll(()=>p.evaluate(()=>window.browserCommands.some(q=>q.action==='close'))).toBe(true);
+});

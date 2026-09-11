@@ -92,7 +92,7 @@ Text fields keep the standard editing shortcuts. Safari and Chrome reserve ⌘W,
 
 ## Native iPhone and iPad app
 
-`ios/HyprlandTouch.xcodeproj` is a UIKit/WKWebView wrapper for iOS 18 or later with the shared **HyprlandTouch** scheme and automatic development signing. It hides the status bar, defers the system edge gestures so the shell's swipes work, forwards ⌘ shortcuts on iPad, adds a Core Location bridge for the weather widget, and opens browser tabs in an isolated in-app Safari view.
+`ios/HyprlandTouch.xcodeproj` is a UIKit/WKWebView wrapper for iOS 18 or later with the shared **HyprlandTouch** scheme and automatic development signing. It hides the status bar, defers the system edge gestures so the shell's swipes work, forwards ⌘ shortcuts on iPad, adds a Core Location bridge for the weather widget, and opens browser pages in an isolated WKWebView inside the themed Browser window.
 
 Before building, set two values in `ios/HyprlandTouch/Info.plist` and the project: `OmarchyRemoteURL` (your HTTPS address followed by `/native/`) and the bundle identifier. Debug builds load that live URL and fall back to the bundled offline copy with an "Offline copy · Retry live" button; Release builds use the bundled copy only. Every build runs `scripts/prepare-native.py` to package `public/` into the app. Hold two fingers on the screen for about a second to switch between the live and bundled sources or reload.
 
