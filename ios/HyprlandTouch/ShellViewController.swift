@@ -107,6 +107,9 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
     private var page: WKWebView?
     private var observations: [NSKeyValueObservation] = []
     private var requestedVisible = false
+    private var controlsHidden = false
+    private var panY: CGFloat = 0
+    private var scrollTravel: CGFloat = 0
 
     func reset() {
         observations.removeAll()
@@ -128,6 +131,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         browser.layer.cornerRadius = 12
         browser.clipsToBounds = true
         browser.scrollView.contentInsetAdjustmentBehavior = .never
+        browser.scrollView.panGestureRecognizer.addTarget(self, action: #selector(pageScrolled(_:)))
         browser.allowsBackForwardNavigationGestures = true
         browser.accessibilityIdentifier = "hyprland.browser.page"
         let focus = UITapGestureRecognizer()
@@ -139,13 +143,32 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
                         browser.observe(\.isLoading, options: [.new]) { [weak self] _, _ in Task { @MainActor in self?.publish() } }]
         return browser
     }
+    private func showControls(_ hidden: Bool) {
+        guard controlsHidden != hidden else { return }
+        controlsHidden = hidden
+        publish(controlsHidden: hidden)
+    }
+    @objc private func pageScrolled(_ pan: UIPanGestureRecognizer) {
+        guard let page, !page.isHidden else { return }
+        let y = pan.translation(in: page).y
+        if pan.state == .began { panY = y; scrollTravel = 0; return }
+        guard pan.state == .changed else { return }
+        let delta = y - panY
+        panY = y
+        if delta * scrollTravel < 0 { scrollTravel = 0 }
+        scrollTravel += delta
+        if page.scrollView.contentOffset.y <= 0 || scrollTravel > 20 { showControls(false) }
+        else if scrollTravel < -40 && page.scrollView.contentSize.height > page.bounds.height { showControls(true) }
+    }
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        if let page, touch.location(in: page).y < 24 { showControls(false) }
         publish(focused: true)
         return false // Observe focus without recognizing or cancelling website touches.
     }
-    private func publish(error: String? = nil, preview: String? = nil, focused: Bool = false) {
+    private func publish(error: String? = nil, preview: String? = nil, focused: Bool = false, controlsHidden: Bool? = nil) {
         guard let page else { return }
         var state: [String: Any] = ["url": page.url?.absoluteString ?? "", "back": page.canGoBack, "forward": page.canGoForward, "loading": page.isLoading]
+        if let controlsHidden { state["controlsHidden"] = controlsHidden }
         if focused { state["focused"] = true }
         if let error { state["error"] = error }
         if let preview { state["preview"] = preview }
@@ -183,7 +206,10 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
                   rect[2] > 0, rect[3] > 0 else { page.isHidden = true; replyHandler(nil, "Invalid bounds"); return }
             let scale = presenter.view.bounds.width / viewport
             let frame = CGRect(x: rect[0] * scale, y: rect[1] * scale, width: rect[2] * scale, height: rect[3] * scale).intersection(presenter.view.bounds)
+            if let hidden = body["controlsHidden"] as? Bool { controlsHidden = hidden }
             page.frame = frame
+            if let radius = body["radius"] as? Double, radius.isFinite { page.layer.cornerRadius = max(0, min(24, radius * scale)) }
+            page.layer.maskedCorners = body["roundedTop"] as? Bool == true ? [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
             requestedVisible = !frame.isEmpty && !frame.isNull
             page.isHidden = !requestedVisible
             if let rgb = body["background"] as? [Double], rgb.count == 3, rgb.allSatisfy({ $0.isFinite && (0...255).contains($0) }) {
@@ -216,6 +242,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         if let url = navigationAction.request.url, ["http", "https"].contains(url.scheme?.lowercased() ?? "") { webView.load(navigationAction.request) }
         return nil
     }
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { controlsHidden = false; publish(controlsHidden: false) }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { publish(); snapshot() }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { if (error as NSError).code != NSURLErrorCancelled { publish(error: error.localizedDescription) } }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { if (error as NSError).code != NSURLErrorCancelled { publish(error: error.localizedDescription) } }

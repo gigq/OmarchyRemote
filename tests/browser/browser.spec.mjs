@@ -26,6 +26,16 @@ test('Embedded page stays in its frame, hides for Expo and retains navigation st
  expect(frame.rect[0]).toBeGreaterThan(0);expect(frame.rect[1]).toBeGreaterThan(0);expect(frame.rect[0]+frame.rect[2]).toBeLessThanOrEqual(402);expect(frame.rect[1]+frame.rect[3]).toBeLessThan(874);
  await p.evaluate(()=>window.dispatchEvent(new CustomEvent('host-browser-state',{detail:{url:'https://example.org/',back:true,forward:false,loading:false}})));
  await expect(p.getByRole('textbox',{name:'Page address'})).toHaveValue('https://example.org/');
+ const expanded=await p.locator('.browser-native-slot').boundingBox();
+ await p.evaluate(()=>window.dispatchEvent(new CustomEvent('host-browser-state',{detail:{controlsHidden:true}})));
+ await expect(p.locator('.browser-chrome')).toHaveCSS('max-height','0px');
+ await p.waitForTimeout(300);
+ const full=await p.locator('.browser-native-slot').boundingBox(),root=await p.locator('.browser-app').boundingBox();
+ expect(Math.abs(full.x-root.x)).toBeLessThan(1);expect(Math.abs(full.y-root.y)).toBeLessThan(1);
+ expect(Math.abs(full.width-root.width)).toBeLessThan(1);expect(Math.abs(full.height-root.height)).toBeLessThan(1);
+ expect(full.height-expanded.height).toBeGreaterThan(90);
+ await p.evaluate(()=>window.dispatchEvent(new CustomEvent('host-browser-state',{detail:{controlsHidden:false}})));
+ await expect(p.getByRole('button',{name:'Back',exact:true})).toBeVisible();
  await p.getByRole('button',{name:'Back',exact:true}).click();
  expect(await p.evaluate(()=>window.browserCommands.some(q=>q.action==='back'))).toBe(true);
  await p.getByRole('button',{name:'Desktop tabs',exact:true}).click();
