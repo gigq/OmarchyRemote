@@ -1,0 +1,78 @@
+/* Desk layout (iPad, Mac, desktop windows). `html.desk-mode` is set by pwa.js when both viewport
+   edges pass 600px; the shell then fills the window at 1:1 and workspaces tile several windows. */
+.desk-mode, .desk-mode body { width:100%; height:100%; overflow:hidden; background:var(--theme-background) !important; }
+.desk-mode .prototype-layout { position:fixed; inset:0; height:100dvh; box-sizing:border-box; display:block; gap:0; padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+.desk-mode .prototype-column { width:100%; height:100%; display:block; }
+.desk-mode #phone-viewport { width:100%; height:100%; }
+.desk-mode #touch-shell { width:100% !important; height:100% !important; transform:none; }
+.desk-mode .demo-controls, .desk-mode .prototype-notes { display:none !important; }
+
+/* Top bar: numbered workspaces, then "name · N windows · dwindle". */
+.desk-mode .shell-topbar { height:60px !important; padding:12px 30px 0 24px !important; font-size:13px !important; }
+.desk-mode .workspace-switcher { width:auto !important; display:flex !important; align-items:center; gap:6px !important; }
+.desk-mode .workspace-pill { width:28px !important; height:28px !important; border-radius:8px !important; font-size:13px !important; }
+.desk-ws-label { display:none; }
+.desk-mode .desk-ws-label { display:inline-block; margin-left:14px; color:var(--theme-secondary); font-size:12px; white-space:nowrap; }
+.desk-mode .shell-topbar > div:last-child { font-size:13px; gap:14px !important; }
+
+/* Window frames follow the tile instead of the phone's fixed inset. */
+/* `#touch-shell` keeps these ahead of the phone frame insets in dashboard.css. */
+.desk-mode [data-workspace] { border-radius:14px !important; }
+.desk-mode #touch-shell [data-workspace]::after { inset:0; border-radius:14px; }
+.desk-mode .expo-mode [data-workspace] { border-radius:28px !important; }
+.desk-mode #touch-shell.expo-mode [data-workspace]::after { border-width:6px; border-radius:28px; }
+.desk-mode .expo-mode .workspace-label { padding:22px 26px !important; font-size:36px; }
+.desk-mode .expo-swipe-hint { bottom:6px; }
+.desk-mode .expo-notice { left:calc(50% - 260px); right:auto; width:520px; box-sizing:border-box; }
+
+/* Apps sit inside their tile with a uniform margin; the system keyboard resizes the desk instead. */
+.desk-mode .remote-app, .desk-mode #remote-terminal-app, .desk-mode #remote-herdr-app, .desk-mode .theme-settings, .desk-mode .browser-app, .desk-mode .files-app { inset:14px 16px 14px !important; }
+.desk-mode .remote-app.with-keyboard, .desk-mode #remote-terminal-app.with-keyboard, .desk-mode #remote-herdr-app.with-keyboard, .desk-mode .browser-app:focus-within, .desk-mode .files-app:focus-within { bottom:14px !important; }
+.desk-mode .files-folder-form { bottom:0 !important; }
+.desk-mode .weather-picker, .desk-mode .widget-overview { inset:12px 20% !important; border:1px solid var(--theme-border) !important; border-radius:18px !important; }
+.desk-mode .dashboard-pin-panel { inset:24px 25% !important; }
+
+/* Home: framed clock + app grid panel, widgets beside it (landscape) or under it (portrait). */
+.desk-mode [data-workspace="home"] { display:grid !important; padding:0 !important; gap:0 !important; }
+.desk-mode.desk-landscape [data-workspace="home"] { grid-template-columns:[panel-start] 34px [content-start] minmax(0,1fr) [content-end] 34px [panel-end] 22px [side-start] minmax(0,.95fr) [side-end]; grid-template-rows:[panel-start] 34px auto auto auto minmax(0,1fr) auto 30px [panel-end]; }
+.desk-mode.desk-portrait [data-workspace="home"] { grid-template-columns:[panel-start] 34px [content-start] minmax(0,1fr) [content-end] 34px [panel-end]; grid-template-rows:[panel-start] 34px auto auto auto minmax(0,1fr) auto 30px [panel-end] 22px [side-start] minmax(0,44%) [side-end]; }
+.desk-mode [data-workspace="home"] > [data-live-time] { grid-column:content; grid-row:2; font-size:88px !important; letter-spacing:-4px !important; line-height:.9; }
+.desk-mode [data-workspace="home"] > .home-host { grid-column:content; grid-row:2; position:static !important; justify-self:end; align-self:start; margin-top:10px; font-size:12px; max-width:240px; text-align:right; }
+.desk-mode [data-workspace="home"] > [data-live-date] { grid-column:content; grid-row:3; font-size:14px !important; margin:14px 0 26px !important; }
+.desk-mode [data-workspace="home"] > div:has(> .home-app-grid) { grid-column:content; grid-row:4; }
+.desk-mode #home-attention { grid-column:content; grid-row:5; align-self:end; margin-top:auto; font-size:13px; }
+.desk-mode #home-metrics { grid-column:content; grid-row:6; margin:12px 0 0; }
+.desk-mode.desk-landscape #home-widgets { grid-column:side; grid-row:1 / -1; }
+.desk-mode.desk-portrait #home-widgets { grid-column:1 / -1; grid-row:side; }
+.desk-mode #touch-shell [data-workspace="home"]::after { position:static; inset:auto; grid-column:panel; grid-row:panel; border-radius:16px; }
+.desk-mode #touch-shell.expo-mode [data-workspace="home"]::after { position:absolute; inset:0; border-radius:28px; }
+.desk-mode .home-app-grid { grid-template-columns:repeat(6,minmax(0,1fr)) !important; gap:12px !important; }
+.desk-mode .home-app-grid > div, .desk-mode .home-app-grid sc-for > div, .desk-mode .home-pin { height:80px !important; border-radius:18px !important; padding:12px !important; }
+.desk-mode .home-app-grid > div > div:first-child { font-size:20px !important; }
+.desk-mode .home-app-grid > div > div:last-child { font-size:11px !important; }
+
+/* Widgets show all at once instead of a paged strip. */
+.desk-mode #home-widgets { position:static !important; width:auto; min-height:0; display:flex; flex-direction:column; }
+.desk-mode .widget-viewport { height:auto !important; flex:1; min-height:0; overflow:auto; touch-action:pan-y; border-radius:0; }
+.desk-mode .widget-strip { display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; height:auto !important; width:auto !important; transform:none !important; align-content:start; }
+.desk-mode .widget-strip > .home-widget { flex:none !important; min-height:150px; box-sizing:border-box; }
+.desk-mode .widget-strip > #widget-weather, .desk-mode .widget-strip > #widget-codexbar { grid-column:1 / -1; }
+.desk-mode.desk-portrait .widget-strip { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.desk-mode.desk-portrait .widget-strip > #widget-codexbar { grid-column:auto; }
+.desk-mode .widget-dot { display:none; }
+.desk-mode .widget-dots { justify-content:flex-end; height:30px; }
+.desk-mode .widget-manage { position:static; }
+
+/* Launcher, shades, and the SUPER keyboard hang from the centre of the wider bar. */
+.desk-mode .shell-overlay, .desk-mode .shell-shade { left:calc(50% - 300px) !important; right:auto !important; width:600px; top:60px !important; box-sizing:border-box; border-top:1px solid var(--theme-border) !important; border-radius:22px !important; }
+.desk-mode .custom-keyboard { left:calc(50% - 270px) !important; right:auto !important; width:540px; box-sizing:border-box; border:1px solid var(--theme-border); border-bottom:0; border-radius:18px 18px 0 0; padding-bottom:18px !important; }
+
+/* ⌘/ shortcut sheet. */
+.desk-sheet { position:absolute; inset:0; z-index:40; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; padding:40px; box-sizing:border-box; background:color-mix(in srgb, var(--theme-background) 72%, transparent); font-size:12px; }
+.desk-sheet-head { display:flex; align-items:baseline; gap:16px; }
+.desk-sheet-head h2 { margin:0; font:500 24px 'Space Grotesk',sans-serif; }
+.desk-sheet-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); gap:18px 32px; width:min(100%,960px); max-height:70%; overflow:auto; padding:24px 28px; box-sizing:border-box; background:var(--theme-surface); border:1px solid var(--theme-border); border-radius:22px; }
+.desk-sheet-group h3 { margin:0 0 10px; font-size:11px; font-weight:600; letter-spacing:.6px; text-transform:uppercase; color:var(--theme-secondary); }
+.desk-sheet-row { display:flex; align-items:flex-start; gap:12px; padding:5px 0; }
+.desk-sheet-row kbd { font:inherit; flex:none; min-width:96px; padding:3px 8px; border:1px solid var(--theme-border); border-radius:6px; background:var(--theme-surface-raised); color:var(--theme-foreground); white-space:nowrap; text-align:center; }
+.desk-sheet-foot { margin:0; }

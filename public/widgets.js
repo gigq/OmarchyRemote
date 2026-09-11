@@ -76,7 +76,7 @@
     place.append(city,node('span','widget-muted',`↑ ${this.temp(w.daily?.temperature_2m_max?.[0])} · ↓ ${this.temp(w.daily?.temperature_2m_min?.[0])}`));top.append(current,place);root.append(top);
     const hours=node('div','weather-hours');const times=w.hourly?.time||[];const next=times.findIndex(t=>t>=Date.now()/1000),start=next<0?times.length:next;
     const low=w.daily?.temperature_2m_min?.[0],high=w.daily?.temperature_2m_max?.[0];
-    for(let i=start;i<Math.min(times.length,start+6);i++){
+    for(let i=start;i<Math.min(times.length,start+(this.logic?.state?.desk?12:6));i++){
      const temperature=w.hourly.temperature_2m[i],h=node('div','weather-hour');
      const track=node('div','weather-bar'),fill=node('i');const ratio=number(temperature)&&number(low)&&number(high)?Math.max(0,Math.min(1,(temperature-low)/Math.max(1,high-low))):0;
      fill.style.height=(20+ratio*80)+'%';fill.style.background=ratio>.6?'var(--theme-yellow)':ratio<.3?'var(--theme-green)':'var(--theme-secondary)';track.append(fill);

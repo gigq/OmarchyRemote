@@ -12,10 +12,10 @@
       if(this.drag){e.stopImmediatePropagation();return}
       e.stopImmediatePropagation();e.preventDefault();
       const card=e.target.closest('[data-workspace]'),key=card?.dataset.workspace;
-      const scale=this.root.getBoundingClientRect().width/402;
+      const scale=this.root.getBoundingClientRect().width/(this.root.offsetWidth||402);
       this.drag={card,key,id:e.pointerId,x:e.clientX,y:e.clientY,dx:0,dy:0,scale,base:card?.style.transform,transition:card?.style.transition,order:[...this.logic.state.open],active:this.logic.cur(),slots:this.logic.state.open.map(k=>{const el=this.root.querySelector(`[data-workspace="${k}"]`),r=el.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}})};
       this.root.setPointerCapture(e.pointerId);
-      if(card&&key!=='home')this.timer=setTimeout(()=>{if(!this.drag)return;this.drag.reorder=true;card.classList.add('expo-lifted');this.paint()},420);
+      if(card&&key!=='home'&&!this.logic.state.desk)this.timer=setTimeout(()=>{if(!this.drag)return;this.drag.reorder=true;card.classList.add('expo-lifted');this.paint()},420);
     }
     move(e){
       const d=this.drag;if(!d||e.pointerId!==d.id)return;e.stopImmediatePropagation();e.preventDefault();
@@ -37,7 +37,7 @@
         animation.onfinish=()=>{animation.cancel();this.clearCard(d);this.logic.closeApp(d.key,true)};
       }else{
         this.drag=null;this.clearCard(d);this.logic.set({});
-        if(!d.reorder&&Math.hypot(d.dx,d.dy)<9&&d.key)this.logic.go(this.logic.state.open.indexOf(d.key));
+        if(!d.reorder&&Math.hypot(d.dx,d.dy)<9&&d.key)this.logic.jump(d.key);
         else if(!d.reorder&&d.dy>65&&Math.abs(d.dy)>Math.abs(d.dx))this.logic.set({ov:false});
       }
       if(this.root.hasPointerCapture(d.id))this.root.releasePointerCapture(d.id);

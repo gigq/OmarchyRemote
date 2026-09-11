@@ -10,6 +10,27 @@ Start edge gestures inside the app's visible content, above the home indicator a
 
 This is a simulated operating system UI. Apps, Wi-Fi controls, agents, weather, time, and battery values are mock data; they do not control iOS. Terminal and Herdr connect to HOST as described below. Shell UI workspace state resets when the page reloads. A PWA cannot defer iOS system gestures; use the native app below for that experience.
 
+## iPad, Mac, and desktop windows
+
+When both edges of the viewport are at least 600 px (an iPad in either orientation, a Mac or Windows browser window, or the native app on iPad), the shell switches to **desk mode**: the 402×874 phone canvas is replaced by a 1:1 layout that fills the window, and workspaces become tiled containers. Home keeps the framed clock and a six-column app grid on the left with the weather, btop, Tailscale, and CodexBar widgets shown all at once beside it (or underneath in portrait). Opening an app from Home starts a new workspace; opening another app while a workspace is active tiles it into that workspace with Hyprland's dwindle split (side by side on the longer axis, then stacked), up to four windows per workspace. The top bar lists numbered workspaces and shows `name · N windows · dwindle|fullscreen` for the current one. Tapping a window focuses it; tapping the active pill or pressing ⌘E opens Expo, which shows each workspace's tiles as one group. The phone layout is unchanged below the threshold. `public/desk.js` and `public/desk.css` own this mode.
+
+Hardware keyboards use ⌘ on Apple devices (Omarchy's SUPER) and Ctrl+Alt on Windows and Linux. Press **⌘/** in the app for the same table.
+
+| Keys | Action |
+| --- | --- |
+| ⌘1…9, ⌘[ / ⌘] | Switch workspace, previous / next workspace |
+| ⌘E | Expo overview |
+| ⌘⇧1…9, ⌘⇧[ / ⌘⇧] | Move the focused window to a workspace |
+| ⌘← ↑ ↓ →, ⌘⇧arrows | Focus / swap window in a direction |
+| ⌘` / ⌘⇧` | Next / previous window in the workspace |
+| ⌘F | Toggle fullscreen for the focused window |
+| ⌘W (⌘⌫ where the browser keeps ⌘W) | Close the focused window |
+| ⌘⏎, ⌘⇧⏎ or ⌘⇧B, ⌘⇧F, ⌘⇧A, ⌘⇧D, ⌘, | Terminal, browser, files, Herdr, lazydocker, settings |
+| ⌘K or ⌘Space | Launcher |
+| ⌘/ | Shortcut sheet; Esc closes sheets, Expo, and shades |
+
+Text fields keep the standard editing shortcuts (⌘A/C/V/X/Z and ⌘-arrows). Safari and Chrome reserve ⌘W, ⌘T, ⌘N, and ⌘Space for themselves; the native iPad app receives them.
+
 ## Native iPhone app
 
 `ios/HyprlandTouch.xcodeproj` contains a UIKit/WKWebView app with the shared **HyprlandTouch** scheme. It supports iPhone on iOS 18 or later and uses automatic development signing. The bundle identifier is `com.example.HyprlandTouch`.

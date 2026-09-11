@@ -11,7 +11,7 @@
   };
   const socket=path=>new WebSocket(`${location.protocol==='https:'?'wss:':'ws:'}//${location.host}/api/${path}`);
   function terminal(host,readonly=false){
-    const t=new Terminal({fontFamily:'"JetBrains Mono", monospace',fontSize:12,lineHeight:1.15,theme:window.HyprlandThemes?.terminalTheme()||theme,scrollback:3000,cursorBlink:!readonly,disableStdin:readonly,allowProposedApi:false});
+    const t=new Terminal({fontFamily:'"JetBrains Mono", monospace',fontSize:window.HyprlandDesk?.isDesk()?13:12,lineHeight:1.15,theme:window.HyprlandThemes?.terminalTheme()||theme,scrollback:3000,cursorBlink:!readonly,disableStdin:readonly,allowProposedApi:false});
     t.open(host);t.textarea?.setAttribute('inputmode','none');t.textarea?.setAttribute('autocapitalize','off');
     return t;
   }
@@ -303,11 +303,15 @@
       const ids=[...Object.keys(HOST_TUIS).map(k=>'remote-'+k+'-app'),'remote-herdr-app'];
       for(const id of ids){const root=mount(id);if(root)root.classList.toggle('with-keyboard',kb&&!this.logic.state.ov);if(root)root.classList.toggle('native-typing',native)}
       if(location.protocol==='file:'){for(const id of [...ids,'remote-files-app','remote-browser-app']){const root=mount(id);if(root&&!root.textContent)root.append(node('p','remote-empty','Connect to HOST to use this app.'))}return}
-      if(Object.hasOwn(HOST_TUIS,current)&&!this.tuis[current]){const app=current==='terminal'?new TerminalTabs(mount('remote-terminal-app'),this):new TerminalApp(mount('remote-'+current+'-app'),this,current);this.tuis[current]=app;app.connect()}
-      if(current==='browser'&&!this.browser)this.browser=new HostBrowserApp(mount('remote-browser-app'));
-      this.browser?.show(current==='browser'&&!this.logic.state.ov);
-      if(current==='files'&&!this.files)this.files=new HostFilesApp(mount('remote-files-app'),path=>this.filesTerminal(path));
-      if(current==='herd'&&!this.herdr){this.herdr=new HerdrApp(mount('remote-herdr-app'),this);this.herdr.connect()}
+      // The desk shows every window of the current workspace, so each of them mounts, not only the focused one.
+      const s=this.logic.state,visible=s.desk&&window.HyprlandDesk?(window.HyprlandDesk.desks(s)[s.ws]||[current]):[current];
+      for(const key of visible){
+        if(Object.hasOwn(HOST_TUIS,key)&&!this.tuis[key]){const app=key==='terminal'?new TerminalTabs(mount('remote-terminal-app'),this):new TerminalApp(mount('remote-'+key+'-app'),this,key);this.tuis[key]=app;app.connect()}
+        if(key==='browser'&&!this.browser)this.browser=new HostBrowserApp(mount('remote-browser-app'));
+        if(key==='files'&&!this.files)this.files=new HostFilesApp(mount('remote-files-app'),path=>this.filesTerminal(path));
+        if(key==='herd'&&!this.herdr){this.herdr=new HerdrApp(mount('remote-herdr-app'),this);this.herdr.connect()}
+      }
+      this.browser?.show(visible.includes('browser')&&!this.logic.state.ov);
       for(const [key,app] of Object.entries(this.tuis))if(current!==key||this.logic.state.ov)app.stopTouchScroll.cancel();
       if(current!=='herd'||this.logic.state.ov)this.herdr?.stopTouchScroll.cancel();
       for(const app of [...Object.values(this.tuis),this.herdr])if(app)app.nativeInput.show(native&&app.nativeInput===this.currentInput()&&kb&&!this.logic.state.ov);

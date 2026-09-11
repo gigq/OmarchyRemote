@@ -22,6 +22,7 @@ The hosted Sites PWA is a separate delivery path. Publish it only when that is p
 
 - One Rust backend in `backend/` serves all host apps. Terminal owns PTYs; Herdr uses the local Unix socket. Add future app adapters under this shared backend, not separate servers per app.
 - `omarchy-remote.service` is enabled on loopback 4188. The existing Node server proxies `/api/` and WebSockets through the same Tailscale URL.
+- `public/desk.js` and `public/desk.css` own desk mode (viewports with both edges ≥ 600px: iPad, Mac, desktop windows): tiled workspaces, ⌘/Ctrl+Alt bindings, and the ⌘/ sheet. Keep the phone shell below that threshold unchanged; `tests/browser/desk.spec.mjs` covers both.
 - `public/remote.js` and `public/remote.css` own the real app views. `public/native-terminal.js` renders xterm buffers into native overflow views; `public/native-input.js` owns system-keyboard input and pane drafts. `public/dashboard.js` and `public/dashboard.css` own Home summaries, pinned apps, notifications, and the native-input launcher. The exported component owns shell gestures and the SUPER custom keyboard.
 - Build changed Rust with `cargo build --release --manifest-path backend/Cargo.toml`, then restart `omarchy-remote.service`. This ends backend-owned shells; finish isolated tests before restarting. HTML edits preserve running shells.
 - Never print or embed `~/.config/omarchy-remote/backend.env`; its proxy secret is server-only. Both services load it.

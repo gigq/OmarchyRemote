@@ -26,7 +26,9 @@
 <script src="/expo.js"></script>
 <script src="/widget-deck.js"></script>
 <script src="/widgets.js"></script>
+<script src="/desk.js"></script>
 <link rel="stylesheet" href="/widgets.css">
+<link rel="stylesheet" href="/desk.css">
 <title>Hyprland Touch</title>
 <meta name="description" content="A Rosé Pine mobile OS prototype with touch workspaces, launcher, and SUPER keyboard.">
 <meta name="theme-color" content="#191724">
@@ -397,14 +399,14 @@
 <div class="prototype-column">
 <div id="phone-viewport">
 <div id="touch-shell" sc-camel-on-pointer-cancel="{{ cancel }}" sc-camel-on-pointer-down="{{ down }}" sc-camel-on-pointer-up="{{ up }}" style="width:402px;height:var(--canvas-height,874px);position:relative;background:var(--theme-background);color:var(--theme-foreground);font-family:'JetBrains Mono',ui-monospace,monospace;touch-action:none;user-select:none;overflow:hidden;cursor:default">
-  <div style="position:absolute;top:0;left:0;right:0;height:52px;box-sizing:border-box;z-index:15;background:var(--theme-background);display:flex;align-items:center;justify-content:space-between;padding:7px 22px 0 14px;font-size:12px;color:var(--theme-secondary)">
-    <div class="workspace-switcher" style="width:112px;display:grid;grid-template-columns:repeat(5,20px);gap:3px"><sc-for list="{{ pills }}" as="w" hint-placeholder-count="4"><div sc-camel-on-click="{{ w.on }}" class="workspace-pill" style="width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font-size:11px;font-weight:600;background: {{ w.bg }};color: {{ w.c }};transition:background .3s,color .3s;cursor:pointer">{{ w.i }}</div></sc-for></div>
+  <div class="shell-topbar" style="position:absolute;top:0;left:0;right:0;height:52px;box-sizing:border-box;z-index:15;background:var(--theme-background);display:flex;align-items:center;justify-content:space-between;padding:7px 22px 0 14px;font-size:12px;color:var(--theme-secondary)">
+    <div class="workspace-switcher" style="width:112px;display:grid;grid-template-columns:repeat(5,20px);gap:3px"><sc-for list="{{ pills }}" as="w" hint-placeholder-count="4"><div sc-camel-on-click="{{ w.on }}" class="workspace-pill" style="width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font-size:11px;font-weight:600;background: {{ w.bg }};color: {{ w.c }};transition:background .3s,color .3s;cursor:pointer">{{ w.i }}</div></sc-for><span class="desk-ws-label">{{ wsLabel }}</span></div>
     <div style="display:flex;gap:10px;align-items:center;height:24px;white-space:nowrap"><sc-if value="{{ isWifi }}" hint-placeholder-val="{{ true }}"><svg width="17" height="13" sc-camel-view-box="0 0 16 12" fill="none" style="display:block"><path d="M1.50 4.50A9.2 9.2 0 0 1 14.50 4.50" stroke="var(--theme-foreground)" stroke-width="1.9" stroke-linecap="round"></path><path d="M3.76 6.76A6 6 0 0 1 12.24 6.76" stroke="var(--theme-foreground)" stroke-width="1.9" stroke-linecap="round"></path><path d="M5.95 8.95A2.9 2.9 0 0 1 10.05 8.95" stroke="var(--theme-foreground)" stroke-width="1.9" stroke-linecap="round"></path><circle cx="8" cy="11" r="1.1" fill="var(--theme-foreground)"></circle></svg></sc-if><sc-if value="{{ isCell }}" hint-placeholder-val="{{ false }}"><span style="color:var(--theme-foreground);font-weight:600;font-size:11px;letter-spacing:.5px">{{ netLabel }}</span></sc-if><sc-if value="{{ isOff }}" hint-placeholder-val="{{ false }}"><span style="color:var(--theme-red);font-size:11px">offline</span></sc-if><span style="color:var(--theme-foreground);font-weight:500" data-live-time>—</span><span style="color:var(--theme-green)">87%</span></div>
   </div>
 
   <div style="position:absolute;inset:0;overflow:hidden">
 
-    <div data-workspace="home" sc-camel-on-click="{{ cHome.tap }}" style="position:absolute;inset:0;transform: {{ cHome.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cHome.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cHome.op }};pointer-events: {{ cHome.pe }};box-sizing:border-box;padding:100px 26px 0">
+    <div data-workspace="home" sc-camel-on-click="{{ cHome.tap }}" style="position:absolute;inset:0;width: {{ cHome.w }};height: {{ cHome.h }};transform: {{ cHome.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cHome.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cHome.op }};pointer-events: {{ cHome.pe }};box-sizing:border-box;padding:100px 26px 0">
       <div style="font-family:'Space Grotesk',sans-serif;font-size:76px;font-weight:500;letter-spacing:-3px;line-height:.9" data-live-time>—</div>
       <div style="font-family:'Space Grotesk',sans-serif;font-size:15px;color:var(--theme-rose);margin:12px 0 22px" data-live-date>—</div>
       <div style="display:flex;flex-direction:column;gap:10px">
@@ -414,52 +416,52 @@
       <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cHome.lab }};transition: {{ tr }};pointer-events:none">home</div>
     </div>
 
-    <div data-workspace="terminal" sc-camel-on-click="{{ cTerminal.tap }}" style="position:absolute;inset:0;transform: {{ cTerminal.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cTerminal.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cTerminal.op }};pointer-events: {{ cTerminal.pe }};box-sizing:border-box">
+    <div data-workspace="terminal" sc-camel-on-click="{{ cTerminal.tap }}" style="position:absolute;inset:0;width: {{ cTerminal.w }};height: {{ cTerminal.h }};transform: {{ cTerminal.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cTerminal.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cTerminal.op }};pointer-events: {{ cTerminal.pe }};box-sizing:border-box">
       <div id="remote-terminal-app" class="remote-app"></div>
       <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-terminal) 60%,transparent);opacity: {{ cTerminal.lab }};transition: {{ tr }};pointer-events:none">terminal</div>
     </div>
 
-    <div data-workspace="btop" sc-camel-on-click="{{ cBtop.tap }}" style="position:absolute;inset:0;transform: {{ cBtop.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cBtop.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cBtop.op }};pointer-events: {{ cBtop.pe }};box-sizing:border-box">
+    <div data-workspace="btop" sc-camel-on-click="{{ cBtop.tap }}" style="position:absolute;inset:0;width: {{ cBtop.w }};height: {{ cBtop.h }};transform: {{ cBtop.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cBtop.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cBtop.op }};pointer-events: {{ cBtop.pe }};box-sizing:border-box">
       <div id="remote-btop-app" class="remote-app"></div>
       <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-terminal) 60%,transparent);opacity: {{ cBtop.lab }};transition: {{ tr }};pointer-events:none">btop</div>
     </div>
 
-    <div data-workspace="services" sc-camel-on-click="{{ cServices.tap }}" style="position:absolute;inset:0;transform: {{ cServices.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cServices.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cServices.op }};pointer-events: {{ cServices.pe }};box-sizing:border-box">
+    <div data-workspace="services" sc-camel-on-click="{{ cServices.tap }}" style="position:absolute;inset:0;width: {{ cServices.w }};height: {{ cServices.h }};transform: {{ cServices.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cServices.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cServices.op }};pointer-events: {{ cServices.pe }};box-sizing:border-box">
       <div id="remote-services-app" class="remote-app"></div>
       <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-terminal) 60%,transparent);opacity: {{ cServices.lab }};transition: {{ tr }};pointer-events:none">services</div>
     </div>
 
-    <div data-workspace="lazydocker" sc-camel-on-click="{{ cLazydocker.tap }}" style="position:absolute;inset:0;transform: {{ cLazydocker.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cLazydocker.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cLazydocker.op }};pointer-events: {{ cLazydocker.pe }};box-sizing:border-box">
+    <div data-workspace="lazydocker" sc-camel-on-click="{{ cLazydocker.tap }}" style="position:absolute;inset:0;width: {{ cLazydocker.w }};height: {{ cLazydocker.h }};transform: {{ cLazydocker.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cLazydocker.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cLazydocker.op }};pointer-events: {{ cLazydocker.pe }};box-sizing:border-box">
       <div id="remote-lazydocker-app" class="remote-app"></div>
       <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-terminal) 60%,transparent);opacity: {{ cLazydocker.lab }};transition: {{ tr }};pointer-events:none">lazydocker</div>
     </div>
 
-    <div data-workspace="dua" sc-camel-on-click="{{ cDua.tap }}" style="position:absolute;inset:0;transform: {{ cDua.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cDua.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cDua.op }};pointer-events: {{ cDua.pe }};box-sizing:border-box">
+    <div data-workspace="dua" sc-camel-on-click="{{ cDua.tap }}" style="position:absolute;inset:0;width: {{ cDua.w }};height: {{ cDua.h }};transform: {{ cDua.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cDua.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cDua.op }};pointer-events: {{ cDua.pe }};box-sizing:border-box">
       <div id="remote-dua-app" class="remote-app"></div>
       <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-terminal) 60%,transparent);opacity: {{ cDua.lab }};transition: {{ tr }};pointer-events:none">dua</div>
     </div>
 
-    <div data-workspace="lnav" sc-camel-on-click="{{ cLnav.tap }}" style="position:absolute;inset:0;transform: {{ cLnav.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cLnav.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cLnav.op }};pointer-events: {{ cLnav.pe }};box-sizing:border-box">
+    <div data-workspace="lnav" sc-camel-on-click="{{ cLnav.tap }}" style="position:absolute;inset:0;width: {{ cLnav.w }};height: {{ cLnav.h }};transform: {{ cLnav.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cLnav.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cLnav.op }};pointer-events: {{ cLnav.pe }};box-sizing:border-box">
       <div id="remote-lnav-app" class="remote-app"></div>
       <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-terminal) 60%,transparent);opacity: {{ cLnav.lab }};transition: {{ tr }};pointer-events:none">lnav</div>
     </div>
 
-    <div data-workspace="browser" sc-camel-on-click="{{ cBrowser.tap }}" style="position:absolute;inset:0;transform: {{ cBrowser.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cBrowser.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cBrowser.op }};pointer-events: {{ cBrowser.pe }};box-sizing:border-box">
+    <div data-workspace="browser" sc-camel-on-click="{{ cBrowser.tap }}" style="position:absolute;inset:0;width: {{ cBrowser.w }};height: {{ cBrowser.h }};transform: {{ cBrowser.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cBrowser.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cBrowser.op }};pointer-events: {{ cBrowser.pe }};box-sizing:border-box">
       <div id="remote-browser-app" class="remote-app"></div>
       <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cBrowser.lab }};transition: {{ tr }};pointer-events:none">browser</div>
     </div>
 
-    <div data-workspace="files" sc-camel-on-click="{{ cFiles.tap }}" style="position:absolute;inset:0;transform: {{ cFiles.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cFiles.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cFiles.op }};pointer-events: {{ cFiles.pe }};box-sizing:border-box">
+    <div data-workspace="files" sc-camel-on-click="{{ cFiles.tap }}" style="position:absolute;inset:0;width: {{ cFiles.w }};height: {{ cFiles.h }};transform: {{ cFiles.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cFiles.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cFiles.op }};pointer-events: {{ cFiles.pe }};box-sizing:border-box">
       <div id="remote-files-app" class="remote-app"></div>
       <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cFiles.lab }};transition: {{ tr }};pointer-events:none">files</div>
     </div>
 
-    <div data-workspace="settings" sc-camel-on-click="{{ cSettings.tap }}" style="position:absolute;inset:0;transform: {{ cSettings.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cSettings.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cSettings.op }};pointer-events: {{ cSettings.pe }};box-sizing:border-box">
+    <div data-workspace="settings" sc-camel-on-click="{{ cSettings.tap }}" style="position:absolute;inset:0;width: {{ cSettings.w }};height: {{ cSettings.h }};transform: {{ cSettings.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cSettings.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cSettings.op }};pointer-events: {{ cSettings.pe }};box-sizing:border-box">
       <div id="theme-settings" class="theme-settings"></div>
       <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cSettings.lab }};transition: {{ tr }};pointer-events:none">settings</div>
     </div>
 
-    <div data-workspace="herd" sc-camel-on-click="{{ cHerd.tap }}" style="position:absolute;inset:0;transform: {{ cHerd.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cHerd.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cHerd.op }};pointer-events: {{ cHerd.pe }};box-sizing:border-box">
+    <div data-workspace="herd" sc-camel-on-click="{{ cHerd.tap }}" style="position:absolute;inset:0;width: {{ cHerd.w }};height: {{ cHerd.h }};transform: {{ cHerd.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cHerd.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cHerd.op }};pointer-events: {{ cHerd.pe }};box-sizing:border-box">
       <div id="remote-herdr-app" class="remote-app"></div>
       <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cHerd.lab }};transition: {{ tr }};pointer-events:none">herdr</div>
     </div>
@@ -475,11 +477,11 @@
     <div id="dashboard-launcher"></div>
   </div>
 
-  <div style="position:absolute;left:0;right:0;top:52px;z-index:14;background:color-mix(in srgb, var(--theme-surface) 96%, transparent);border:1px solid var(--theme-border);border-top:0;border-radius:0 0 28px 28px;transform: {{ shadeNTf }};transition: {{ tr }};padding:14px 18px 18px;display:flex;flex-direction:column;gap:8px;box-sizing:border-box">
+  <div class="shell-shade" style="position:absolute;left:0;right:0;top:52px;z-index:14;background:color-mix(in srgb, var(--theme-surface) 96%, transparent);border:1px solid var(--theme-border);border-top:0;border-radius:0 0 28px 28px;transform: {{ shadeNTf }};transition: {{ tr }};padding:14px 18px 18px;display:flex;flex-direction:column;gap:8px;box-sizing:border-box">
     <div id="dashboard-notifications"></div>
   </div>
 
-  <div style="position:absolute;left:0;right:0;top:52px;z-index:14;background:color-mix(in srgb, var(--theme-surface) 96%, transparent);border:1px solid var(--theme-border);border-top:0;border-radius:0 0 28px 28px;transform: {{ shadeQTf }};transition: {{ tr }};padding:14px 18px 18px;display:flex;flex-direction:column;gap:10px;box-sizing:border-box">
+  <div class="shell-shade" style="position:absolute;left:0;right:0;top:52px;z-index:14;background:color-mix(in srgb, var(--theme-surface) 96%, transparent);border:1px solid var(--theme-border);border-top:0;border-radius:0 0 28px 28px;transform: {{ shadeQTf }};transition: {{ tr }};padding:14px 18px 18px;display:flex;flex-direction:column;gap:10px;box-sizing:border-box">
     <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--theme-secondary);padding:0 4px"><span>quick settings</span><span>87% · 4h 12m</span></div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px"><sc-for list="{{ qsToggles }}" as="t" hint-placeholder-count="6"><div sc-camel-on-click="{{ t.on }}" style="height:64px;border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;justify-content:space-between;background: {{ t.bg }};color: {{ t.c }};cursor:pointer;transition:background .2s,color .2s;box-sizing:border-box"><div style="font-size:12px;font-weight:600">{{ t.n }}</div><div style="font-size:10px;opacity:.75">{{ t.state }}</div></div></sc-for></div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
@@ -526,16 +528,16 @@ class Component extends DCLogic {
     {g:'md',n:'README.md',s:'3.1K',t:'tue',perm:'-rw-r--r--',meta:'markdown · 96 lines',prev:[['# hyprland-touch','var(--theme-rose)'],['Arch + Hyprland on a phone.','var(--theme-secondary)'],['## install','var(--theme-rose)'],['./install.sh','var(--theme-secondary)']]},
     {g:'js',n:'waybar.jsonc',s:'1.8K',t:'tue',perm:'-rw-r--r--',meta:'jsonc · 64 lines',prev:[['{ "layer": "top",','var(--theme-secondary)'],['  "modules-left": ["hyprland/workspaces"],','var(--theme-secondary)'],['  "modules-right": ["network","battery"],','var(--theme-secondary)'],['  "height": 52 }','var(--theme-secondary)']]},
     {g:'png',n:'fastfetch.png',s:'218K',t:'12:41',perm:'-rw-r--r--',meta:'png · 1206×2622',prev:[['image preview · 1206×2622','var(--theme-dim)'],['sRGB · 8-bit','var(--theme-dim)']]}];
-  state = { ws:0, open:['home'], ov:false, kb:false, sup:false, term:false, ctl:false, shade:null, launch:false, map:false, query:'', input:'', cursor:0, transcript:[], history:[], historyIndex:-1, draft:'', shift:false, fileSel:5, herdView:'list', herdG:0, pane:0, wifi:true, qs:{bluetooth:true,dnd:false,rotate:false,airplane:false,torch:false}, notifsCleared:false,
+  state = { ws:0, open:['home'], desk:!!window.HyprlandDesk?.isDesk(), deskW:window.innerWidth, deskH:window.innerHeight, tiles:{}, focus:null, full:[], ov:false, kb:false, sup:false, term:false, ctl:false, shade:null, launch:false, map:false, query:'', input:'', cursor:0, transcript:[], history:[], historyIndex:-1, draft:'', shift:false, fileSel:5, herdView:'list', herdG:0, pane:0, wifi:true, qs:{bluetooth:true,dnd:false,rotate:false,airplane:false,torch:false}, notifsCleared:false,
     agents:[
       {ws:'mobile-hypr',m:'local',a:'claude',s:'working',t:'wiring edge gestures',tail:'▸ editing src/gestures.rs',el:'12m',lines:[['~/src/mobile-hypr ❯ claude','var(--theme-secondary)'],['› wire the edge gestures to hyprctl dispatch','var(--theme-foreground)'],['',''],['● Read src/gestures.rs (212 lines)','var(--theme-secondary)'],['● Read src/main.rs (88 lines)','var(--theme-secondary)'],['● Update src/gestures.rs +38 −4','var(--theme-secondary)'],['● Bash cargo check ✓ 0 warnings','var(--theme-secondary)'],['● Update src/gestures.rs +12 −0','var(--theme-secondary)'],['',''],['✻ Wiring the bottom-right zone to exec hyprctl dispatch…','var(--theme-green)'],['12m 04s · 48.2k tokens · esc to interrupt','var(--theme-dim)']]},
       {ws:'mobile-hypr',m:'local',a:'codex',s:'blocked',t:'waybar battery module',tail:'allow write to waybar/battery.rs?',el:'3m',ans:[{k:'n',l:'deny'},{k:'y',l:'allow once'},{k:'a',l:'allow always',p:true}],lines:[['~/src/mobile-hypr ❯ codex','var(--theme-secondary)'],['› add a battery module to waybar that reads /sys/class/power_supply','var(--theme-foreground)'],['',''],['• read waybar/config.jsonc','var(--theme-secondary)'],['• read waybar/modules/mod.rs','var(--theme-secondary)'],['• plan: battery.rs → register module → style.css','var(--theme-secondary)'],['',''],['┌ edit waybar/battery.rs','var(--theme-secondary)'],['│ + use std::fs;','var(--theme-green)'],['│ + const SYS_BAT: &str = "/sys/class/power_supply/BAT0";','var(--theme-green)'],['│ + pub fn read_capacity() -> u8 {','var(--theme-green)'],['│ +     fs::read_to_string(format!("{SYS_BAT}/capacity"))','var(--theme-green)'],['│ +         .map(|s| s.trim().parse().unwrap_or(0))','var(--theme-green)'],['│ − // TODO battery','var(--theme-red)'],['└ 6 lines','var(--theme-dim)'],['',''],['? Allow write to waybar/battery.rs? [y/n/a]','var(--theme-yellow)']]},
       {ws:'herdr-ios',m:'hetzner-1',a:'claude',s:'done',t:'swift bridge for socket api',tail:'+124 −31 · 3 files · tests pass',el:'41m',lines:[['~/src/herdr-ios ❯ claude','var(--theme-secondary)'],['› bridge the herdr socket api to swift','var(--theme-foreground)'],['',''],['● Write Sources/HerdrKit/Socket.swift +124','var(--theme-secondary)'],['● Update Package.swift +3 −1','var(--theme-secondary)'],['● Bash swift test ✓ 14 passed','var(--theme-secondary)'],['',''],['Done. Socket API bridged; ready to commit.','var(--theme-magenta)']]},
       {ws:'herdr-ios',m:'hetzner-1',a:'amp',s:'idle',t:'docs: agent guide',tail:'❯',el:'2h',lines:[['~/src/herdr-ios ❯ amp','var(--theme-secondary)'],['› draft docs/agent-guide.md','var(--theme-foreground)'],['● Write docs/agent-guide.md +212','var(--theme-secondary)'],['',''],['❯','var(--theme-foreground)']]},
       {ws:'dotfiles',m:'local',a:'claude',s:'blocked',t:'migrate to rosé pine',tail:'which variant? 1 main · 2 moon · 3 dawn',el:'1m',ans:[{k:'1',l:'main',p:true},{k:'2',l:'moon'},{k:'3',l:'dawn'}],lines:[['~/dotfiles ❯ claude','var(--theme-secondary)'],['› migrate the terminal theme to rosé pine','var(--theme-foreground)'],['',''],['● Read alacritty/alacritty.toml','var(--theme-secondary)'],['● Read nvim/lua/theme.lua','var(--theme-secondary)'],['',''],['? Which Rosé Pine variant for the terminal?','var(--theme-yellow)'],['  1 main   2 moon   3 dawn','var(--theme-secondary)']]}] };
-  componentDidMount(){ this.remote=window.HyprlandRemote?.attach(this); window.HyprlandThemes.attach(); this.expo=window.HyprlandExpo.attach(this); this.widgets=window.HyprlandWidgets.attach(this); this.dashboard=window.HyprlandDashboard.attach(this) }
-  componentDidUpdate(){ this.remote?.update(); this.expo?.update(); this.widgets?.update(); this.dashboard?.update() }
-  componentWillUnmount(){ this.keyEnd();this.dashboard?.dispose();this.widgets?.dispose();this.expo?.dispose();this.remote?.dispose() }
+  componentDidMount(){ this.remote=window.HyprlandRemote?.attach(this); window.HyprlandThemes.attach(); this.expo=window.HyprlandExpo.attach(this); this.widgets=window.HyprlandWidgets.attach(this); this.dashboard=window.HyprlandDashboard.attach(this); this.desk=window.HyprlandDesk?.attach(this) }
+  componentDidUpdate(){ this.remote?.update(); this.expo?.update(); this.widgets?.update(); this.dashboard?.update(); this.desk?.update() }
+  componentWillUnmount(){ this.keyEnd();this.desk?.dispose();this.dashboard?.dispose();this.widgets?.dispose();this.expo?.dispose();this.remote?.dispose() }
   ptr = null; wx = null;
   cancel=()=>{ this.ptr=null; this.ax=null; this.wx=null };
   aDown=e=>{ this.ax=e.clientX };
@@ -543,11 +545,15 @@ class Component extends DCLogic {
   wDown=e=>{ this.wx=e.clientX };
   wUp=e=>{ if(this.wx==null) return; const dx=e.clientX-this.wx; this.wx=null; const w=this.state.widget||0; if(dx<-40) this.set({widget:Math.min(2,w+1)}); else if(dx>40) this.set({widget:Math.max(0,w-1)}) };
   set(p){ this.setState(p) }
-  cur(){ return this.state.open[this.state.ws] }
+  cur(){ const s=this.state; return s.desk&&window.HyprlandDesk?window.HyprlandDesk.cur(s):s.open[s.ws] }
+  reset(){ return {ov:false,kb:false,sup:false,ctl:false,launch:false,shade:null,query:''} }
+  // Desk mode: workspaces hold several windows; `jump` and `focusApp` address a window by app key.
+  jump(key){ const s=this.state; if(s.desk&&window.HyprlandDesk){ const D=window.HyprlandDesk; this.set({...D.go(s,D.deskOf(s,key)),focus:key,...this.reset()}) } else this.go(s.open.indexOf(key)) }
+  focusApp(key){ const s=this.state; if(!s.desk||!window.HyprlandDesk||!s.open.includes(key)) return this.openApp(key); this.set({ws:window.HyprlandDesk.deskOf(s,key),focus:key}) }
   openLauncher(){const show=()=>this.set({launch:true,kb:true,sup:false,ov:false,shade:null});if(window.ReactDOM?.flushSync)window.ReactDOM.flushSync(show);else show();this.dashboard?.field.focus()}
-  go(i,open){ open=open||this.state.open; const n=open.length; this.set({open,ws:Math.max(0,Math.min(n-1,i)),ov:false,kb:false,sup:false,ctl:false,launch:false,shade:null,query:''}) }
-  openApp(key){ if(!this.APPS[key])return; const s=this.state; const i=s.open.indexOf(key); if(i>=0) return this.go(i); if(s.open.length>=10){this.expo?.error('Maximum 10 workspaces. Close an app in Expo to open another.');return} const open=[...s.open,key]; this.go(open.length-1,open) }
-  async closeApp(k,expo=false){ if(k==='home'||!this.state.open.includes(k)||this.closing)return; this.closing=true; try{ await this.remote?.closeApp(k); const s=this.state,current=this.cur(),open=s.open.filter(x=>x!==k),ws=current===k?Math.max(0,s.ws-1):open.indexOf(current); this.set({open,ws,ov:expo,kb:false,sup:false,ctl:false}) }catch(e){ this.expo?.error('Could not close app. Check the HOST connection and try again.');this.set({}) }finally{this.closing=false} }
+  go(i,open){ open=open||this.state.open; const s=this.state; if(s.desk&&window.HyprlandDesk){ this.set({open,...window.HyprlandDesk.go({...s,open},i),...this.reset()}); return } const n=open.length; this.set({open,ws:Math.max(0,Math.min(n-1,i)),...this.reset()}) }
+  openApp(key){ if(!this.APPS[key])return; const s=this.state; const i=s.open.indexOf(key); if(s.desk&&window.HyprlandDesk){ if(i<0&&s.open.length>=10){this.expo?.error('Maximum 10 windows. Close one in Expo to open another.');return} this.set({...window.HyprlandDesk.open(s,key),...this.reset()}); return } if(i>=0) return this.go(i); if(s.open.length>=10){this.expo?.error('Maximum 10 workspaces. Close an app in Expo to open another.');return} const open=[...s.open,key]; this.go(open.length-1,open) }
+  async closeApp(k,expo=false){ if(k==='home'||!this.state.open.includes(k)||this.closing)return; this.closing=true; try{ await this.remote?.closeApp(k); const s=this.state; if(s.desk&&window.HyprlandDesk){ this.set({...window.HyprlandDesk.close(s,k),ov:expo,kb:false,sup:false,ctl:false}) } else { const current=this.cur(),open=s.open.filter(x=>x!==k),ws=current===k?Math.max(0,s.ws-1):open.indexOf(current); this.set({open,ws,ov:expo,kb:false,sup:false,ctl:false}) } }catch(e){ this.expo?.error('Could not close app. Check the HOST connection and try again.');this.set({}) }finally{this.closing=false} }
   closeWs(){ this.closeApp(this.cur()) }
   down=e=>{ const r=e.currentTarget.getBoundingClientRect(); this.ptr={x:e.clientX-r.left,y:e.clientY-r.top,cx:e.clientX,cy:e.clientY,w:r.width,h:r.height} }
   up=e=>{ const p=this.ptr; if(!p) return; this.ptr=null; const dx=e.clientX-p.cx, dy=e.clientY-p.cy, s=this.state, E=Math.max(24,p.w*.08), T=40, third=p.w/3;
@@ -630,10 +636,11 @@ class Component extends DCLogic {
     const n=s.open.length, cols=n<=4?2:3, sc=n<=4?.35:n>9?.19:.26, x0=n<=4?45:29, dx=n<=4?171:120, y0=n<=4?104:n>9?80:96, dy=n<=4?328:n>9?190:243;
     const cards={};
     Object.keys(A).forEach(k=>{ const i=s.open.indexOf(k), on=i>=0;
-      cards[k]={ tf: !on?'translate(440px,0px) scale(1)':(s.ov?`translate(${x0+(i%cols)*dx}px,${y0+Math.floor(i/cols)*dy}px) scale(${sc})`:`translate(${(i-s.ws)*440}px,0px) scale(1)`), bd:i===s.ws?'var(--theme-accent)':'var(--theme-window-inactive)', lab:s.ov?1:0, op:on?1:0, pe:on?'auto':'none', tap:()=>{ if(this.state.ov) this.go(i) } } });
+      cards[k]={ tf: !on?'translate(440px,0px) scale(1)':(s.ov?`translate(${x0+(i%cols)*dx}px,${y0+Math.floor(i/cols)*dy}px) scale(${sc})`:`translate(${(i-s.ws)*440}px,0px) scale(1)`), bd:i===s.ws?'var(--theme-accent)':'var(--theme-window-inactive)', lab:s.ov?1:0, op:on?1:0, pe:on?'auto':'none', w:'100%', h:'100%', tap:()=>{ if(this.state.ov) this.go(i) } } });
+    const D=s.desk&&window.HyprlandDesk?window.HyprlandDesk.render(this,s,s.deskW,s.deskH):null; if(D)Object.assign(cards,D.cards);
     const wsC=i=>A[s.open[i]]?'var(--theme-secondary)':'transparent';
     const glow=P.barGlow??0, barW=P.barWidth??2, barOp=P.barOpacity??.75;
-    const pills=s.open.map((k,i)=>({i:i+1,col:T.mu,bg:i===s.ws?T.sf2:'transparent',c:i===s.ws?T.fg:T.mu,on:()=>{ if(i===this.state.ws) this.set({ov:!this.state.ov,kb:false}); else this.go(i) }}));
+    const pills=D?D.pills:s.open.map((k,i)=>({i:i+1,col:T.mu,bg:i===s.ws?T.sf2:'transparent',c:i===s.ws?T.fg:T.mu,on:()=>{ if(i===this.state.ws) this.set({ov:!this.state.ov,kb:false}); else this.go(i) }}));
     const netP=P.network||'auto'; const net=netP==='auto'?(s.wifi?'wifi':'5G'):netP;
     // keyboard
     const bind={q:'close',e:'files',s:'settings',a:'agents',t:'term',h:'ws ←',l:'ws →',space:'launch','⏎':'term','←':'ws ←','→':'ws →','↑':'expo','↓':'home'};
@@ -675,7 +682,7 @@ class Component extends DCLogic {
     return {
       swipeHintOpacity:s.ov||s.kb||s.launch||s.shade?0:1,
       keyEnd:this.keyEnd, terminalHeight:s.kb&&!s.ov?'calc(100% - 273px)':'100%', terminalLines:s.transcript, terminalBefore:Array.from(s.input).slice(0,s.cursor).join(''), terminalCursor:Array.from(s.input)[s.cursor]||' ', terminalAfter:Array.from(s.input).slice(s.cursor+1).join(''), down:this.down, up:this.up, cancel:this.cancel, tr, rad:s.ov?'28px':'0px', ovOp:s.ov?1:0, openCount:n,
-      pills, isWifi:net==='wifi', isCell:!['wifi','offline'].includes(net), isOff:net==='offline', netLabel:net,
+      pills, wsLabel:D?D.label:'', isWifi:net==='wifi', isCell:!['wifi','offline'].includes(net), isOff:net==='offline', netLabel:net,
       barW:barW+'px', prevC:wsC(s.ws-1), prevOp:s.ws>0?barOp:0, prevGlow:s.ws>0&&glow>0?`0 0 ${glow}px ${wsC(s.ws-1)}`:'none', nextC:wsC(s.ws+1), nextOp:s.ws<n-1?barOp:0, nextGlow:s.ws<n-1&&glow>0?`0 0 ${glow}px ${wsC(s.ws+1)}`:'none',
       cLazydocker:cards.lazydocker, cDua:cards.dua, cLnav:cards.lnav, cServices:cards.services, cBtop:cards.btop, cHome:cards.home, cTerminal:cards.terminal, cBrowser:cards.browser, cFiles:cards.files, cSettings:cards.settings, cHerd:cards.herd,
       managePins:()=>this.dashboard?.managePins(),homeApps:homeKeys.map(k=>({g:A[k].g,n:A[k].n,c:A[k].c,op:1,badge:k==='herd'?(s.herdAttention||0):'',badgeDisplay:k==='herd'&&s.herdAttention?'block':'none',on:()=>this.openApp(k)})),

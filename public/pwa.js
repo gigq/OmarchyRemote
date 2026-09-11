@@ -1,11 +1,19 @@
 // Fit the design's logical canvas to the usable viewport without stretching type.
+// Screens with both edges past 600px (iPad, Mac, desktop windows) get the desk layout at 1:1 instead.
+function deskMode() { return Math.min(window.innerWidth, window.innerHeight) >= 600; }
 function fitCanvas() {
   const viewport = document.getElementById('phone-viewport');
   if (!viewport) return;
-  const scale = viewport.clientWidth / 402;
+  const root = document.documentElement, desk = deskMode();
+  root.classList.toggle('desk-mode', desk);
+  root.classList.toggle('desk-landscape', desk && window.innerWidth >= window.innerHeight);
+  root.classList.toggle('desk-portrait', desk && window.innerWidth < window.innerHeight);
+  const scale = desk ? 1 : viewport.clientWidth / 402;
   if (!scale) return;
-  document.documentElement.style.setProperty('--canvas-scale', scale);
-  document.documentElement.style.setProperty('--canvas-height', `${viewport.clientHeight / scale}px`);
+  root.style.setProperty('--canvas-scale', scale);
+  root.style.setProperty('--canvas-height', `${viewport.clientHeight / scale}px`);
+  const inset = window.visualViewport ? Math.max(0, window.innerHeight - window.visualViewport.height) : 0;
+  window.dispatchEvent(new CustomEvent('hyprland-layout', { detail: { desk, width: viewport.clientWidth, height: viewport.clientHeight, inset: inset > 80 ? inset : 0 } }));
 }
 const observer = new MutationObserver(() => {
   const viewport = document.getElementById('phone-viewport');
