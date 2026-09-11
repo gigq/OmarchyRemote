@@ -108,6 +108,25 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
     private var observations: [NSKeyValueObservation] = []
     private var requestedVisible = false
     private var controlsHidden = false
+    private var forceDark = UserDefaults.standard.bool(forKey: "browserForceDark")
+    private let darkWorld = WKContentWorld.world(name: "BrowserAppearance")
+    private lazy var darkSource: String? = {
+        guard let url = Bundle.main.resourceURL?.appendingPathComponent("Web/vendor/darkreader/darkreader.js") else { return nil }
+        return try? String(contentsOf: url, encoding: .utf8)
+    }()
+    private func darkScript(_ enabled: Bool) -> String {
+        guard let darkSource else { return "" }
+        return "if (!globalThis.DarkReader) {\n" + darkSource + "\n}\n" +
+            (enabled ? "DarkReader.setFetchMethod(window.fetch.bind(window)); DarkReader.enable({brightness:100,contrast:100,sepia:0}, {disableStyleSheetsProxy:true,disableCustomElementRegistryProxy:true});" : "DarkReader.disable();")
+    }
+    private func configureDarkScripts(_ browser: WKWebView) {
+        let controller = browser.configuration.userContentController
+        controller.removeAllUserScripts()
+        if forceDark, darkSource != nil {
+            controller.addUserScript(WKUserScript(source: darkScript(true), injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: darkWorld))
+        }
+    }
+
     private var panY: CGFloat = 0
     private var scrollTravel: CGFloat = 0
 
@@ -122,9 +141,10 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         if let page { return page }
         guard let presenter else { return nil }
         let configuration = WKWebViewConfiguration()
-        // Independent persistent website storage, with NO shell scripts or message handlers.
+        // Independent website storage; appearance script runs in an isolated world, with no host handlers.
         configuration.websiteDataStore = .default()
         let browser = WKWebView(frame: .zero, configuration: configuration)
+        configureDarkScripts(browser)
         browser.navigationDelegate = self
         browser.uiDelegate = self
         browser.isHidden = true
@@ -189,7 +209,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
               ShellSource.trusts(message.frameInfo.securityOrigin) || message.frameInfo.request.url?.isFileURL == true,
               let body = message.body as? [String: Any] else { replyHandler(nil, "Unsupported page"); return }
         let action = body["action"] as? String ?? "open"
-        if action == "capabilities" { replyHandler(["embedded": true], nil); return }
+        if action == "capabilities" { replyHandler(["embedded": true, "darkMode": darkSource != nil, "dark": forceDark], nil); return }
         if action == "close" { reset(); replyHandler(["closed": true], nil); return }
         if action == "layout" {
             guard let page, let presenter else { replyHandler(["visible": false], nil); return }
@@ -225,6 +245,21 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         case "open":
             guard let raw = body["url"] as? String, let url = URL(string: raw), ["https", "http"].contains(url.scheme?.lowercased() ?? ""), url.host != nil else { replyHandler(nil, "Use an http or https URL"); return }
             page.load(URLRequest(url: url))
+        case "dark":
+            guard let enabled = body["enabled"] as? Bool, darkSource != nil else { replyHandler(nil, "Dark mode unavailable"); return }
+            page.evaluateJavaScript(darkScript(enabled), in: nil, in: darkWorld) { [weak self, weak page] result in
+                guard let self, let page, self.page === page else { replyHandler(nil, "Page closed"); return }
+                switch result {
+                case .failure(let error): replyHandler(nil, error.localizedDescription)
+                case .success:
+                    self.forceDark = enabled
+                    UserDefaults.standard.set(enabled, forKey: "browserForceDark")
+                    self.configureDarkScripts(page)
+                    self.snapshot()
+                    replyHandler(["dark": enabled], nil)
+                }
+            }
+            return
         case "snapshot": snapshot()
         case "back": page.goBack()
         case "forward": page.goForward()

@@ -81,3 +81,27 @@ test('Embedded iPad page follows tiling, fullscreen, rotation and app disposal',
  await p.keyboard.press('Meta+ArrowUp');await p.keyboard.press('Meta+w');
  await expect.poll(()=>p.evaluate(()=>window.browserCommands.some(q=>q.action==='close'))).toBe(true);
 });
+
+test('Dark toggle persists native choice and the tab list uses Herd back chevron',async({page:p})=>{
+ await p.route('**/api/browser/snapshot',r=>r.fulfill({json:data()}));
+ await p.addInitScript(()=>{window.browserCommands=[];window.webkit={messageHandlers:{browserDevice:{postMessage:async q=>{window.browserCommands.push(q);return q.action==='capabilities'?{embedded:true,darkMode:true,dark:true}:q.action==='dark'?{dark:q.enabled}:{}}}}}});
+ await p.goto('/native/');await p.getByText('browser',{exact:true}).first().click();await p.getByRole('link',{name:'Open Example Domain on phone'}).click();
+ await expect(p.getByRole('button',{name:'Desktop tabs',exact:true})).toHaveText('‹');
+ const dark=p.getByRole('button',{name:'Force dark mode'});
+ await expect(dark).toHaveAttribute('aria-pressed','true');await dark.click();await expect(dark).toHaveAttribute('aria-pressed','false');
+ await dark.click();await expect(dark).toHaveAttribute('aria-pressed','true');
+ expect(await p.evaluate(()=>window.browserCommands.filter(q=>q.action==='dark').map(q=>q.enabled))).toEqual([false,true]);
+});
+
+test('Bundled Dark Reader recolors a light document and restores its original styling',async({page:p})=>{
+ await p.goto('/native/');
+ await p.setContent('<html><head><style>body{background:white;color:black}article{background:#eee;color:#222}</style></head><body><article>Readable text</article></body></html>');
+ await p.addScriptTag({path:'public/vendor/darkreader/darkreader.js'});
+ const before=await p.locator('body').evaluate(el=>getComputedStyle(el).backgroundColor);
+ await p.evaluate(()=>{DarkReader.setFetchMethod(window.fetch.bind(window));DarkReader.enable({brightness:100,contrast:100,sepia:0},{disableStyleSheetsProxy:true,disableCustomElementRegistryProxy:true})});
+ await expect.poll(()=>p.locator('body').evaluate(el=>getComputedStyle(el).backgroundColor)).not.toBe(before);
+ const color=await p.locator('body').evaluate(el=>getComputedStyle(el).backgroundColor);
+ expect(Math.max(...color.match(/\d+/g).slice(0,3).map(Number))).toBeLessThan(80);
+ await p.evaluate(()=>DarkReader.disable());
+ await expect(p.locator('body')).toHaveCSS('background-color',before);
+});
