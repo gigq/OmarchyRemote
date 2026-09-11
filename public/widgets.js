@@ -1,7 +1,6 @@
 (() => {
- const node=(tag,cls,text)=>{const n=document.createElement(tag);n.className=cls||'';if(text!=null)n.textContent=text;return n};
- const mount=id=>[...document.querySelectorAll('#'+id)].find(n=>!n.closest('x-dc'));
- const storage={get:k=>{try{return JSON.parse(localStorage.getItem(k))}catch{return null}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
+ const {node,mount}=window.HyprlandUtil;
+ const storage={get:window.HyprlandUtil.storage.read,set:window.HyprlandUtil.storage.write};
  const number=n=>typeof n==='number'&&Number.isFinite(n);
  const percent=n=>number(n)?Math.round(n)+'%':'—';
  const bytes=n=>!number(n)?'—':n>=1024**4?(n/1024**4).toFixed(1)+'T':n>=1024**3?(n/1024**3).toFixed(1)+'G':n>=1024**2?(n/1024**2).toFixed(1)+'M':n>=1024?(n/1024).toFixed(0)+'K':Math.round(n)+'B';

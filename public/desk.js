@@ -6,8 +6,7 @@
   const CHROME={top:60,side:24,bottom:26,gap:12};
   const APPLE=/Mac|iPhone|iPad|iPod/i.test(navigator.platform||'')||/Macintosh|iPad|iPhone/.test(navigator.userAgent);
   const MOD=APPLE?'⌘':'Ctrl+Alt';
-  const mount=id=>[...document.querySelectorAll('#'+id)].find(n=>!n.closest('x-dc'));
-  const node=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!=null)n.textContent=text;return n};
+  const {mount,node}=window.HyprlandUtil;
   const isDesk=()=>Math.min(window.innerWidth,window.innerHeight)>=MIN_SIDE;
 
   // ---- workspace model: pure functions over the shell state ---------------------------------

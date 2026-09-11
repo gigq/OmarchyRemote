@@ -1,10 +1,7 @@
 /* Shared host client. App adapters own their views; the shell owns gestures/keyboard. */
 (() => {
   const theme={background:'#15131f',foreground:'#e0def4',cursor:'#ebbcba',selectionBackground:'#403d52',black:'#26233a',red:'#eb6f92',green:'#9ccfd8',yellow:'#f6c177',blue:'#31748f',magenta:'#c4a7e7',cyan:'#9ccfd8',white:'#e0def4',brightBlack:'#6e6a86'};
-  const node=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!=null)n.textContent=text;return n};
-  const button=(text,action)=>{const b=node('button','remote-button',text);b.type='button';b.onclick=e=>{e.stopPropagation();action()};return b};
-  const mount=id=>[...document.querySelectorAll('#'+id)].find(n=>!n.closest('x-dc'));
-  const storage={get:k=>{try{return localStorage.getItem(k)}catch{return null}},set:(k,v)=>{try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch{}}};
+  const {node,button,mount,storage}=window.HyprlandUtil;
   const api=async(path,body)=>{
     const response=await fetch('/api/'+path,{method:body===undefined?'GET':'POST',headers:{'X-Hyprland-Client':'1',...(body===undefined?{}:{'Content-Type':'application/json'})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(8000)});
     const value=await response.json();if(!response.ok)throw Error(value.error||'Host unavailable');return value;

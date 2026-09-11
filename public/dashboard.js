@@ -1,9 +1,7 @@
 /* Live dashboard, attention inbox and a native-input universal launcher. */
 (() => {
- const el=(tag,cls,text)=>{const n=document.createElement(tag);n.className=cls||'';if(text!=null)n.textContent=text;return n};
- const mount=id=>[...document.querySelectorAll('#'+id)].find(n=>!n.closest('x-dc'));
- const read=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key))??fallback}catch{return fallback}};
- const save=(key,value)=>{try{localStorage.setItem(key,JSON.stringify(value))}catch{}};
+ const {node:el,mount}=window.HyprlandUtil;
+ const read=window.HyprlandUtil.storage.read, save=window.HyprlandUtil.storage.write;
  const group=p=>HyprlandRemote.paneGroup(p);
  const title=p=>p.terminal_title_stripped||p.agent||p.pane_id;
  class Dashboard {

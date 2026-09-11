@@ -1,8 +1,8 @@
 /* Home's configurable widget deck and its local overview. */
 (() => {
  const catalog={weather:'Weather',metrics:'Host metrics',tailscale:'Tailscale',codexbar:'CodexBar'};
- const el=(tag,cls,text)=>{const n=document.createElement(tag);n.className=cls||'';if(text!=null)n.textContent=text;return n};
- const read=key=>{try{return JSON.parse(localStorage.getItem(key))}catch{return null}};
+ const {node:el}=window.HyprlandUtil;
+ const read=window.HyprlandUtil.storage.read;
  class WidgetDeck {
   constructor(host,roots){
    this.host=host;this.roots=roots;this.abort=new AbortController();const saved=read('omarchy-widgets');this.order=Array.isArray(saved)?[...new Set(saved.filter(k=>catalog[k]))]:Object.keys(catalog);this.selected=read('omarchy-widget-current');if(!this.order.includes(this.selected))this.selected=this.order[0];

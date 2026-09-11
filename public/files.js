@@ -1,8 +1,8 @@
 /* Real host browsing, search, selection and editing through the shared gateway. */
 (() => {
- const node=(tag,cls,text)=>{const e=document.createElement(tag);e.className=cls||'';if(text!=null)e.textContent=text;return e};
+ const {node}=window.HyprlandUtil;
  const size=n=>n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KiB':(n/1048576).toFixed(1)+' MiB';
- const read=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key))??fallback}catch{return fallback}};
+ const read=window.HyprlandUtil.storage.read;
  const store=(key,v)=>{try{localStorage.setItem(key,JSON.stringify(v))}catch{}};
  const ext=e=>e.name.includes('.')?e.name.split('.').pop().toLowerCase():'';
  const badge=e=>e.directory?'▸':({json:'{ }',html:'ht',jpeg:'img',jpg:'img',png:'img',conf:'cf',toml:'cf',yaml:'cf',yml:'cf'}[ext(e)]||ext(e).slice(0,3)||'file');

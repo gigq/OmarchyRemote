@@ -1,6 +1,6 @@
 /* Provider-neutral tab manager. The companion extension owns desktop mutations. */
 (()=>{
- const node=(tag,cls,text)=>{const e=document.createElement(tag);e.className=cls||'';if(text!=null)e.textContent=text;return e};
+ const {node}=window.HyprlandUtil;
  const webURL=raw=>{try{const u=new URL(raw);return ['https:','http:'].includes(u.protocol)?u:null}catch{return null}};
  class BrowserApp {
   constructor(root){this.root=root;this.instances=[];this.filter='';this.active=true;this.abort=new AbortController();root.classList.add('browser-app');
