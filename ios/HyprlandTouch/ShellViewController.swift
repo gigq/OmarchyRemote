@@ -3,6 +3,12 @@ import WebKit
 import OSLog
 
 @MainActor
+private final class ShellWebView: WKWebView {
+    // The shell supplies its own mode and dismissal controls above the keyboard.
+    override var inputAccessoryView: UIView? { nil }
+}
+
+@MainActor
 final class ShellViewController: UIViewController, WKNavigationDelegate {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "HyprlandTouch", category: "Shell")
     private let background = UIColor(red: 25 / 255, green: 23 / 255, blue: 36 / 255, alpha: 1)
@@ -37,7 +43,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
-        webView = WKWebView(frame: .zero, configuration: configuration)
+        webView = ShellWebView(frame: .zero, configuration: configuration)
         webView.translatesAutoresizingMaskIntoConstraints = false
         webView.navigationDelegate = self
         webView.isOpaque = false

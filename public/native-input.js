@@ -35,7 +35,7 @@
       this.configure();
     }
     saveDraft(){if(this.message)this.draft=this.field.value}
-    configure(){this.mode.textContent=this.message?'Message':'Keys';this.field.setAttribute('aria-label',this.message?'Message to host':'Direct terminal keys');this.field.setAttribute('autocorrect',this.message?'on':'off');this.field.setAttribute('enterkeyhint',this.message?'send':'enter');this.field.setAttribute('autocapitalize','off');this.field.spellcheck=this.message;this.field.placeholder=this.message?'Write a message…':'';this.submit.textContent=this.message?'Send':'Return';this.field.value=this.message?this.draft:sentinel;this.field.rows=this.message?2:1;this.clearCtrl()}
+    configure(){this.tools.hidden=this.message;this.mode.textContent=this.message?'Message':'Keys';this.field.setAttribute('aria-label',this.message?'Message to host':'Direct terminal keys');this.field.setAttribute('autocorrect',this.message?'on':'off');this.field.setAttribute('enterkeyhint',this.message?'send':'enter');this.field.setAttribute('autocapitalize','off');this.field.spellcheck=this.message;this.field.placeholder=this.message?'Write a message…':'';this.submit.textContent=this.message?'Send':'Return';this.field.value=this.message?this.draft:sentinel;this.field.rows=this.message?2:1;this.clearCtrl()}
     reset(){this.field.value=sentinel;this.field.setSelectionRange(1,1)}
     clearCtrl(){this.ctrl=false;this.ctrlButton.setAttribute('aria-pressed','false')}
     sendText(text){if(this.ctrl&&text){this.key(Array.from(text)[0],{ctrl:true});text=Array.from(text).slice(1).join('');this.clearCtrl()}if(text)this.send(text,false)}
