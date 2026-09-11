@@ -245,7 +245,7 @@ fn save_at(home: &Path, q: Save) -> Result<Value> {
     }
     let old = bytes(&path, TEXT_LIMIT)?;
     if digest(&old) != q.version {
-        bail!("File changed on HOST. Reopen it before saving; your draft has been kept.")
+        bail!("File changed on the host. Reopen it before saving; your draft has been kept.")
     }
     let meta = fs::metadata(&path)?;
     let temp = path.with_file_name(format!(".omarchy-edit-{}", uuid::Uuid::new_v4()));
@@ -253,7 +253,7 @@ fn save_at(home: &Path, q: Save) -> Result<Value> {
         crate::uploads::write_new(&temp, q.text.as_bytes())?;
         fs::set_permissions(&temp, fs::Permissions::from_mode(meta.mode() & 0o777))?;
         if digest(&bytes(&path, TEXT_LIMIT)?) != q.version {
-            bail!("File changed on HOST; reopen before saving")
+            bail!("File changed on the host; reopen before saving")
         }
         fs::rename(&temp, &path)?;
         Ok(())

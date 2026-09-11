@@ -102,10 +102,11 @@ test('Files browses, uploads, previews and creates folders without overwriting',
  }finally{await rm(folder,{recursive:true,force:true})}
 });
 
-for(const [app,marker] of [['btop','CPU'],['services','Units'],['lazydocker','Containers'],['dua','mark-move']])test(`${app} launches separately with reconnect and isolated close`,async()=>{
+for(const [app,marker] of [['btop','CPU'],['services','Units'],['lazydocker','Containers'],['dua','mark-move'],['lnav','\x1b[>c']])// lnav starts after `ready` and probes the terminal (Secondary DA) before drawing
+test(`${app} launches separately with reconnect and isolated close`,async()=>{
  const shell=await api('terminal/session',{}),monitor=await api('terminal/session',{app});const c=await connect(`terminal/${monitor.id}/ws`);
  try{
-  await c.wait(m=>m.type==='screen');
+  await c.wait(m=>m.type==='screen');c.send({type:'ready'});
   await c.wait(()=>c.messages.filter(m=>m.type==='screen'||m.type==='output').map(m=>Buffer.from(m.data).toString()).join('').includes(marker));
   assert.equal((await api('terminal/session',{app,id:monitor.id})).resumed,true);
   const wrong=await fetch(base+'/api/terminal/session',{method:'POST',headers:{'X-Hyprland-Client':'1','Content-Type':'application/json'},body:JSON.stringify({id:monitor.id})});assert.equal(wrong.status,400);

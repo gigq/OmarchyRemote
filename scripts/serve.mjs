@@ -11,7 +11,7 @@ const nativeRoot = path.join(root, 'ios/Generated/Web');
 const clients = new Set();
 const apiPort = Number(process.env.OMARCHY_API_PORT || 4188);
 const proxyToken = process.env.OMARCHY_PROXY_TOKEN;
-const allowedHosts = new Set((process.env.OMARCHY_ORIGINS || 'https://your-host.your-tailnet.ts.net:12443,http://127.0.0.1:4187,http://localhost:4187').split(',').map(origin => new URL(origin).host));
+const allowedHosts = new Set((process.env.OMARCHY_ORIGINS || 'http://127.0.0.1:4187,http://localhost:4187').split(',').map(origin => new URL(origin).host));
 function apiHeaders(req) {
   const headers = { ...req.headers, 'x-omarchy-proxy': proxyToken };
   delete headers['transfer-encoding'];

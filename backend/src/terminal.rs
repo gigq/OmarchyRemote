@@ -25,74 +25,36 @@ pub struct Terminal {
 }
 pub type Sessions = Arc<Mutex<HashMap<String, Arc<Terminal>>>>;
 impl Terminal {
+    /// `program` is `terminal` (the login shell, optionally in `cwd`) or a TUI id from `apps::TUIS`.
     pub fn spawn(program: &str, cwd: Option<std::path::PathBuf>) -> Result<Arc<Self>> {
-        if program == "terminal" {
+        if program == crate::apps::TERMINAL {
             let mut cmd =
                 CommandBuilder::new(std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into()));
             cmd.arg("-l");
-            return Self::spawn_command_at(cmd, program, cwd);
+            return Self::spawn_command_at(cmd, program, cwd, true);
         }
-        if program == "services" {
-            let path =
-                std::path::PathBuf::from(std::env::var("HOME")?).join(".cargo/bin/systemctl-tui");
-            let mut cmd = CommandBuilder::new(path);
-            cmd.arg("--no-log");
-            return Self::spawn_command(cmd, program);
-        }
-        if program == "lazydocker" {
-            return Self::spawn_command(CommandBuilder::new("/usr/bin/lazydocker"), program);
-        }
-        if program == "dua" {
-            let mut cmd = CommandBuilder::new("/usr/bin/dua");
-            cmd.args(["interactive", "--threads", "2", "--stay-on-filesystem"]);
-            return Self::spawn_command(cmd, program);
-        }
-        if program == "lnav" {
-            let path = std::path::PathBuf::from(std::env::var("HOME")?).join(".local/bin/lnav");
-            // notcurses needs terminal capability replies during startup. Wait
-            // for the phone to restore its screen and subscribe before exec.
-            let mut cmd = CommandBuilder::new("/bin/sh");
-            cmd.args([
-                "-c",
-                "IFS= read -r omarchy_start || exit; exec \"$@\"",
-                "omarchy-lnav",
-            ]);
-            cmd.arg(path);
-            cmd.env("TERMINFO", "/usr/share/terminfo");
-            cmd.args([
-                "-N",
-                "-e",
-                "journalctl --no-pager -f -n 1000 -o short-iso",
-                "-c",
-                ";UPDATE lnav_views SET options=json_set(options, '$.word-wrap', 'normal') WHERE name IN ('log','text')",
-            ]);
-            return Self::spawn_command(cmd, program);
-        }
-        if program != "btop" {
+        let Some(app) = crate::apps::tui(program) else {
             bail!("Unknown host app")
-        }
-        let dir =
-            std::path::PathBuf::from(std::env::var("HOME")?).join(".local/share/omarchy-remote");
-        std::fs::create_dir_all(&dir)?;
-        let mut cmd = CommandBuilder::new("/usr/bin/btop");
-        cmd.arg("--config");
-        cmd.arg(dir.join("btop.conf"));
-        cmd.arg("--force-utf");
-        Self::spawn_command(cmd, "btop")
+        };
+        Self::spawn_command_at(
+            crate::apps::command(app)?,
+            program,
+            None,
+            !app.wait_for_client,
+        )
     }
     #[cfg(test)]
     fn spawn_shell(shell: &str) -> Result<Arc<Self>> {
         let mut cmd = CommandBuilder::new(shell);
         cmd.arg("-l");
-        Self::spawn_command(cmd, "terminal")
+        Self::spawn_command_at(cmd, "terminal", None, true)
     }
-    fn spawn_command(cmd: CommandBuilder, program: &str) -> Result<Arc<Self>> {
-        Self::spawn_command_at(cmd, program, None)
-    }
+    /// `started` is false for programs that must wait for the first client (see `start`).
     fn spawn_command_at(
         mut cmd: CommandBuilder,
         program: &str,
         cwd: Option<std::path::PathBuf>,
+        started: bool,
     ) -> Result<Arc<Self>> {
         let pair = native_pty_system().openpty(PtySize {
             rows: 32,
@@ -101,7 +63,7 @@ impl Terminal {
             pixel_height: 0,
         })?;
 
-        cmd.cwd(cwd.unwrap_or(std::path::PathBuf::from(std::env::var("HOME")?)));
+        cmd.cwd(cwd.map(Ok).unwrap_or_else(crate::apps::home)?);
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
         // This shell isn't a child pane of the agent that launched the service.
@@ -121,7 +83,7 @@ impl Terminal {
         let (events, _) = broadcast::channel(512);
         let terminal = Arc::new(Self {
             program: program.to_owned(),
-            started: Mutex::new(program != "lnav"),
+            started: Mutex::new(started),
             output: Mutex::new(Output {
                 sequence: 0,
                 parser: vt100::Parser::new(32, 80, 1000),

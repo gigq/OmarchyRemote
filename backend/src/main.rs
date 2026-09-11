@@ -1,4 +1,5 @@
 mod ansi;
+mod apps;
 mod browser;
 mod files;
 mod files_ops;
@@ -125,9 +126,7 @@ async fn widget_weather(Query(q): Query<WeatherQuery>) -> Result<Json<Value>, Ap
         .map_err(error)
 }
 async fn capabilities() -> Json<Value> {
-    Json(
-        json!({"version":1,"host":std::env::var("HOSTNAME").unwrap_or_else(|_|"host".into()),"apps":[{"id":"browser","name":"Browser","features":["tabs","windows","workspaces","close","move","create","pin","mute"]},{"id":"lazydocker","name":"Lazydocker","features":["docker","reconnect"]},{"id":"dua","name":"dua","features":["disk-usage","reconnect"]},{"id":"lnav","name":"lnav","features":["logs","reconnect"]},{"id":"services","name":"Services","features":["systemd","reconnect"]},{"id":"btop","name":"btop","features":["monitor","reconnect"]},{"id":"files","name":"Files","features":["browse","preview","upload","mkdir","search","fuzzy","selection","archive","move","copy","rename","trash","edit"]},{"id":"terminal","name":"Terminal","features":["pty","resize","reconnect"]},{"id":"herdr","name":"Herdr","features":["workspaces","agents","panes","input"]}]}),
-    )
+    Json(json!({"version":1,"host":apps::host_name(),"apps":apps::capabilities()}))
 }
 #[derive(Deserialize)]
 struct SessionRequest {
@@ -142,7 +141,7 @@ async fn session(
     let sessions = app.sessions.clone();
     tokio::task::spawn_blocking(move || {
         let program = req.app.as_deref().unwrap_or("terminal");
-        if !["terminal", "btop", "services", "lazydocker", "dua", "lnav"].contains(&program) {
+        if !apps::is_session_app(program) {
             return Err((
                 StatusCode::BAD_REQUEST,
                 Json(json!({"error":"Unknown host app"})),
@@ -380,11 +379,10 @@ async fn main() -> anyhow::Result<()> {
         token.len() >= 32,
         "Proxy token must be at least 32 characters"
     );
+    // Browser origins allowed to call the API; add the address the phone uses (for example a
+    // Tailscale Serve URL) through OMARCHY_ORIGINS in backend.env.
     let origins = std::env::var("OMARCHY_ORIGINS")
-        .unwrap_or_else(|_| {
-            "https://your-host.your-tailnet.ts.net:12443,http://127.0.0.1:4187,http://localhost:4187"
-                .into()
-        })
+        .unwrap_or_else(|_| "http://127.0.0.1:4187,http://localhost:4187".into())
         .split(',')
         .map(str::to_owned)
         .collect();
