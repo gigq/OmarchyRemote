@@ -143,7 +143,10 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge { [.top, .bottom] }
     // Keep the system's dimmed escape indicator when bottom-edge deferral is active.
     override var prefersHomeIndicatorAutoHidden: Bool { false }
-    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .portrait }
+    // iPhone keeps the portrait phone shell; iPad rotates freely and the web shell relays out in desk mode.
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        traitCollection.userInterfaceIdiom == .pad ? .all : .portrait
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()

@@ -33,7 +33,7 @@ Text fields keep the standard editing shortcuts (⌘A/C/V/X/Z and ⌘-arrows). S
 
 ## Native iPhone app
 
-`ios/HyprlandTouch.xcodeproj` contains a UIKit/WKWebView app with the shared **HyprlandTouch** scheme. It supports iPhone on iOS 18 or later and uses automatic development signing. The bundle identifier is `com.example.HyprlandTouch`.
+`ios/HyprlandTouch.xcodeproj` contains a UIKit/WKWebView app with the shared **HyprlandTouch** scheme. It supports iPhone and iPad on iOS 18 or later and uses automatic development signing. iPhone stays portrait; iPad rotates freely and the web shell renders in desk mode (see above), with hardware-keyboard ⌘ shortcuts reaching the page directly. The bundle identifier is `com.example.HyprlandTouch`.
 
 Debug builds now load the live prototype from **https://your-host.your-tailnet.ts.net:12443/native/** by default. Connect Tailscale on the iPhone, then open Hyprland. If HOST is unreachable, the app loads its bundled offline copy and shows **Offline copy · Retry HOST**. It also retries when returning to the foreground. Release builds use the bundled copy only. Every build runs `scripts/prepare-native.py` to package the current `public/` files into `HyprlandTouch.app/Web` and convert root-relative asset URLs for file loading. `ios/WebOverrides/native.css` removes outer safe-area padding and arranges the custom status widgets beside the Dynamic Island. The hosted PWA remains separate; native live pages disable service-worker caching.
 
