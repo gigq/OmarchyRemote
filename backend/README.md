@@ -1,8 +1,8 @@
 # Omarchy host backend
 
-One Rust service connects the mobile shell to apps on the host. `terminal.rs` owns real PTYs; `herdr.rs` adapts the existing Herdr Unix socket. `main.rs` provides shared HTTP/WebSocket transport, origin checks, payload limits, capability discovery, and route registration. New app adapters belong alongside these modules under `/api/<app>/…`, and advertise their capabilities at `/api/capabilities`.
+One Rust service connects the mobile shell to apps on the host. `apps.rs` is the table of host apps: the terminal programs the phone can open in their own PTY (`TUIS`) and the route-backed apps (`SERVICES`), plus the host name, home, and data directory. `terminal.rs` owns real PTYs; `herdr.rs` adapts the existing Herdr Unix socket; `files.rs`, `files_ops.rs`, `uploads.rs`, `browser.rs`, and `widgets.rs` serve the other apps. `main.rs` provides shared HTTP/WebSocket transport, origin checks, payload limits, capability discovery, and route registration. New app adapters belong alongside these modules under `/api/<app>/…`, and advertise their capabilities at `/api/capabilities`; see `../CONTRIBUTING.md`.
 
-The HTML development server on loopback 4187 forwards `/api/` HTTP and WebSocket traffic to this service on loopback 4188. Both remain behind the existing private Tailscale Serve address. The Node process handles static files and live reload only; PTYs, Herdr access, and app APIs live in Rust. A future production static frontend can use the same API contract.
+The HTML development server on loopback 4187 forwards `/api/` HTTP and WebSocket traffic to this service on loopback 4188. Both stay behind whatever private HTTPS address you publish (Tailscale Serve, for example). The Node process handles static files and live reload only; PTYs, Herdr access, and app APIs live in Rust. A future production static frontend can use the same API contract.
 
 ## Files API
 
@@ -22,8 +22,8 @@ Paths are canonicalized and confined to HOME; external symlinks and the proxy-se
 ## App API v1
 
 - `POST /api/uploads/images`: raw image bytes (maximum 10 MiB), returning `{ "path": "/absolute/host/path" }`. Detects PNG/JPEG/GIF/WebP/HEIC/HEIF signatures; stores unique mode-0600 files under `$HOME/.local/share/omarchy-remote/uploads` (mode 0700). Does not send pane input or expose a download route. Files persist until removed on the host.
-- `GET /api/capabilities`: host and available app adapters.
-- `POST /api/terminal/session` with `{ "id": "optional previous ID", "app": "terminal" }`: create or resume a shell. Optional `cwd` selects a HOME-confined directory for a new Terminal shell. `app: "btop"` launches the fixed `/usr/bin/btop` executable in an independent session. `app: "services"` launches `$HOME/.cargo/bin/systemctl-tui --no-log`; `app: "lazydocker"`, `"dua"`, and `"lnav"` launch fixed commands for Docker, HOME disk usage, and a live host journal viewer. Other app values and cross-app resume IDs are rejected. Missing/expired IDs create a new session; the returned ID must replace the saved one.
+- `GET /api/capabilities`: `{ version, host, home, apps }`, where `host` is the display name, `home` the backend user's home directory (the shell shortens paths with it), and `apps` the route-backed and PTY apps with their feature tags.
+- `POST /api/terminal/session` with `{ "id": "optional previous ID", "app": "terminal" }`: create or resume a shell. Optional `cwd` selects a HOME-confined directory for a new Terminal shell. Any other `app` must be an id from `TUIS` in `apps.rs` (`btop`, `services`, `lazydocker`, `dua`, `lnav`); the program is resolved on `PATH`, `~/.cargo/bin`, `~/.local/bin`, `/usr/local/bin`, and `/usr/bin`, and a missing program returns `<program> is not installed on this host`. Unknown app values and cross-app resume IDs are rejected. Missing/expired IDs create a new session; the returned ID must replace the saved one.
 - `WS /api/terminal/{id}/ws`: receive `screen` (UTF-8 bytes plus dimensions), `output` (bytes), `exit`, and `error`; send `input` (`data` string) or `resize` (`cols`, `rows`). A screen snapshot restores the terminal after reconnection. PTYs remain alive across app closure and live reload, until shell exit or backend restart. Up to eight shells may be open. Reconnection restores the current screen, not previous client scrollback.
 - `GET /api/herdr/snapshot`: local Herdr workspaces, tabs, agents, and panes.
 - `GET /api/herdr/panes/{id}`: most recent 300 lines, with ANSI formatting.
@@ -34,18 +34,19 @@ Herdr uses its installed protocol-20 NDJSON socket API directly. Pane viewing/in
 
 ## Configuration and operation
 
-`~/.config/omarchy-remote/backend.env` is a private mode-0600 environment file shared by the two user services. `OMARCHY_PROXY_TOKEN` (at least 32 characters) is required. It is sent from the local development proxy to Rust and never embedded in web assets or returned to clients. Only the local proxy knows it. Browser API requests require `X-Hyprland-Client: 1`; WebSockets require an allowed Origin. Cross-origin requests and unrecognized Host values are rejected. Tailscale network access controls determine who can reach the host; this is a trusted-tailnet application, not a public multi-user shell service.
+`~/.config/omarchy-remote/backend.env` is a private mode-0600 environment file shared by the two user services. `OMARCHY_PROXY_TOKEN` (at least 32 characters) is required. It is sent from the local development proxy to Rust and never embedded in web assets or returned to clients. Only the local proxy knows it. Browser API requests require `X-Hyprland-Client: 1`; WebSockets require an allowed Origin. Cross-origin requests and unrecognized Host values are rejected. Whoever can reach the published HTTPS address can open a shell as the backend user, so the network (a tailnet, a VPN, a firewall) is the access control; this is a single-user application, not a public multi-user shell service.
 
 Optional settings:
 
 - `OMARCHY_API_PORT` defaults to 4188.
-- `OMARCHY_ORIGINS` is a comma-separated list of full origins; configure identically for both services. Defaults: the current HOST HTTPS endpoint and localhost/127.0.0.1 port 4187.
+- `OMARCHY_ORIGINS` is a comma-separated list of full origins a browser may load the shell from; both services read it. Defaults to `http://127.0.0.1:4187,http://localhost:4187`, so the published HTTPS origin must be added here.
+- `OMARCHY_HOST_NAME` is the name shown in the app's status lines and capabilities. Defaults to the kernel hostname.
 - `OMARCHY_HERDR_SOCKET` defaults to `$HOME/.config/herdr/herdr.sock`.
 - `SHELL` selects the terminal shell. The installed service uses `/bin/bash` with the user's login configuration and starts in their home directory. Agent-specific environment and the proxy secret are removed from child shells.
 
-The additional TUI dependencies are `/usr/bin/lazydocker`, `/usr/bin/dua`, and `$HOME/.local/bin/lnav` (0.14.1 standalone upstream release). Lnav starts `journalctl --no-pager -f -n 1000 -o short-iso` using its command capture. Lnav waits for a frontend `ready` message after screen restoration and sizing, so its startup capability queries reach the client. Child PTYs receive host-side cursor-query replies so startup does not depend on a connected browser; frontend DSR replies are suppressed to avoid duplicate input.
+The optional TUI programs are `btop`, `systemctl-tui`, `lazydocker`, `dua`, and `lnav` (tested with lnav 0.14.1). Lnav starts `journalctl --no-pager -f -n 1000 -o short-iso` using its command capture. Lnav waits for a frontend `ready` message after screen restoration and sizing, so its startup capability queries reach the client. Child PTYs receive host-side cursor-query replies so startup does not depend on a connected browser; frontend DSR replies are suppressed to avoid duplicate input.
 
-Install the Services dependency with `cargo install systemctl-tui --version 0.7.0 --locked` as the backend user. It runs without sudo and shows both system and user units; host permissions govern service actions.
+Install the Services dependency with `cargo install systemctl-tui --locked` (tested with 0.7.0) as the backend user. It runs without sudo and shows both system and user units; host permissions govern service actions.
 
 Build with `cargo build --release --manifest-path backend/Cargo.toml`. Run through the enabled `omarchy-remote.service`. Restart that service after changing Rust; running PTYs end on restart. Restart `hyprland-touch-dev.service` after proxy/server changes. Web asset saves require neither restart.
 

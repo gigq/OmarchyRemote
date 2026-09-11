@@ -1,11 +1,12 @@
+# Installed by deploy/install.sh; the checkout path is filled in from the template in deploy/.
 [Unit]
-Description=Omarchy host backend (Terminal and Herdr)
+Description=Omarchy Remote host backend
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/user/git/OmarchyRemote
-ExecStart=/home/user/git/OmarchyRemote/backend/target/release/omarchy-remote
+WorkingDirectory=@REPO@
+ExecStart=@REPO@/backend/target/release/omarchy-remote
 EnvironmentFile=%h/.config/omarchy-remote/backend.env
 Environment=SHELL=/bin/bash
 Restart=on-failure

@@ -1,5 +1,7 @@
 {
-  "name": "hyprland-touch",
+  "name": "omarchy-remote",
+  "description": "Touch shell for an Omarchy desktop: terminal, files, browser tabs, Herdr agents, and host TUIs from a phone, tablet, or browser window.",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {
