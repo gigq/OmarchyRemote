@@ -392,12 +392,10 @@
     <div style="width:124px;display:flex;gap:3px"><sc-for list="{{ pills }}" as="w" hint-placeholder-count="4"><div sc-camel-on-click="{{ w.on }}" style="flex:1;min-width:0;max-width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font-size:9.5px;font-weight:600;background: {{ w.bg }};color: {{ w.c }};transition:background .3s,color .3s;cursor:pointer">{{ w.i }}</div></sc-for></div>
     <div style="display:flex;gap:10px;align-items:center;height:24px;white-space:nowrap"><sc-if value="{{ isWifi }}" hint-placeholder-val="{{ true }}"><svg width="17" height="13" sc-camel-view-box="0 0 16 12" fill="none" style="display:block"><path d="M1.50 4.50A9.2 9.2 0 0 1 14.50 4.50" stroke="var(--theme-foreground)" stroke-width="1.9" stroke-linecap="round"></path><path d="M3.76 6.76A6 6 0 0 1 12.24 6.76" stroke="var(--theme-foreground)" stroke-width="1.9" stroke-linecap="round"></path><path d="M5.95 8.95A2.9 2.9 0 0 1 10.05 8.95" stroke="var(--theme-foreground)" stroke-width="1.9" stroke-linecap="round"></path><circle cx="8" cy="11" r="1.1" fill="var(--theme-foreground)"></circle></svg></sc-if><sc-if value="{{ isCell }}" hint-placeholder-val="{{ false }}"><span style="color:var(--theme-foreground);font-weight:600;font-size:11px;letter-spacing:.5px">{{ netLabel }}</span></sc-if><sc-if value="{{ isOff }}" hint-placeholder-val="{{ false }}"><span style="color:var(--theme-red);font-size:11px">offline</span></sc-if><span style="color:var(--theme-foreground);font-weight:500">13:37</span><span style="color:var(--theme-green)">87%</span></div>
   </div>
-  <div style="position:absolute;left:0;top:120px;bottom:120px;width: {{ barW }};border-radius:0 4px 4px 0;background: {{ prevC }};opacity: {{ prevOp }};box-shadow: {{ prevGlow }};transition:background .4s,opacity .4s;pointer-events:none;z-index:6"></div>
-  <div style="position:absolute;right:0;top:120px;bottom:120px;width: {{ barW }};border-radius:4px 0 0 4px;background: {{ nextC }};opacity: {{ nextOp }};box-shadow: {{ nextGlow }};transition:background .4s,opacity .4s;pointer-events:none;z-index:6"></div>
 
   <div style="position:absolute;inset:0;overflow:hidden">
 
-    <div data-workspace="home" sc-camel-on-click="{{ cHome.tap }}" style="position:absolute;inset:0;transform: {{ cHome.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cHome.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cHome.op }};pointer-events: {{ cHome.pe }};box-sizing:border-box;padding:100px 26px 0">
+    <div data-workspace="home" sc-camel-on-click="{{ cHome.tap }}" style="position:absolute;inset:0;transform: {{ cHome.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cHome.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cHome.op }};pointer-events: {{ cHome.pe }};box-sizing:border-box;padding:100px 26px 0">
       <div style="font-family:'Space Grotesk',sans-serif;font-size:76px;font-weight:500;letter-spacing:-3px;line-height:.9">13:37</div>
       <div style="font-family:'Space Grotesk',sans-serif;font-size:15px;color:var(--theme-rose);margin:12px 0 22px">Thursday, 10 September</div>
       <div style="display:flex;flex-direction:column;gap:10px">
@@ -427,18 +425,18 @@
       <div style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cHome.lab }};transition: {{ tr }};pointer-events:none">home</div>
     </div>
 
-    <div data-workspace="terminal" sc-camel-on-click="{{ cTerminal.tap }}" style="position:absolute;inset:0;transform: {{ cTerminal.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cTerminal.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cTerminal.op }};pointer-events: {{ cTerminal.pe }};box-sizing:border-box">
+    <div data-workspace="terminal" sc-camel-on-click="{{ cTerminal.tap }}" style="position:absolute;inset:0;transform: {{ cTerminal.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cTerminal.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cTerminal.op }};pointer-events: {{ cTerminal.pe }};box-sizing:border-box">
       <div id="remote-terminal-app" class="remote-app"></div>
       <div style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-terminal) 60%,transparent);opacity: {{ cTerminal.lab }};transition: {{ tr }};pointer-events:none">terminal</div>
     </div>
 
-    <div data-workspace="firefox" sc-camel-on-click="{{ cFirefox.tap }}" style="position:absolute;inset:0;transform: {{ cFirefox.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cFirefox.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cFirefox.op }};pointer-events: {{ cFirefox.pe }};box-sizing:border-box;display:flex;flex-direction:column">
+    <div data-workspace="firefox" sc-camel-on-click="{{ cFirefox.tap }}" style="position:absolute;inset:0;transform: {{ cFirefox.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cFirefox.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cFirefox.op }};pointer-events: {{ cFirefox.pe }};box-sizing:border-box;display:flex;flex-direction:column">
       <div style="flex:1;margin:62px 14px 0;border-radius:14px;background:repeating-linear-gradient(135deg,var(--theme-surface) 0 10px,var(--theme-background) 10px 20px);display:grid;place-items:center;font-size:11px;color:var(--theme-secondary)">page content</div>
       <div style="display:flex;align-items:center;gap:10px;margin:14px;padding:13px 16px;border-radius:14px;background:var(--theme-surface);border:1px solid var(--theme-border);font-size:12px"><span style="color:var(--theme-green)">🔒</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">wiki.archlinux.org/title/Wayland</span></div>
       <div style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cFirefox.lab }};transition: {{ tr }};pointer-events:none">firefox</div>
     </div>
 
-    <div data-workspace="phone" sc-camel-on-click="{{ cPhone.tap }}" style="position:absolute;inset:0;transform: {{ cPhone.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cPhone.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cPhone.op }};pointer-events: {{ cPhone.pe }};box-sizing:border-box;display:flex;flex-direction:column;align-items:center;padding-top:112px">
+    <div data-workspace="phone" sc-camel-on-click="{{ cPhone.tap }}" style="position:absolute;inset:0;transform: {{ cPhone.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cPhone.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cPhone.op }};pointer-events: {{ cPhone.pe }};box-sizing:border-box;display:flex;flex-direction:column;align-items:center;padding-top:112px">
       <div style="font-family:'Space Grotesk',sans-serif;font-size:30px;letter-spacing:-.5px">+1 415 555 0134</div>
       <div style="font-size:11px;color:var(--theme-secondary);margin:6px 0 36px">san francisco, ca</div>
       <div style="display:grid;grid-template-columns:repeat(3,64px);gap:12px 24px"><sc-for list="{{ dial }}" as="d" hint-placeholder-count="12"><div style="width:64px;height:64px;border-radius:20px;background:var(--theme-surface);display:grid;place-items:center;font-size:22px">{{ d.l }}</div></sc-for></div>
@@ -446,7 +444,7 @@
       <div style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cPhone.lab }};transition: {{ tr }};pointer-events:none">phone</div>
     </div>
 
-    <div data-workspace="files" sc-camel-on-click="{{ cFiles.tap }}" style="position:absolute;inset:0;transform: {{ cFiles.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cFiles.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cFiles.op }};pointer-events: {{ cFiles.pe }};box-sizing:border-box">
+    <div data-workspace="files" sc-camel-on-click="{{ cFiles.tap }}" style="position:absolute;inset:0;transform: {{ cFiles.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cFiles.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cFiles.op }};pointer-events: {{ cFiles.pe }};box-sizing:border-box">
       <div style="display:flex;align-items:baseline;justify-content:space-between;padding:68px 18px 10px;font-size:12px"><div style="display:flex;gap:6px;color:var(--theme-secondary)"><span>~</span><span>/</span><span>src</span><span>/</span><span style="color:var(--theme-red);font-weight:600">mobile-hypr</span></div><span style="font-size:10px;color:var(--theme-dim)">9 items · {{ fileIdx }}/9</span></div>
       <div style="display:flex;flex-direction:column;padding:0 8px">
         <sc-for list="{{ fileRows }}" as="f" hint-placeholder-count="9"><div sc-camel-on-click="{{ f.on }}" style="display:flex;align-items:center;gap:12px;height:42px;padding:0 12px;border-radius:10px;background: {{ f.bg }};cursor:pointer"><div style="width:26px;height:26px;border-radius:8px;flex:none;display:grid;place-items:center;font-size:9px;font-weight:700;color: {{ f.gc }};background: {{ f.gbg }}">{{ f.g }}</div><div style="flex:1;min-width:0;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color: {{ f.c }}">{{ f.n }}</div><div style="font-size:10px;color:var(--theme-secondary);white-space:nowrap">{{ f.s }}</div><div style="font-size:10px;color:var(--theme-dim);white-space:nowrap;width:56px;text-align:right">{{ f.t }}</div></div></sc-for>
@@ -456,12 +454,12 @@
       <div style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cFiles.lab }};transition: {{ tr }};pointer-events:none">files</div>
     </div>
 
-    <div data-workspace="settings" sc-camel-on-click="{{ cSettings.tap }}" style="position:absolute;inset:0;transform: {{ cSettings.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cSettings.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cSettings.op }};pointer-events: {{ cSettings.pe }};box-sizing:border-box">
+    <div data-workspace="settings" sc-camel-on-click="{{ cSettings.tap }}" style="position:absolute;inset:0;transform: {{ cSettings.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cSettings.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cSettings.op }};pointer-events: {{ cSettings.pe }};box-sizing:border-box">
       <div id="theme-settings" class="theme-settings"></div>
       <div style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cSettings.lab }};transition: {{ tr }};pointer-events:none">settings</div>
     </div>
 
-    <div data-workspace="herd" sc-camel-on-click="{{ cHerd.tap }}" style="position:absolute;inset:0;transform: {{ cHerd.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cHerd.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cHerd.op }};pointer-events: {{ cHerd.pe }};box-sizing:border-box">
+    <div data-workspace="herd" sc-camel-on-click="{{ cHerd.tap }}" style="position:absolute;inset:0;transform: {{ cHerd.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cHerd.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cHerd.op }};pointer-events: {{ cHerd.pe }};box-sizing:border-box">
       <div id="remote-herdr-app" class="remote-app"></div>
       <div style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cHerd.lab }};transition: {{ tr }};pointer-events:none">herd</div>
     </div>
@@ -632,10 +630,10 @@ class Component extends DCLogic {
     const n=s.open.length, cols=n<=4?2:3, sc=n<=4?.35:.26, x0=n<=4?45:29, dx=n<=4?171:120, y0=n<=4?104:96, dy=n<=4?328:243;
     const cards={};
     Object.keys(A).forEach(k=>{ const i=s.open.indexOf(k), on=i>=0;
-      cards[k]={ tf: !on?'translate(440px,0px) scale(1)':(s.ov?`translate(${x0+(i%cols)*dx}px,${y0+Math.floor(i/cols)*dy}px) scale(${sc})`:`translate(${(i-s.ws)*440}px,0px) scale(1)`), bd:s.ov?(i===s.ws?A[k].c:T.bd):'transparent', lab:s.ov?1:0, op:on?1:0, pe:on?'auto':'none', tap:()=>{ if(this.state.ov) this.go(i) } } });
-    const wsC=i=>A[s.open[i]]?.c||'transparent';
+      cards[k]={ tf: !on?'translate(440px,0px) scale(1)':(s.ov?`translate(${x0+(i%cols)*dx}px,${y0+Math.floor(i/cols)*dy}px) scale(${sc})`:`translate(${(i-s.ws)*440}px,0px) scale(1)`), bd:i===s.ws?'var(--theme-accent)':'var(--theme-window-inactive)', lab:s.ov?1:0, op:on?1:0, pe:on?'auto':'none', tap:()=>{ if(this.state.ov) this.go(i) } } });
+    const wsC=i=>A[s.open[i]]?'var(--theme-secondary)':'transparent';
     const glow=P.barGlow??0, barW=P.barWidth??2, barOp=P.barOpacity??.75;
-    const pills=s.open.map((k,i)=>({i:i+1,col:A[k].c,bg:i===s.ws?A[k].c:'transparent',c:i===s.ws?T.bg:T.mu,on:()=>{ if(i===this.state.ws) this.set({ov:!this.state.ov,kb:false}); else this.go(i) }}));
+    const pills=s.open.map((k,i)=>({i:i+1,col:T.mu,bg:i===s.ws?T.sf2:'transparent',c:i===s.ws?T.fg:T.mu,on:()=>{ if(i===this.state.ws) this.set({ov:!this.state.ov,kb:false}); else this.go(i) }}));
     const netP=P.network||'auto'; const net=netP==='auto'?(s.wifi?'wifi':'5G'):netP;
     // keyboard
     const bind={q:'close',w:'web',e:'files',s:'settings',a:'agents',t:'term',p:'phone',h:'ws ←',l:'ws →',space:'launch','⏎':'term','←':'ws ←','→':'ws →','↑':'expo','↓':'home'};

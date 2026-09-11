@@ -56,3 +56,9 @@ html, body { margin: 0; min-height: 100%; overscroll-behavior: none; }
 .expo-mode [data-workspace] > * { pointer-events:none !important; }
 .expo-mode [data-workspace].expo-lifted { box-shadow:0 14px 50px #0008; outline:5px solid var(--theme-accent); }
 .expo-notice { position:absolute; bottom:50px; left:24px; right:24px; z-index:30; padding:14px; border:1px solid var(--theme-red); border-radius:12px; color:var(--theme-foreground); background:var(--theme-surface); font-size:12px; line-height:1.5; }
+
+/* Uncommitted appearance experiment: Omarchy-style window frames. */
+:root { --theme-window-inactive:#595959aa; }
+[data-workspace]::after { content:''; position:absolute; inset:54px 4px 34px; border:2px solid var(--pane-border); border-radius:10px; pointer-events:none; z-index:9; }
+.expo-mode [data-workspace]::after { inset:0; border-width:6px; border-radius:26px; }
+.expo-mode [data-workspace].expo-lifted { outline:none; }
