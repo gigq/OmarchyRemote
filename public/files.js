@@ -115,4 +115,5 @@
   dispose(){this.disposed=true;clearTimeout(this.debounce);this.abort.abort();this.clearPreview();this.root.replaceChildren()}
  }
  window.HostFilesApp=FilesApp;
+ window.HyprlandApps?.provide('files',{create:(root,bridge)=>new FilesApp(root,path=>bridge.openTerminalAt(path))});
 })();

@@ -49,4 +49,5 @@
   dispose(){this.disposed=true;clearInterval(this.timer);this.abort.abort();document.removeEventListener('visibilitychange',this.visibility);this.root.replaceChildren()}
  }
  window.HostBrowserApp=BrowserApp;
+ window.HyprlandApps?.provide('browser',{create:root=>new BrowserApp(root)});
 })();

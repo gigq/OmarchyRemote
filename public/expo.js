@@ -42,7 +42,7 @@
       }
       if(this.root.hasPointerCapture(d.id))this.root.releasePointerCapture(d.id);
     }
-    clearCard(d){if(!d?.card)return;d.card.classList.remove('expo-lifted');d.card.style.removeProperty('z-index');d.card.style.transition=d.transition;const name='c'+({herd:'Herd'}[d.key]||d.key[0].toUpperCase()+d.key.slice(1));const value=this.logic.renderVals()[name];d.card.style.transform=value.tf;d.card.style.opacity=value.op}
+    clearCard(d){if(!d?.card)return;d.card.classList.remove('expo-lifted');d.card.style.removeProperty('z-index');d.card.style.transition=d.transition;this.logic.cards?.apply(d.key)}
     cancel(){clearTimeout(this.timer);const d=this.drag;if(!d)return;this.drag=null;this.clearCard(d);if(d.reorder)this.logic.set({open:d.order,ws:d.order.indexOf(d.active)});else this.logic.set({});if(this.root.hasPointerCapture(d.id))this.root.releasePointerCapture(d.id)}
     error(text){this.notice?.remove();this.notice=document.createElement('div');this.notice.className='expo-notice';this.notice.setAttribute('role','alert');this.notice.textContent=text;this.root.append(this.notice);clearTimeout(this.noticeTimer);this.noticeTimer=setTimeout(()=>this.notice?.remove(),5000)}
     dispose(){clearTimeout(this.noticeTimer);this.notice?.remove();this.cancel();this.abort.abort()}

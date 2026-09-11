@@ -97,7 +97,7 @@
     }
     const pills=d.map((apps,i)=>({i:i+1,col:logic.T.mu,bg:i===s.ws?logic.T.sf2:'transparent',c:i===s.ws?logic.T.fg:logic.T.mu,on:()=>{if(i===logic.state.ws)logic.set({ov:!logic.state.ov,kb:false});else logic.go(i)}}));
     const apps=d[s.ws]||['home'];
-    const label=s.ws===0?`home · ${(s.homePins||[]).length||10} apps`:`${A[focused]?.n||focused} · ${apps.length} ${apps.length===1?'window':'windows'} · ${apps.some(k=>(s.full||[]).includes(k))?'fullscreen':'dwindle'}`;
+    const label=s.ws===0?`home · ${(s.homePins||[]).length||10} apps`:`${A[focused]?.name||focused} · ${apps.length} ${apps.length===1?'window':'windows'} · ${apps.some(k=>(s.full||[]).includes(k))?'fullscreen':'dwindle'}`;
     return{cards,pills,label};
   };
 
@@ -120,7 +120,7 @@
     {group:'Apps',keys:'⇧ ↩',shift:true,code:/^(Enter|NumpadEnter)$/,label:'Browser',run:d=>d.logic.openApp('browser')},
     {group:'Apps',keys:'⇧ B',shift:true,code:/^KeyB$/,label:'Browser',run:d=>d.logic.openApp('browser')},
     {group:'Apps',keys:'⇧ F',shift:true,code:/^KeyF$/,label:'Files',run:d=>d.logic.openApp('files')},
-    {group:'Apps',keys:'⇧ A',shift:true,code:/^KeyA$/,label:'Herdr agents',run:d=>d.logic.openApp('herd')},
+    {group:'Apps',keys:'⇧ A',shift:true,code:/^KeyA$/,label:'Herdr agents',run:d=>d.logic.openApp('herdr')},
     {group:'Apps',keys:'⇧ D',shift:true,code:/^KeyD$/,label:'lazydocker',run:d=>d.logic.openApp('lazydocker')},
     {group:'Apps',keys:',',code:/^Comma$/,label:'Settings',run:d=>d.logic.openApp('settings')},
     {group:'Shell',keys:'K  or  Space',code:/^(KeyK|Space)$/,label:'Launcher',run:d=>d.logic.state.launch?d.logic.set({launch:false,kb:false,query:''}):d.logic.openLauncher()},

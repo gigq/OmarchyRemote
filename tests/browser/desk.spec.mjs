@@ -18,13 +18,13 @@ test.describe('landscape iPad',()=>{
   expect(t.width).toBeGreaterThan(500);expect(t.height).toBeGreaterThan(700);
   await p.keyboard.press('Meta+Shift+A');
   await expect(label(p)).toHaveText('herdr · 3 windows · dwindle');
-  const h=await box(p,'herd'),b2=await box(p,'browser');
+  const h=await box(p,'herdr'),b2=await box(p,'browser');
   expect(b2.y+b2.height).toBeLessThan(h.y);expect(Math.abs(h.x-b2.x)).toBeLessThan(1);
   await p.keyboard.press('Meta+ArrowLeft');await expect(label(p)).toContainText('terminal · 3 windows');
   await p.keyboard.press('Meta+ArrowRight');await expect(label(p)).toContainText('browser · 3 windows');
   await p.keyboard.press('Meta+ArrowDown');await expect(label(p)).toContainText('herdr · 3 windows');
   await p.keyboard.press('Meta+f');await expect(label(p)).toHaveText('herdr · 3 windows · fullscreen');
-  await p.waitForTimeout(500);const full=await box(p,'herd');expect(full.width).toBeGreaterThan(1100);
+  await p.waitForTimeout(500);const full=await box(p,'herdr');expect(full.width).toBeGreaterThan(1100);
   await expect(p.locator('[data-workspace="browser"]').last()).toHaveCSS('opacity','0');
   await p.keyboard.press('Meta+f');await expect(label(p)).toHaveText('herdr · 3 windows · dwindle');
   await p.keyboard.press('Meta+Shift+Digit3');
@@ -63,7 +63,7 @@ test.describe('portrait iPad',()=>{
   expect(grid.y+grid.height).toBeLessThan(widgets.y);expect(widgets.width).toBeGreaterThan(700);
   await p.keyboard.press('Meta+Enter');await p.keyboard.press('Meta+Shift+A');
   await expect(label(p)).toHaveText('herdr · 2 windows · dwindle');
-  const t=await box(p,'terminal'),h=await box(p,'herd');
+  const t=await box(p,'terminal'),h=await box(p,'herdr');
   expect(t.y+t.height).toBeLessThan(h.y);expect(Math.abs(t.x-h.x)).toBeLessThan(1);expect(t.width).toBeGreaterThan(700);
   await p.screenshot({path:'artifacts/browser/desk-portrait.png'});
  });

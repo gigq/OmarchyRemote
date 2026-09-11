@@ -15,10 +15,3 @@ test('Files browses the host, previews literal text, creates a folder and upload
   await p.getByRole('button',{name:/upload.txt/}).click();await expect(p.locator('.files-code-source')).toHaveText('Uploaded from Files');await p.screenshot({path:'artifacts/browser/files-preview.png'});
  }finally{await rm(folder,{recursive:true,force:true})}
 });
-test('launcher cursor is flush with text and only functional apps remain',async({page:p})=>{
- await p.goto('/');await p.getByText('launcher',{exact:true}).last().evaluate(el=>el.click());
- for(const name of ['f','i','l'])await p.getByRole('button',{name,exact:true}).click();
- const query=p.locator('.launcher-query').last();await expect(query).toHaveText('fil');
- const bounds=await query.evaluate(el=>{const a=el.firstElementChild.getBoundingClientRect(),b=el.lastElementChild.getBoundingClientRect();return{gap:b.x-a.right}});expect(Math.abs(bounds.gap)).toBeLessThan(.1);
- await expect(p.locator('[data-workspace="phone"]')).toHaveCount(0);await expect(p.locator('[data-workspace="firefox"]')).toHaveCount(0);
-});

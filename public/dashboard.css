@@ -51,7 +51,7 @@
 .terminal-tab-body,.terminal-tab { display:flex; flex-direction:column; flex:1; min-height:0; }
 .terminal-tab[hidden] { display:none !important; }
 @media (max-height:740px) { [data-workspace="home"] { padding-top:72px !important; } [data-workspace="home"] > [data-live-time] { font-size:46px !important; } .home-host { top:95px; } .home-app-grid sc-for > div { height:52px !important; } #home-attention { padding:6px 10px; } }
-#touch-shell :is([data-workspace="home"],[data-workspace="herd"],[data-workspace="terminal"])::after { inset:54px 12px 34px; border-radius:24px; }
+#touch-shell :is([data-workspace="home"],[data-workspace="herdr"],[data-workspace="terminal"])::after { inset:54px 12px 34px; border-radius:24px; }
 #remote-herdr-app { inset:76px 28px 46px; }
 #remote-herdr-app .remote-bar { padding:0 0 16px; min-height:32px; }
 #remote-herdr-app .remote-bar > strong { font-size:20px; font-weight:500; }

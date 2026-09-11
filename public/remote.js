@@ -114,6 +114,7 @@
     }
     resume(){if(this.connecting||this.exited||this.disposed)return;const old=this.ws;this.ws=null;this.ready=false;old?.close();this.connect()}
     exit(){this.exited=true;this.ready=false;this.ws?.close();this.status.textContent=this.app==='terminal'?'Shell exited':`${this.app} exited`;this.restart.hidden=false;}
+    key(input){return this.input(input.data)}
     input(data){this.stopTouchScroll.cancel();if(this.ready&&this.ws?.readyState===1){this.ws.send(JSON.stringify({type:'input',data}));this.term.scrollToBottom();return true}else this.status.textContent=this.exited?'App exited · use Restart':'Disconnected · input was not sent';return false;}
     dispose(){this.disposed=true;clearTimeout(this.retry);this.ws?.close();this.resizeObserver.disconnect();this.stopTouchScroll();this.nativeInput.dispose();this.term.dispose()}
   }
@@ -132,7 +133,7 @@
     get exited(){return this.active.exited}
     add(key='omarchy-terminal-tab-'+crypto.randomUUID(),activate=true){if(this.tabs.length>=8)return;const root=node('div','terminal-tab');this.body.append(root);const tab=new TerminalApp(root,this.bridge,'terminal',key);this.tabs.push(tab);if(activate)this.activate(this.tabs.length-1);this.save()}
     save(){storage.set('omarchy-terminal-tabs',JSON.stringify(this.tabs.map(t=>t.storageKey)))}
-    activate(index){this.confirmation?.remove();this.confirmation=null;this.index=index;this.tabs.forEach((t,i)=>{t.root.hidden=i!==index;t.nativeInput.show(false)});storage.set('omarchy-terminal-active',this.active.storageKey);this.render();this.active.connect();this.active.resize();if(this.bridge.tuis.terminal===this)this.bridge.update()}
+    activate(index){this.confirmation?.remove();this.confirmation=null;this.index=index;this.tabs.forEach((t,i)=>{t.root.hidden=i!==index;t.nativeInput.show(false)});storage.set('omarchy-terminal-active',this.active.storageKey);this.render();this.active.connect();this.active.resize();if(this.bridge.apps.terminal===this)this.bridge.update()}
     render(){this.addButton?.remove();this.bar.hidden=this.tabs.length===1;this.bar.replaceChildren();this.tabs.forEach((tab,i)=>{const b=button((i+1)+' shell',()=>this.activate(i));b.setAttribute('aria-pressed',String(i===this.index));this.bar.append(b)});const add=button('+',()=>this.add());add.setAttribute('aria-label','New terminal tab');add.disabled=this.tabs.length>=8;const close=button('×',()=>this.confirmClose());close.setAttribute('aria-label','Close terminal tab');close.disabled=this.tabs.length===1;this.addButton=add;if(this.tabs.length===1)this.active.root.querySelector('.remote-bar').append(add);else this.bar.append(add,close)}
     confirmClose(){if(this.confirmation||this.tabs.length===1)return;const tab=this.active;const row=this.confirmation=node('div','terminal-close-confirm');row.setAttribute('role','group');row.setAttribute('aria-label','Confirm close shell');row.append(node('span','','Close shell and its running process?'),button('Cancel',()=>{row.remove();this.confirmation=null}),button('Close shell',()=>this.closeCurrent(tab)));this.root.insertBefore(row,this.body)}
     async closeCurrent(tab){if(this.closing||this.tabs.length===1||!this.tabs.includes(tab))return;this.closing=true;this.confirmation?.querySelectorAll('button').forEach(b=>b.disabled=true);try{const session=tab.sessionRequest?await tab.sessionRequest:null;const id=session?.id||storage.get(tab.storageKey);if(id)await api('terminal/'+encodeURIComponent(id)+'/close',{});tab.dispose();tab.root.remove();storage.set(tab.storageKey,null);this.tabs.splice(this.tabs.indexOf(tab),1);this.save();this.activate(Math.min(this.index,this.tabs.length-1))}catch(e){tab.status.textContent=e.message}finally{this.closing=false;this.confirmation?.remove();this.confirmation=null}}
@@ -141,6 +142,7 @@
     resize(){this.active.resize()}
     resume(){for(const t of this.tabs)if(t.sessionRequest)t.resume()}
     input(data){return this.active.input(data)}
+    key(input){return this.active.key(input)}
     dispose(){this.tabs.forEach(t=>t.dispose())}
   }
   const paneGroup=p=>/blocked/.test(p.agent_status)&&p.attention_kind!=='chat'?'attention':/working|running|progress|busy/.test(p.agent_status)?'running':/idle|ready|blocked/.test(p.agent_status)?'idle':'done';
@@ -265,9 +267,10 @@
         }catch(e){if(this.disposed)break;messages.push((file.name||'Image')+': '+(e.name==='TimeoutError'?'Upload timed out. Try again.':e.message||'Upload failed'))}
       }}finally{
         this.uploading=false;this.uploadPane=null;this.attachButton.disabled=false;this.nativeInput.submit.disabled=false;
-        if(!this.disposed&&this.selected===pane){this.inputStatus.textContent=messages.join(' · ');if(this.bridge.logic.cur()==='herd'&&!this.bridge.logic.state.ov){this.bridge.logic.set({kb:true,sup:false});this.nativeInput.focus()}}
+        if(!this.disposed&&this.selected===pane){this.inputStatus.textContent=messages.join(' · ');if(this.bridge.logic.cur()==='herdr'&&!this.bridge.logic.state.ov){this.bridge.logic.set({kb:true,sup:false});this.nativeInput.focus()}}
       }
     }
+    key(input){return this.input(input)}
     input(input){
       if(!this.selected){this.status.textContent='Select a pane to type';return false}
       if(!this.online||this.ws?.readyState!==1){this.inputStatus.textContent='Disconnected · input was not sent';return false}
@@ -277,52 +280,61 @@
     }
     dispose(){this.disposed=true;this.uploadAbort.abort();clearTimeout(this.retry);this.ws?.close();this.resizeObserver.disconnect();this.stopTouchScroll();this.nativeInput.dispose();this.term.dispose()}
   }
+  // The shell talks to every app through this bridge; apps come from the HyprlandApps catalog
+  // and their providers (below and in files.js, browser.js, themes.js). Nothing here knows app names.
   class HostBridge {
     constructor(logic){
-      this.logic=logic;this.tuis={};this.herdr=null;this.files=null;
-      this.foreground=()=>{if(!document.hidden){for(const app of Object.values(this.tuis))app.resume();this.herdr?.resume()}};
+      this.logic=logic;this.apps={};
+      this.foreground=()=>{if(!document.hidden)for(const app of Object.values(this.apps))app.resume?.()};
       document.addEventListener('visibilitychange',this.foreground);window.addEventListener('online',this.foreground);this.update();
     }
+    app(key){return this.apps[key]||null}
     async closeApp(key){
-      const app=this.tuis[key]||(key==='herd'?this.herdr:key==='files'?this.files:key==='browser'?this.browser:null);
-      if(key==='terminal'&&app instanceof TerminalTabs){await app.closeSessions()}else if(Object.hasOwn(HOST_TUIS,key)){
-        const session=app?.sessionRequest?await app.sessionRequest:null;
-        const id=session?.id||storage.get('omarchy-'+key+'-id');
-        if(id)await api(`terminal/${encodeURIComponent(id)}/close`,{});
-        storage.set('omarchy-'+key+'-id',null);
-      }
-      if(app){app.dispose();app.root.replaceChildren();if(key==='herd')this.herdr=null;else if(key==='files')this.files=null;else if(key==='browser')this.browser=null;else delete this.tuis[key]}
+      const spec=HyprlandApps.get(key),app=this.apps[key]||null;if(!spec)return;
+      if(spec.provider?.close)await spec.provider.close(app,this);
+      if(app){app.dispose?.();mount(spec.mount)?.replaceChildren();delete this.apps[key]}
     }
     createInput(root,message,send){return new NativeInput(root,{message,send,key:(key,mods)=>this.key(key,mods),focus:()=>{if(!this.logic.state.kb)this.logic.set({kb:true,sup:false})},hide:()=>this.logic.set({kb:false,sup:false})})}
     keyboard(){if(!this.logic.state.ov){this.logic.set({kb:true,sup:false});this.currentInput()?.focus()}}
-    currentInput(){return(this.tuis[this.logic.cur()]||(this.logic.cur()==='herd'?this.herdr:null))?.nativeInput}
+    currentInput(){return this.apps[this.logic.cur()]?.nativeInput||null}
     update(){
-      const current=this.logic.cur(),kb=this.logic.state.kb;
-      const native=(Object.hasOwn(HOST_TUIS,current)||current==='herd')&&!this.logic.state.launch&&!this.logic.state.sup;
+      const s=this.logic.state,current=this.logic.cur(),kb=s.kb,ov=s.ov;
+      const native=!!HyprlandApps.get(current)?.native&&!s.launch&&!s.sup;
       mount('touch-shell')?.classList.toggle('use-native-input',native);
-      const ids=[...Object.keys(HOST_TUIS).map(k=>'remote-'+k+'-app'),'remote-herdr-app'];
-      for(const id of ids){const root=mount(id);if(root)root.classList.toggle('with-keyboard',kb&&!this.logic.state.ov);if(root)root.classList.toggle('native-typing',native)}
-      if(location.protocol==='file:'){for(const id of [...ids,'remote-files-app','remote-browser-app']){const root=mount(id);if(root&&!root.textContent)root.append(node('p','remote-empty','Connect to HOST to use this app.'))}return}
-      // The desk shows every window of the current workspace, so each of them mounts, not only the focused one.
-      const s=this.logic.state,visible=s.desk&&window.HyprlandDesk?(window.HyprlandDesk.desks(s)[s.ws]||[current]):[current];
-      for(const key of visible){
-        if(Object.hasOwn(HOST_TUIS,key)&&!this.tuis[key]){const app=key==='terminal'?new TerminalTabs(mount('remote-terminal-app'),this):new TerminalApp(mount('remote-'+key+'-app'),this,key);this.tuis[key]=app;app.connect()}
-        if(key==='browser'&&!this.browser)this.browser=new HostBrowserApp(mount('remote-browser-app'));
-        if(key==='files'&&!this.files)this.files=new HostFilesApp(mount('remote-files-app'),path=>this.filesTerminal(path));
-        if(key==='herd'&&!this.herdr){this.herdr=new HerdrApp(mount('remote-herdr-app'),this);this.herdr.connect()}
+      for(const spec of Object.values(HyprlandApps.catalog)){
+        if(!spec.native)continue;const root=mount(spec.mount);
+        if(root){root.classList.toggle('with-keyboard',kb&&!ov);root.classList.toggle('native-typing',native)}
       }
-      this.browser?.show(visible.includes('browser')&&!this.logic.state.ov);
-      for(const [key,app] of Object.entries(this.tuis))if(current!==key||this.logic.state.ov)app.stopTouchScroll.cancel();
-      if(current!=='herd'||this.logic.state.ov)this.herdr?.stopTouchScroll.cancel();
-      for(const app of [...Object.values(this.tuis),this.herdr])if(app)app.nativeInput.show(native&&app.nativeInput===this.currentInput()&&kb&&!this.logic.state.ov);
-      if(current!=='files'||this.logic.state.ov)this.files?.blur();
-      this.herdr?.placeLatest();
-      const input=this.currentInput();if(native&&kb&&!this.logic.state.ov&&input&&document.activeElement!==input.field)input.focus();
-      for(const app of Object.values(this.tuis))app.resize();
+      if(location.protocol==='file:'){
+        for(const spec of Object.values(HyprlandApps.catalog)){if(spec.offline)continue;const root=mount(spec.mount);if(root&&!root.textContent)root.append(node('p','remote-empty','Connect to HOST to use this app.'))}
+        return;
+      }
+      const visible=s.desk&&window.HyprlandDesk?(window.HyprlandDesk.desks(s)[s.ws]||[current]):[current];
+      for(const key of visible){
+        const spec=HyprlandApps.get(key);if(!spec?.provider||this.apps[key])continue;
+        const root=mount(spec.mount);if(!root)continue;
+        const app=spec.provider.create(root,this);this.apps[key]=app;app.connect?.();
+      }
+      for(const [key,app] of Object.entries(this.apps)){
+        const focused=key===current&&!ov;
+        app.show?.(visible.includes(key)&&!ov);
+        if(!focused){app.stopTouchScroll?.cancel();app.blur?.()}
+        app.nativeInput?.show(native&&focused&&kb);
+        app.placeLatest?.();
+      }
+      const input=this.currentInput();if(native&&kb&&!ov&&input&&document.activeElement!==input.field)input.focus();
+      for(const app of Object.values(this.apps))app.resize?.();
     }
-    async filesTerminal(path){await this.closeApp('terminal');storage.set('omarchy-terminal-cwd',path);this.logic.openApp('terminal')}
-    key(key,mods){const input=keyInput(key,mods);if(!input)return;if(this.logic.cur()==='herd')this.herdr?.input(input);else this.tuis[this.logic.cur()]?.input(input.data)}
-    dispose(){for(const app of Object.values(this.tuis))app.dispose();this.herdr?.dispose();this.files?.dispose();this.browser?.dispose();document.removeEventListener('visibilitychange',this.foreground);window.removeEventListener('online',this.foreground)}
+    async openTerminalAt(path){await this.closeApp('terminal');storage.set('omarchy-terminal-cwd',path);this.logic.openApp('terminal')}
+    key(key,mods){const input=keyInput(key,mods);if(!input)return;this.apps[this.logic.cur()]?.key?.(input)}
+    dispose(){for(const app of Object.values(this.apps))app.dispose?.();document.removeEventListener('visibilitychange',this.foreground);window.removeEventListener('online',this.foreground)}
+  }
+  // Host TUIs share TerminalApp; each one is a catalog app whose session the backend spawns by id.
+  const closeSession=async(key,app)=>{const session=app?.sessionRequest?await app.sessionRequest:null;const id=session?.id||storage.get('omarchy-'+key+'-id');if(id)await api(`terminal/${encodeURIComponent(id)}/close`,{});storage.set('omarchy-'+key+'-id',null)};
+  if(window.HyprlandApps){
+    HyprlandApps.provide('terminal',{create:(root,bridge)=>new TerminalTabs(root,bridge),close:(app)=>app?app.closeSessions():closeSession('terminal',null)});
+    for(const key of Object.keys(HOST_TUIS))if(key!=='terminal')HyprlandApps.provide(key,{create:(root,bridge)=>new TerminalApp(root,bridge,key),close:app=>closeSession(key,app)});
+    HyprlandApps.provide('herdr',{create:(root,bridge)=>new HerdrApp(root,bridge)});
   }
   window.HyprlandRemote={attach:logic=>new HostBridge(logic),keyInput,orderHerdr,paneGroup};
 })();

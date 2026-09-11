@@ -5,6 +5,7 @@
 <script src="/assets/react.js"></script>
 <script src="/assets/react-dom.js"></script>
 <script src="/assets/0de3c380-5f28-4c7d-ae96-8da6e27b0691.js"></script>
+<script src="/apps.js"></script>
 
 
 <link rel="stylesheet" href="/assets/xterm/xterm.css">
@@ -27,6 +28,7 @@
 <script src="/widget-deck.js"></script>
 <script src="/widgets.js"></script>
 <script src="/desk.js"></script>
+<script src="/cards.js"></script>
 <link rel="stylesheet" href="/widgets.css">
 <link rel="stylesheet" href="/desk.css">
 <title>Hyprland Touch</title>
@@ -406,65 +408,16 @@
 
   <div style="position:absolute;inset:0;overflow:hidden">
 
-    <div data-workspace="home" sc-camel-on-click="{{ cHome.tap }}" style="position:absolute;inset:0;width: {{ cHome.w }};height: {{ cHome.h }};transform: {{ cHome.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cHome.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cHome.op }};pointer-events: {{ cHome.pe }};box-sizing:border-box;padding:100px 26px 0">
+    <div data-workspace="home" style="position:absolute;inset:0;width:100%;height:100%;transform:translate(0px,0px) scale(1);transform-origin:0 0;--pane-border:var(--theme-accent);border:2px solid transparent;border-radius:0px;overflow:hidden;background:var(--theme-background);opacity:1;pointer-events:auto;box-sizing:border-box;padding:100px 26px 0">
       <div style="font-family:'Space Grotesk',sans-serif;font-size:76px;font-weight:500;letter-spacing:-3px;line-height:.9" data-live-time>—</div>
       <div style="font-family:'Space Grotesk',sans-serif;font-size:15px;color:var(--theme-rose);margin:12px 0 22px" data-live-date>—</div>
       <div style="display:flex;flex-direction:column;gap:10px">
         <div class="home-app-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-content:start"><sc-for list="{{ homeApps }}" as="ap"><div sc-camel-on-click="{{ ap.on }}" style="height:60px;border-radius:14px;background:var(--theme-surface);display:flex;flex-direction:column;justify-content:space-between;padding:10px;cursor:pointer;box-sizing:border-box"><div style="font-size:16px;font-weight:700;color: {{ ap.c }}">{{ ap.g }}</div><div style="font-size:11px;color:var(--theme-secondary)">{{ ap.n }}</div><span class="home-app-badge" style="display: {{ ap.badgeDisplay }}">{{ ap.badge }}</span></div></sc-for><button class="home-pin" sc-camel-on-click="{{ managePins }}" aria-label="Manage pinned apps">+<small>pin</small></button></div>
       </div>
       <div id="home-attention"></div><div id="home-metrics"></div><div id="home-widgets"></div>
-      <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cHome.lab }};transition: {{ tr }};pointer-events:none">home</div>
+      <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity:0;pointer-events:none">home</div>
     </div>
 
-    <div data-workspace="terminal" sc-camel-on-click="{{ cTerminal.tap }}" style="position:absolute;inset:0;width: {{ cTerminal.w }};height: {{ cTerminal.h }};transform: {{ cTerminal.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cTerminal.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cTerminal.op }};pointer-events: {{ cTerminal.pe }};box-sizing:border-box">
-      <div id="remote-terminal-app" class="remote-app"></div>
-      <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-terminal) 60%,transparent);opacity: {{ cTerminal.lab }};transition: {{ tr }};pointer-events:none">terminal</div>
-    </div>
-
-    <div data-workspace="btop" sc-camel-on-click="{{ cBtop.tap }}" style="position:absolute;inset:0;width: {{ cBtop.w }};height: {{ cBtop.h }};transform: {{ cBtop.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cBtop.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cBtop.op }};pointer-events: {{ cBtop.pe }};box-sizing:border-box">
-      <div id="remote-btop-app" class="remote-app"></div>
-      <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-terminal) 60%,transparent);opacity: {{ cBtop.lab }};transition: {{ tr }};pointer-events:none">btop</div>
-    </div>
-
-    <div data-workspace="services" sc-camel-on-click="{{ cServices.tap }}" style="position:absolute;inset:0;width: {{ cServices.w }};height: {{ cServices.h }};transform: {{ cServices.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cServices.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cServices.op }};pointer-events: {{ cServices.pe }};box-sizing:border-box">
-      <div id="remote-services-app" class="remote-app"></div>
-      <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-terminal) 60%,transparent);opacity: {{ cServices.lab }};transition: {{ tr }};pointer-events:none">services</div>
-    </div>
-
-    <div data-workspace="lazydocker" sc-camel-on-click="{{ cLazydocker.tap }}" style="position:absolute;inset:0;width: {{ cLazydocker.w }};height: {{ cLazydocker.h }};transform: {{ cLazydocker.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cLazydocker.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cLazydocker.op }};pointer-events: {{ cLazydocker.pe }};box-sizing:border-box">
-      <div id="remote-lazydocker-app" class="remote-app"></div>
-      <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-terminal) 60%,transparent);opacity: {{ cLazydocker.lab }};transition: {{ tr }};pointer-events:none">lazydocker</div>
-    </div>
-
-    <div data-workspace="dua" sc-camel-on-click="{{ cDua.tap }}" style="position:absolute;inset:0;width: {{ cDua.w }};height: {{ cDua.h }};transform: {{ cDua.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cDua.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cDua.op }};pointer-events: {{ cDua.pe }};box-sizing:border-box">
-      <div id="remote-dua-app" class="remote-app"></div>
-      <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-terminal) 60%,transparent);opacity: {{ cDua.lab }};transition: {{ tr }};pointer-events:none">dua</div>
-    </div>
-
-    <div data-workspace="lnav" sc-camel-on-click="{{ cLnav.tap }}" style="position:absolute;inset:0;width: {{ cLnav.w }};height: {{ cLnav.h }};transform: {{ cLnav.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cLnav.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cLnav.op }};pointer-events: {{ cLnav.pe }};box-sizing:border-box">
-      <div id="remote-lnav-app" class="remote-app"></div>
-      <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-terminal) 60%,transparent);opacity: {{ cLnav.lab }};transition: {{ tr }};pointer-events:none">lnav</div>
-    </div>
-
-    <div data-workspace="browser" sc-camel-on-click="{{ cBrowser.tap }}" style="position:absolute;inset:0;width: {{ cBrowser.w }};height: {{ cBrowser.h }};transform: {{ cBrowser.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cBrowser.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cBrowser.op }};pointer-events: {{ cBrowser.pe }};box-sizing:border-box">
-      <div id="remote-browser-app" class="remote-app"></div>
-      <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cBrowser.lab }};transition: {{ tr }};pointer-events:none">browser</div>
-    </div>
-
-    <div data-workspace="files" sc-camel-on-click="{{ cFiles.tap }}" style="position:absolute;inset:0;width: {{ cFiles.w }};height: {{ cFiles.h }};transform: {{ cFiles.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cFiles.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cFiles.op }};pointer-events: {{ cFiles.pe }};box-sizing:border-box">
-      <div id="remote-files-app" class="remote-app"></div>
-      <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cFiles.lab }};transition: {{ tr }};pointer-events:none">files</div>
-    </div>
-
-    <div data-workspace="settings" sc-camel-on-click="{{ cSettings.tap }}" style="position:absolute;inset:0;width: {{ cSettings.w }};height: {{ cSettings.h }};transform: {{ cSettings.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cSettings.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cSettings.op }};pointer-events: {{ cSettings.pe }};box-sizing:border-box">
-      <div id="theme-settings" class="theme-settings"></div>
-      <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cSettings.lab }};transition: {{ tr }};pointer-events:none">settings</div>
-    </div>
-
-    <div data-workspace="herd" sc-camel-on-click="{{ cHerd.tap }}" style="position:absolute;inset:0;width: {{ cHerd.w }};height: {{ cHerd.h }};transform: {{ cHerd.tf }};transform-origin:0 0;transition: {{ tr }};--pane-border: {{ cHerd.bd }};border:2px solid transparent;border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cHerd.op }};pointer-events: {{ cHerd.pe }};box-sizing:border-box">
-      <div id="remote-herdr-app" class="remote-app"></div>
-      <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cHerd.lab }};transition: {{ tr }};pointer-events:none">herdr</div>
-    </div>
   </div>
 
   <div class="expo-swipe-hint" aria-hidden="true" style="opacity: {{ swipeHintOpacity }}"></div>
@@ -516,7 +469,7 @@
 </x-dc>
 <script type="text/x-dc" data-dc-script="" data-props="{&quot;network&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;wifi&quot;,&quot;5G&quot;,&quot;LTE&quot;,&quot;3G&quot;,&quot;offline&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Status bar&quot;},&quot;barWidth&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:2,&quot;min&quot;:1,&quot;max&quot;:12,&quot;step&quot;:1,&quot;unit&quot;:&quot;px&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Edge bars&quot;},&quot;barGlow&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0,&quot;min&quot;:0,&quot;max&quot;:40,&quot;step&quot;:1,&quot;unit&quot;:&quot;px&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Edge bars&quot;},&quot;barOpacity&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0.75,&quot;min&quot;:0.2,&quot;max&quot;:1,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Edge bars&quot;},&quot;slowMotion&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Demo&quot;}}">
 class Component extends DCLogic {
-  APPS = { browser:{n:'browser',c:'var(--theme-blue)',g:'br',d:'Vivaldi · desktop tabs'}, lazydocker:{n:'lazydocker',c:'var(--theme-blue)',g:'dk',d:'containers · docker'}, dua:{n:'dua',c:'var(--theme-yellow)',g:'du',d:'disk usage · cleanup'}, lnav:{n:'lnav',c:'var(--theme-cyan)',g:'lg',d:'host logs · search'}, services:{n:'services',c:'var(--theme-yellow)',g:'sv',d:'systemd services · logs'}, home:{n:'home',c:'var(--theme-rose)',g:'hm',d:'launcher'}, btop:{n:'btop',c:'var(--theme-green)',g:'bt',d:'host system monitor'}, terminal:{n:'terminal',c:'var(--theme-green)',g:'>_',d:'live HOST shell'}, files:{n:'files',c:'var(--theme-red)',g:'fm',d:'files on HOST'}, settings:{n:'settings',c:'var(--theme-accent)',g:'st',d:'appearance · themes'}, herd:{n:'herdr',c:'var(--theme-cyan)',g:'hd',d:'agents · herdr'} };
+  APPS = window.HyprlandApps.catalog; // see public/apps.js
   T = {bg:'var(--theme-background)',sf:'var(--theme-surface)',sf2:'var(--theme-surface-raised)',bd:'var(--theme-border)',fg:'var(--theme-foreground)',mu:'var(--theme-secondary)',dim:'var(--theme-dim)',love:'var(--theme-red)',gold:'var(--theme-yellow)',rose:'var(--theme-rose)',foam:'var(--theme-green)',iris:'var(--theme-magenta)'};
   FILES = [
     {g:'dir',n:'config',s:'12 items',t:'13:02',dir:true,prev:[['hypr/','var(--theme-foreground)'],['waybar/','var(--theme-foreground)'],['walker/','var(--theme-foreground)'],['alacritty/','var(--theme-foreground)']]},
@@ -535,9 +488,9 @@ class Component extends DCLogic {
       {ws:'herdr-ios',m:'hetzner-1',a:'claude',s:'done',t:'swift bridge for socket api',tail:'+124 −31 · 3 files · tests pass',el:'41m',lines:[['~/src/herdr-ios ❯ claude','var(--theme-secondary)'],['› bridge the herdr socket api to swift','var(--theme-foreground)'],['',''],['● Write Sources/HerdrKit/Socket.swift +124','var(--theme-secondary)'],['● Update Package.swift +3 −1','var(--theme-secondary)'],['● Bash swift test ✓ 14 passed','var(--theme-secondary)'],['',''],['Done. Socket API bridged; ready to commit.','var(--theme-magenta)']]},
       {ws:'herdr-ios',m:'hetzner-1',a:'amp',s:'idle',t:'docs: agent guide',tail:'❯',el:'2h',lines:[['~/src/herdr-ios ❯ amp','var(--theme-secondary)'],['› draft docs/agent-guide.md','var(--theme-foreground)'],['● Write docs/agent-guide.md +212','var(--theme-secondary)'],['',''],['❯','var(--theme-foreground)']]},
       {ws:'dotfiles',m:'local',a:'claude',s:'blocked',t:'migrate to rosé pine',tail:'which variant? 1 main · 2 moon · 3 dawn',el:'1m',ans:[{k:'1',l:'main',p:true},{k:'2',l:'moon'},{k:'3',l:'dawn'}],lines:[['~/dotfiles ❯ claude','var(--theme-secondary)'],['› migrate the terminal theme to rosé pine','var(--theme-foreground)'],['',''],['● Read alacritty/alacritty.toml','var(--theme-secondary)'],['● Read nvim/lua/theme.lua','var(--theme-secondary)'],['',''],['? Which Rosé Pine variant for the terminal?','var(--theme-yellow)'],['  1 main   2 moon   3 dawn','var(--theme-secondary)']]}] };
-  componentDidMount(){ this.remote=window.HyprlandRemote?.attach(this); window.HyprlandThemes.attach(); this.expo=window.HyprlandExpo.attach(this); this.widgets=window.HyprlandWidgets.attach(this); this.dashboard=window.HyprlandDashboard.attach(this); this.desk=window.HyprlandDesk?.attach(this) }
-  componentDidUpdate(){ this.remote?.update(); this.expo?.update(); this.widgets?.update(); this.dashboard?.update(); this.desk?.update() }
-  componentWillUnmount(){ this.keyEnd();this.desk?.dispose();this.dashboard?.dispose();this.widgets?.dispose();this.expo?.dispose();this.remote?.dispose() }
+  componentDidMount(){ this.cards=window.HyprlandCards?.attach(this); this.remote=window.HyprlandRemote?.attach(this); window.HyprlandThemes.attach(); this.expo=window.HyprlandExpo.attach(this); this.widgets=window.HyprlandWidgets.attach(this); this.dashboard=window.HyprlandDashboard.attach(this); this.desk=window.HyprlandDesk?.attach(this) }
+  componentDidUpdate(){ this.cards?.update(); this.remote?.update(); this.expo?.update(); this.widgets?.update(); this.dashboard?.update(); this.desk?.update() }
+  componentWillUnmount(){ this.keyEnd();this.desk?.dispose();this.cards?.dispose();this.dashboard?.dispose();this.widgets?.dispose();this.expo?.dispose();this.remote?.dispose() }
   ptr = null; wx = null;
   cancel=()=>{ this.ptr=null; this.ax=null; this.wx=null };
   aDown=e=>{ this.ax=e.clientX };
@@ -564,7 +517,7 @@ class Component extends DCLogic {
     if(s.ov && dy>T && Math.abs(dx)<T) return this.set({ov:false});
     if(p.x<E && dx>T) return this.go(s.ws-1);
     if(p.x>p.w-E && dx<-T) return this.go(s.ws+1);
-    if(!s.ov && !s.kb && this.cur()==='herd' && s.herdView==='pane' && Math.abs(dx)>T && Math.abs(dy)<T){ const n=this.paneList().length; this.set({pane:Math.max(0,Math.min(n-1,s.pane+(dx<0?1:-1)))}) } }
+  }
   groups(){ const g=[]; this.state.agents.forEach((a,i)=>{ let x=g.find(q=>q.ws===a.ws); if(!x){ x={ws:a.ws,m:a.m,list:[]}; g.push(x) } x.list.push({...a,i}) }); return g }
   paneList(){ return (this.groups()[this.state.herdG]||{list:[]}).list }
   answer(i,k){ const agents=this.state.agents.map((a,j)=>j!==i?a:{...a,s:'working',tail:'▸ continuing after "'+k+'"',el:'now',ans:null,lines:[...a.lines,['› '+k,'var(--theme-magenta)'],['● applying…','var(--theme-secondary)']]}); this.set({agents}) }
@@ -589,7 +542,7 @@ class Component extends DCLogic {
   type(l){
     const s=this.state;
     if(l==='⇧') return this.set({shift:!s.shift});
-    if(!s.launch&&this.remote&&['terminal','herd'].includes(this.cur())){this.remote.key(l,{shift:s.shift,ctrl:s.ctl});if(Array.from(l).length===1)this.set({shift:false,ctl:false});return}
+    if(!s.launch&&this.remote&&this.APPS[this.cur()]?.native){this.remote.key(l,{shift:s.shift,ctrl:s.ctl});if(Array.from(l).length===1)this.set({shift:false,ctl:false});return}
     if(l==='esc') return this.set({kb:false,launch:false,sup:false,ctl:false});
     if(s.launch){
       if(l==='⌫') return this.set({query:Array.from(s.query).slice(0,-1).join('')});
@@ -629,22 +582,28 @@ class Component extends DCLogic {
     }
     if(l==='space'||l==='tab'||Array.from(l).length===1){ const text=l==='space'?' ':l==='tab'?'  ':s.shift?this.shifted(l):l; chars.splice(pos,0,...Array.from(text)); this.edit(chars.join(''),pos+Array.from(text).length); this.set({shift:false}) }
   }
-  matches(){ const q=this.state.query.trim().toLowerCase(); return Object.keys(this.APPS).filter(k=>k!=='home' && (this.APPS[k].n.includes(q)||this.APPS[k].d.includes(q))) }
-  renderVals(){
-    const s=this.state, P=this.props, T=this.T, A=this.APPS, cur=this.cur();
+  matches(){ const q=this.state.query.trim().toLowerCase(); return Object.keys(this.APPS).filter(k=>k!=='home' && (this.APPS[k].name.includes(q)||this.APPS[k].description.includes(q))) }
+  // Card geometry for every catalog app (public/cards.js paints it); the desk replaces it above 600 px.
+  layout(){
+    const s=this.state, P=this.props, A=this.APPS;
     const dur=P.slowMotion?'1.4s':'.5s', ease='cubic-bezier(.22,.9,.24,1)', tr=`transform ${dur} ${ease}, opacity ${dur} ${ease}, border-color .3s, border-radius ${dur} ${ease}`;
     const n=s.open.length, cols=n<=4?2:3, sc=n<=4?.35:n>9?.19:.26, x0=n<=4?45:29, dx=n<=4?171:120, y0=n<=4?104:n>9?80:96, dy=n<=4?328:n>9?190:243;
     const cards={};
     Object.keys(A).forEach(k=>{ const i=s.open.indexOf(k), on=i>=0;
-      cards[k]={ tf: !on?'translate(440px,0px) scale(1)':(s.ov?`translate(${x0+(i%cols)*dx}px,${y0+Math.floor(i/cols)*dy}px) scale(${sc})`:`translate(${(i-s.ws)*440}px,0px) scale(1)`), bd:i===s.ws?'var(--theme-accent)':'var(--theme-window-inactive)', lab:s.ov?1:0, op:on?1:0, pe:on?'auto':'none', w:'100%', h:'100%', tap:()=>{ if(this.state.ov) this.go(i) } } });
+      cards[k]={ tf: !on?'translate(440px,0px) scale(1)':(s.ov?`translate(${x0+(i%cols)*dx}px,${y0+Math.floor(i/cols)*dy}px) scale(${sc})`:`translate(${(i-s.ws)*440}px,0px) scale(1)`), bd:i===s.ws?'var(--theme-accent)':'var(--theme-window-inactive)', lab:s.ov?1:0, op:on?1:0, pe:on?'auto':'none', w:'100%', h:'100%' } });
     const D=s.desk&&window.HyprlandDesk?window.HyprlandDesk.render(this,s,s.deskW,s.deskH):null; if(D)Object.assign(cards,D.cards);
+    return {cards,tr,rad:s.ov?'28px':'0px',D};
+  }
+  renderVals(){
+    const s=this.state, P=this.props, T=this.T, A=this.APPS, cur=this.cur();
+    const {tr,rad,D}=this.layout(), n=s.open.length;
     const wsC=i=>A[s.open[i]]?'var(--theme-secondary)':'transparent';
     const glow=P.barGlow??0, barW=P.barWidth??2, barOp=P.barOpacity??.75;
     const pills=D?D.pills:s.open.map((k,i)=>({i:i+1,col:T.mu,bg:i===s.ws?T.sf2:'transparent',c:i===s.ws?T.fg:T.mu,on:()=>{ if(i===this.state.ws) this.set({ov:!this.state.ov,kb:false}); else this.go(i) }}));
     const netP=P.network||'auto'; const net=netP==='auto'?(s.wifi?'wifi':'5G'):netP;
     // keyboard
     const bind={q:'close',e:'files',s:'settings',a:'agents',t:'term',h:'ws ←',l:'ws →',space:'launch','⏎':'term','←':'ws ←','→':'ws →','↑':'expo','↓':'home'};
-    const act={q:()=>this.closeWs(),e:()=>this.openApp('files'),s:()=>this.openApp('settings'),a:()=>this.openApp('herd'),t:()=>this.openApp('terminal'),'⏎':()=>this.openApp('terminal'),h:()=>this.go(s.ws-1),l:()=>this.go(s.ws+1),'←':()=>this.go(s.ws-1),'→':()=>this.go(s.ws+1),'↑':()=>this.set({ov:true,kb:false,sup:false}),'↓':()=>this.go(0),space:()=>this.set({launch:true,sup:false})};
+    const act={q:()=>this.closeWs(),e:()=>this.openApp('files'),s:()=>this.openApp('settings'),a:()=>this.openApp('herdr'),t:()=>this.openApp('terminal'),'⏎':()=>this.openApp('terminal'),h:()=>this.go(s.ws-1),l:()=>this.go(s.ws+1),'←':()=>this.go(s.ws-1),'→':()=>this.go(s.ws+1),'↑':()=>this.set({ov:true,kb:false,sup:false}),'↓':()=>this.go(0),space:()=>this.set({launch:true,sup:false})};
     const R=(str,w)=>str.split(' ').map(l=>({l,w:w||1}));
     const key=x=>{ if(x.l==='SUPER') return {l:'super',w:1.5,fs:'11px',bg:s.sup?T.rose:T.bd,c:s.sup?T.bg:T.fg,on:()=>this.set({sup:!this.state.sup})};
       if(x.l==='LAYER') return {l:s.term?'abc':'123',w:1.5,fs:'11px',bg:T.bd,c:T.iris,on:()=>this.set({term:!this.state.term})};
@@ -659,7 +618,7 @@ class Component extends DCLogic {
     const kbRows=[...(s.term?termRows:abcRows),[{l:'SUPER'},{l:'LAYER'},{l:'esc'},{l:'space',w:3},{l:'.'},{l:'⏎',w:1.5}]].map(r=>({keys:r.map(x=>{const k=key(x); return {...k,down:e=>{if(e.button===0)this.showKey(e,k.l);this.pressKey(e,k.on,!s.sup&&['⌫','←','→'].includes(x.l))},click:e=>{e.stopPropagation();if(e.detail===0){this.showKey(e,k.l);k.on();this.keyEnd(e)}}}})}));
     // launcher
     const m=this.matches();
-    const launchResults=m.slice(0,4).map((k,i)=>({g:A[k].g,n:A[k].n,d:A[k].d,c:A[k].c,bg:i===0?T.sf2:'transparent',hint:i===0?'⏎':(s.open.includes(k)?'ws '+(s.open.indexOf(k)+1):'open'),on:()=>this.openApp(k)}));
+    const launchResults=m.slice(0,4).map((k,i)=>({g:A[k].glyph,n:A[k].name,d:A[k].description,c:A[k].color,bg:i===0?T.sf2:'transparent',hint:i===0?'⏎':(s.open.includes(k)?'ws '+(s.open.indexOf(k)+1):'open'),on:()=>this.openApp(k)}));
     // files
     const F=this.FILES, sel=F[s.fileSel];
     const fileRows=F.map((f,i)=>({g:f.dir?'▸':f.g,n:f.dir?f.n+'/':f.n,s:f.s,t:f.t,bg:i===s.fileSel?T.sf2:'transparent',c:i===s.fileSel?T.love:T.fg,gc:f.dir?T.bg:T.mu,gbg:f.dir?T.love:T.sf2,on:()=>this.set({fileSel:i})}));
@@ -672,24 +631,23 @@ class Component extends DCLogic {
     const panes=this.paneList(), pa=panes[s.pane]||panes[0]||{s:'idle',a:'',ws:'',m:'',lines:[]}, g=groups[s.herdG]||{ws:'',m:''};
     const paneAns=(pa.ans||[]).map(o=>({k:o.k,l:o.l,bg:o.p?T.gold:T.sf2,c:o.p?T.bg:T.fg,fw:o.p?600:400,kbg:o.p?'color-mix(in srgb, var(--theme-background) 18%, transparent)':T.bg,kc:o.p?T.bg:T.mu,on:()=>this.answer(pa.i,o.k)}));
     const blockedCodex=false;
-    const notifsAll=[ blockedCodex?{g:'cx',bg:T.gold,app:'herdr · codex',t:'3m',title:'codex needs you',body:'allow write to waybar/battery.rs?',on:()=>{ this.set({shade:null,herdView:'pane',herdG:0,pane:1}); this.openApp('herd') }}:null,
+    const notifsAll=[ blockedCodex?{g:'cx',bg:T.gold,app:'herdr · codex',t:'3m',title:'codex needs you',body:'allow write to waybar/battery.rs?',on:()=>{ this.set({shade:null,herdView:'pane',herdG:0,pane:1}); this.openApp('herdr') }}:null,
       {g:'pk',bg:T.foam,app:'pacman',t:'12m',title:'12 updates available',body:'linux-mobile 6.12.4 · hyprland 0.52.1 · firefox 143',on:()=>this.openApp('settings')},
       {g:'sg',bg:T.iris,app:'signal',t:'now',title:'maya',body:'did you get the fastfetch theme working?',on:()=>{}} ].filter(Boolean);
     const notifs=s.notifsCleared?[]:notifsAll;
     const qsDefs=[['wi-fi',s.wifi,()=>this.set({wifi:!this.state.wifi})],...Object.keys(s.qs).map(k=>[k,s.qs[k],()=>this.set({qs:{...this.state.qs,[k]:!this.state.qs[k]}})])];
     const qsToggles=qsDefs.map(([n,on,f])=>({n,on:f,bg:on?T.rose:T.sf2,c:on?T.bg:T.fg,state:on?'on':'off'}));
-    const homeKeys=s.homePins||['terminal','files','browser','herd','btop','services','lazydocker','dua','lnav','settings'];
+    const homeKeys=s.homePins||window.HyprlandApps.DEFAULT_PINS;
     return {
       swipeHintOpacity:s.ov||s.kb||s.launch||s.shade?0:1,
-      keyEnd:this.keyEnd, terminalHeight:s.kb&&!s.ov?'calc(100% - 273px)':'100%', terminalLines:s.transcript, terminalBefore:Array.from(s.input).slice(0,s.cursor).join(''), terminalCursor:Array.from(s.input)[s.cursor]||' ', terminalAfter:Array.from(s.input).slice(s.cursor+1).join(''), down:this.down, up:this.up, cancel:this.cancel, tr, rad:s.ov?'28px':'0px', ovOp:s.ov?1:0, openCount:n,
+      keyEnd:this.keyEnd, terminalHeight:s.kb&&!s.ov?'calc(100% - 273px)':'100%', terminalLines:s.transcript, terminalBefore:Array.from(s.input).slice(0,s.cursor).join(''), terminalCursor:Array.from(s.input)[s.cursor]||' ', terminalAfter:Array.from(s.input).slice(s.cursor+1).join(''), down:this.down, up:this.up, cancel:this.cancel, tr, rad, ovOp:s.ov?1:0, openCount:n,
       pills, wsLabel:D?D.label:'', isWifi:net==='wifi', isCell:!['wifi','offline'].includes(net), isOff:net==='offline', netLabel:net,
       barW:barW+'px', prevC:wsC(s.ws-1), prevOp:s.ws>0?barOp:0, prevGlow:s.ws>0&&glow>0?`0 0 ${glow}px ${wsC(s.ws-1)}`:'none', nextC:wsC(s.ws+1), nextOp:s.ws<n-1?barOp:0, nextGlow:s.ws<n-1&&glow>0?`0 0 ${glow}px ${wsC(s.ws+1)}`:'none',
-      cLazydocker:cards.lazydocker, cDua:cards.dua, cLnav:cards.lnav, cServices:cards.services, cBtop:cards.btop, cHome:cards.home, cTerminal:cards.terminal, cBrowser:cards.browser, cFiles:cards.files, cSettings:cards.settings, cHerd:cards.herd,
-      managePins:()=>this.dashboard?.managePins(),homeApps:homeKeys.map(k=>({g:A[k].g,n:A[k].n,c:A[k].c,op:1,badge:k==='herd'?(s.herdAttention||0):'',badgeDisplay:k==='herd'&&s.herdAttention?'block':'none',on:()=>this.openApp(k)})),
+      managePins:()=>this.dashboard?.managePins(),homeApps:homeKeys.filter(k=>A[k]).map(k=>({g:A[k].glyph,n:A[k].name,c:A[k].color,op:1,badge:k==='herdr'?(s.herdAttention||0):'',badgeDisplay:k==='herdr'&&s.herdAttention?'block':'none',on:()=>this.openApp(k)})),
       aDown:this.aDown, aUp:this.aUp, appsTf:`translateX(${-(s.appPage||0)*(100/3)}%)`, appDots:[0,1,2].map(i=>({w:i===(s.appPage||0)?'16px':'5px',c:i===(s.appPage||0)?T.rose:T.bd,on:()=>this.set({appPage:i})})), wDown:this.wDown, wUp:this.wUp, widgetTf:`translateX(${-(s.widget||0)*(100/3)}%)`, widgetDots:['weather','btop','tailscale'].map((nm,i)=>({w:i===(s.widget||0)?'16px':'5px',c:i===(s.widget||0)?T.rose:T.bd,on:()=>this.set({widget:i})})),
       openLaunch:()=>this.openLauncher(), dial:'1 2 3 4 5 6 7 8 9 * 0 #'.split(' ').map(l=>({l})),
       kbOn:()=>{if(!this.state.ov){this.set({kb:true,sup:false});this.scrollPrompt()}}, kbOff:()=>this.set({kb:false,launch:false,sup:false,ctl:false,query:''}),
-      kbTf:s.kb?'translateY(0)':'translateY(105%)', kbRows, supC:s.sup?T.rose:(s.ctl?T.iris:T.mu), supMsg:s.sup?'SUPER · tap a key to run its binding':(s.ctl?'CTRL held · tap a letter':(s.launch?'typing into the launcher':(['terminal','herd'].includes(cur)?'HOST · '+(cur==='terminal'?'terminal':'selected Herdr pane'):'touch keyboard'))),
+      kbTf:s.kb?'translateY(0)':'translateY(105%)', kbRows, supC:s.sup?T.rose:(s.ctl?T.iris:T.mu), supMsg:s.sup?'SUPER · tap a key to run its binding':(s.ctl?'CTRL held · tap a letter':(s.launch?'typing into the launcher':(A[cur]?.native?'HOST · '+(A[cur].typing||A[cur].name):'touch keyboard'))),
       launchTf:s.launch?'translateY(0)':'translateY(-104%)', query:s.query, matchCount:m.length, launchResults, closeAll:()=>this.set({launch:false,kb:false,shade:null,query:''}),
       shadeNTf:s.shade==='notif'?'translateY(0)':'translateY(-104%)', shadeQTf:s.shade==='qs'?'translateY(0)':'translateY(-104%)', notifs, notifCount:notifs.length, clearNotifs:()=>this.set({notifsCleared:true}),
       qsToggles, openSettings:()=>this.openApp('settings'), mapOp:s.map?1:0,

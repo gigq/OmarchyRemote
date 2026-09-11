@@ -4,8 +4,11 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 const html=readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
 const source=html.match(/<script type="text\/x-dc"[^>]*>([\s\S]*?)<\/script>/)[1];
+const apps=readFileSync(new URL('../public/apps.js',import.meta.url),'utf8');
 function terminal(){
-  const ctx=vm.createContext({DCLogic:class {props={};setState(p){Object.assign(this.state,p)}},requestAnimationFrame:f=>f(),document:{getElementById:()=>null},setTimeout,clearTimeout,setInterval,clearInterval});
+  const window={innerWidth:402,innerHeight:874};
+  const ctx=vm.createContext({window,DCLogic:class {props={};setState(p){Object.assign(this.state,p)}},requestAnimationFrame:f=>f(),document:{getElementById:()=>null},setTimeout,clearTimeout,setInterval,clearInterval});
+  vm.runInContext(apps,ctx);
   const c=vm.runInContext(source+';new Component()',ctx); c.openApp('terminal');c.set({kb:true});return c;
 }
 function type(c,text){for(const ch of text)c.type(ch===' '?'space':ch)}
@@ -55,7 +58,7 @@ test('bottom swipes favor expo while keyboard stays in the outer corners',()=>{
 test('workspace limit preserves existing navigation and permits opening after close',async()=>{
  const c=terminal();for(const key of Object.keys(c.APPS))c.openApp(key);
  assert.equal(c.state.open.length,10);
- c.APPS.extra={n:'extra'};c.openApp('extra');assert.equal(c.state.open.length,10);assert.ok(!c.state.open.includes('extra'));
+ c.APPS.extra={name:'extra',description:''};c.openApp('extra');assert.equal(c.state.open.length,10);assert.ok(!c.state.open.includes('extra'));
  c.openApp('files');assert.equal(c.cur(),'files');
  await c.closeApp('files');c.openApp('extra');assert.equal(c.state.open.length,10);assert.equal(c.cur(),'extra');
 });
