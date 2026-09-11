@@ -15,6 +15,11 @@
 .browser-chrome-hidden .browser-native-slot{border-top-left-radius:8px;border-top-right-radius:8px}
 @media(prefers-reduced-motion:reduce){.browser-chrome{transition:none}}
 
-.browser-navigation button[aria-pressed=true]{background:var(--theme-accent);color:var(--theme-background);border-color:var(--theme-accent)}
+.browser-options button[aria-pressed=true]{background:var(--theme-accent);color:var(--theme-background);border-color:var(--theme-accent)}
 
 .browser-navigation button:first-child{font-size:26px;line-height:1;padding:0 8px}
+
+.browser-page{position:relative}
+.browser-options-overlay{position:absolute;inset:0;z-index:20}
+.browser-options{position:absolute;right:8px;top:56px;display:flex;flex-direction:column;gap:4px;min-width:160px;padding:6px;background:var(--theme-surface);border:1px solid var(--theme-border);border-radius:12px;box-shadow:0 8px 24px #0005}
+.browser-options button{min-height:44px;text-align:left;border:0;font-size:14px}

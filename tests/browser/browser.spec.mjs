@@ -87,10 +87,20 @@ test('Dark toggle persists native choice and the tab list uses Herd back chevron
  await p.addInitScript(()=>{window.browserCommands=[];window.webkit={messageHandlers:{browserDevice:{postMessage:async q=>{window.browserCommands.push(q);return q.action==='capabilities'?{embedded:true,darkMode:true,dark:true}:q.action==='dark'?{dark:q.enabled}:{}}}}}});
  await p.goto('/native/');await p.getByText('browser',{exact:true}).first().click();await p.getByRole('link',{name:'Open Example Domain on phone'}).click();
  await expect(p.getByRole('button',{name:'Desktop tabs',exact:true})).toHaveText('‹');
- const dark=p.getByRole('button',{name:'Force dark mode'});
+ await p.getByRole('button',{name:'Browser options',exact:true}).click();
+ const dark=p.getByRole('button',{name:'Force dark mode',includeHidden:true});
  await expect(dark).toHaveAttribute('aria-pressed','true');await dark.click();await expect(dark).toHaveAttribute('aria-pressed','false');
+ await p.getByRole('button',{name:'Browser options',exact:true}).click();
  await dark.click();await expect(dark).toHaveAttribute('aria-pressed','true');
  expect(await p.evaluate(()=>window.browserCommands.filter(q=>q.action==='dark').map(q=>q.enabled))).toEqual([false,true]);
+ await p.getByRole('button',{name:'Browser options',exact:true}).click();
+ expect(await p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1).visible)).toBe(false);
+ await p.getByRole('button',{name:'Reload page'}).click();
+ await expect(p.getByRole('dialog',{name:'Browser options'})).toBeHidden();
+ await expect.poll(()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1).visible)).toBe(true);
+ expect(await p.evaluate(()=>window.browserCommands.some(q=>q.action==='reload'))).toBe(true);
+ await p.getByRole('button',{name:'Browser options',exact:true}).click();await p.keyboard.press('Escape');
+ await expect(p.getByRole('dialog',{name:'Browser options'})).toBeHidden();
 });
 
 test('Bundled Dark Reader recolors a light document and restores its original styling',async({page:p})=>{
