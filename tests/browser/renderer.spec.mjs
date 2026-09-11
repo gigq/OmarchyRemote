@@ -27,7 +27,9 @@ test('scroll position moves by pixels and DOM stays bounded for long history',as
  await expect.poll(()=>scroller.evaluate(el=>el.scrollHeight)).toBeGreaterThan(40000);
  await scroller.evaluate(el=>{el.scrollTop=20003});
  await expect.poll(()=>scroller.evaluate(el=>el.scrollTop)).toBe(20003);
- const first=await scroller.locator('.native-terminal-row').first().getAttribute('data-line');
+ const expectedFirst=await page.evaluate(()=>Math.floor(20003/qaTerms[0].nativeView.height)-80);
+ await expect(scroller.locator('.native-terminal-row').first()).toHaveAttribute('data-line',String(expectedFirst));
+ const first=String(expectedFirst);
  await scroller.evaluate(el=>{el.scrollTop+=3});
  await expect.poll(()=>scroller.evaluate(el=>el.scrollTop)).toBe(20006);
  expect(await scroller.locator('.native-terminal-row').count()).toBeLessThan(230);

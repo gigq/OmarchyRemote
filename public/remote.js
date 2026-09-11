@@ -28,6 +28,26 @@
     if(Array.from(key).length!==1)return null;
     const text=shift?(symbols[key]||key.toUpperCase()):key;return{data:text,text,keys:[]};
   }
+  // Match Herdr Mobile's attention/working/done/ready groups. Activity sequences
+  // come from agent.list; per-pane revision numbers must never rank different panes.
+  function orderHerdr(snapshot){
+    const rank=p=>{const s=String(p.agent_status||'').toLowerCase();if(s.includes('blocked'))return p.attention_kind==='chat'?3:0;if(/working|running|progress|busy/.test(s))return 1;if(/done|complete|finish|success|unread/.test(s))return 2;if(s==='idle'||s==='ready')return 3;return 4};
+    const activity=p=>Number(p.state_change_seq)||0;
+    const groupRank=panes=>Math.min(...panes.map(rank));
+    const recent=panes=>Math.max(0,...panes.map(activity));
+    const compareGroups=(a,b)=>groupRank(a.panes)-groupRank(b.panes)||recent(b.panes)-recent(a.panes);
+    const tabs=new Map(snapshot.tabs.map((t,i)=>[t.tab_id,{...t,order:i}]));
+    const label=p=>tabs.get(p.tab_id)?.label||p.terminal_title_stripped||p.agent||p.pane_id;
+    const groups=snapshot.workspaces.map(workspace=>{
+      const panes=snapshot.panes.filter(p=>p.workspace_id===workspace.workspace_id);
+      const grouped=new Map();for(const pane of panes){const id=pane.tab_id||pane.pane_id;if(!grouped.has(id))grouped.set(id,[]);grouped.get(id).push(pane)}
+      const ordered=[...grouped].map(([id,panes])=>({id,panes})).sort((a,b)=>compareGroups(a,b)
+        ||(tabs.get(a.id)?.order??Infinity)-(tabs.get(b.id)?.order??Infinity)
+        ||String(a.id).localeCompare(String(b.id),undefined,{numeric:true}));
+      return {...workspace,panes:ordered.flatMap(t=>[...t.panes].sort((a,b)=>activity(b)-activity(a)||label(a).localeCompare(label(b))||a.pane_id.localeCompare(b.pane_id,undefined,{numeric:true})))};
+    }).filter(g=>g.panes.length);
+    return groups.sort((a,b)=>compareGroups(a,b)||String(a.label||a.workspace_id).localeCompare(String(b.label||b.workspace_id),undefined,{sensitivity:'base'})||a.workspace_id.localeCompare(b.workspace_id));
+  }
   class TerminalApp {
     constructor(root,bridge){
       this.bridge=bridge;this.root=root;this.status=node('span','remote-status','HOST · connecting…');this.host=node('div','remote-terminal');
@@ -100,12 +120,12 @@
     resume(){if(this.disposed)return;const old=this.ws;this.ws=null;this.online=false;old?.close();if(this.pending.size)this.inputStatus.textContent='Connection interrupted · last input may not have arrived';this.pending.clear();this.connect()}
     send(message){if(this.ws?.readyState!==1)return false;this.ws.send(JSON.stringify(message));return true}
     renderList(){
-      const signature=JSON.stringify([this.snapshot.workspaces.map(w=>[w.workspace_id,w.label]),this.snapshot.panes.map(p=>[p.pane_id,p.workspace_id,p.tab_id,p.agent,p.agent_status,p.terminal_title_stripped,p.foreground_cwd,p.cwd]),this.snapshot.tabs.map(t=>[t.tab_id,t.label])]);
+      const signature=JSON.stringify([this.snapshot.workspaces.map(w=>[w.workspace_id,w.label]),this.snapshot.panes.map(p=>[p.pane_id,p.workspace_id,p.tab_id,p.agent,p.agent_status,p.state_change_seq,p.attention_kind,p.terminal_title_stripped,p.foreground_cwd,p.cwd]),this.snapshot.tabs.map(t=>[t.tab_id,t.label])]);
       if(signature===this.listSignature)return;this.listSignature=signature;
       const scroll=this.list.scrollTop;this.list.replaceChildren();
       if(!this.snapshot.panes.length){this.list.append(node('p','remote-empty','No panes are open in local Herdr.'));return}
-      for(const workspace of this.snapshot.workspaces){
-        const panes=this.snapshot.panes.filter(p=>p.workspace_id===workspace.workspace_id);if(!panes.length)continue;
+      for(const workspace of orderHerdr(this.snapshot)){
+        const panes=workspace.panes;if(!panes.length)continue;
         const group=node('section','herdr-group');const heading=node('div','herdr-group-title');heading.append(node('strong','',workspace.label||workspace.workspace_id),node('span','remote-status',`${panes.length} panes`));group.append(heading);
         for(const pane of panes){const tab=this.snapshot.tabs.find(t=>t.tab_id===pane.tab_id);const row=button('',()=>this.select(pane.pane_id));row.className='herdr-pane';
           const icon=node('span','herdr-agent-icon',pane.agent||'sh');const info=node('span','herdr-pane-info');info.append(node('strong','',pane.terminal_title_stripped||tab?.label||pane.pane_id),node('span','remote-status',`${tab?.label||'terminal'} · ${pane.foreground_cwd||pane.cwd||''}`));
@@ -121,7 +141,7 @@
       this.send({type:'select',pane_id:id});
       if(id){const pane=this.snapshot?.panes.find(p=>p.pane_id===id);if(pane)this.showDetail(pane)}else{this.detail.hidden=true;this.list.hidden=false;this.bridge.logic.set({kb:false})}
     }
-    move(delta){const panes=this.snapshot?.panes||[];const i=panes.findIndex(p=>p.pane_id===this.selected);if(i>=0&&panes[i+delta])this.select(panes[i+delta].pane_id)}
+    move(delta){const panes=this.snapshot?orderHerdr(this.snapshot).flatMap(g=>g.panes):[];const i=panes.findIndex(p=>p.pane_id===this.selected);if(i>=0&&panes[i+delta])this.select(panes[i+delta].pane_id)}
     applyFit(){this.fitButton.textContent=this.fitOutput?'Fit to Phone':'Original Columns';this.fitButton.setAttribute('aria-pressed',String(this.fitOutput));this.fitButton.setAttribute('aria-label','Fit to Phone');this.term.nativeView.setFit(this.fitOutput)}
     trackScroll(){this.followOutput=this.term.nativeView.follow;this.latest.hidden=this.followOutput;}
     showLatest(){this.stopTouchScroll.cancel();this.followOutput=true;this.term.scrollToBottom();this.output.scrollLeft=0;this.latest.hidden=true;}
@@ -191,5 +211,5 @@
     key(key,mods){const input=keyInput(key,mods);if(!input)return;if(this.logic.cur()==='terminal')this.terminal?.input(input.data);else if(this.logic.cur()==='herd')this.herdr?.input(input)}
     dispose(){this.terminal?.dispose();this.herdr?.dispose();document.removeEventListener('visibilitychange',this.foreground);window.removeEventListener('online',this.foreground)}
   }
-  window.HyprlandRemote={attach:logic=>new HostBridge(logic),keyInput};
+  window.HyprlandRemote={attach:logic=>new HostBridge(logic),keyInput,orderHerdr};
 })();
