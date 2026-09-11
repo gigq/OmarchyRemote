@@ -28,6 +28,7 @@ test('persistent real shell accepts input, resizes, and reconnects',async()=>{
   assert.ok(Buffer.from(screen.data).toString().includes('MOBILE_REAL_SHELL'));assert.equal(screen.cols,60);assert.equal(screen.rows,20);
   assert.equal((await api('terminal/session',{id:session.id})).resumed,true);
   c.send({type:'input',data:'exit\r'});await c.wait(m=>m.type==='exit');
+  assert.equal((await api(`terminal/${session.id}/close`,{})).closed,true);
  }finally{c.ws.close()}
 });
 
@@ -48,4 +49,15 @@ test('real Herdr snapshot, selected pane output, literal input and Return',async
    await c.wait(m=>m.type==='input_error'&&m.id==='wrong-pane');
   }finally{c.ws.close()}
  }finally{if(workspace)await herdr('workspace.close',{workspace_id:workspace})}
+});
+
+test('closing an app-owned shell ends it without affecting another session',async()=>{
+ const first=await api('terminal/session',{}),second=await api('terminal/session',{});
+ const a=await connect(`terminal/${first.id}/ws`),b=await connect(`terminal/${second.id}/ws`);
+ try{
+  await a.wait(m=>m.type==='screen');await b.wait(m=>m.type==='screen');
+  assert.equal((await api(`terminal/${first.id}/close`,{})).closed,true);await a.wait(m=>m.type==='exit');
+  assert.equal((await api('terminal/session',{id:second.id})).resumed,true);
+  assert.equal((await api(`terminal/${first.id}/close`,{})).closed,true);
+ }finally{await api(`terminal/${first.id}/close`,{});await api(`terminal/${second.id}/close`,{});a.ws.close();b.ws.close()}
 });

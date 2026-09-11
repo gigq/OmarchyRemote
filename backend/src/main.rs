@@ -120,6 +120,17 @@ async fn session(
     .await
     .map_err(error)?
 }
+async fn terminal_close(
+    State(app): State<App>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let mut sessions = app.sessions.lock().unwrap();
+    if let Some(terminal) = sessions.get(&id) {
+        terminal.terminate().map_err(error)?;
+        sessions.remove(&id);
+    }
+    Ok(Json(json!({"closed":true})))
+}
 async fn terminal_upgrade(
     State(app): State<App>,
     Path(id): Path<String>,
@@ -313,6 +324,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/capabilities", get(capabilities))
         .route("/api/terminal/session", post(session))
         .route("/api/terminal/{id}/ws", get(terminal_upgrade))
+        .route("/api/terminal/{id}/close", post(terminal_close))
         .route("/api/herdr/snapshot", get(snapshot))
         .route("/api/herdr/panes/{id}", get(pane))
         .route("/api/herdr/panes/{id}/input", post(pane_input))

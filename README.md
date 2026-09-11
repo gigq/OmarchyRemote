@@ -71,3 +71,10 @@ The portable catalog includes all 22 installed Omarchy palettes plus the origina
 prototype. Refresh it with `python scripts/import-themes.py`; stock palettes come
 from `/usr/share/omarchy/themes`, with `~/.config/omarchy/themes` overlays applied.
 This copies color definitions only and does not change HOST's desktop theme.
+
+Startup opens Home only. In Expo, swipe an app card upward to dismiss it, or hold
+for about half a second and drag it to another slot to reorder workspaces. Home
+stays first and cannot be dismissed. Short swipes snap back; a cancelled reorder
+restores its original order. Workspace order lasts for the current page session.
+Closing Terminal terminates its app-owned HOST shell; reopening starts a new shell.
+Closing Herdr disconnects the phone view and leaves desktop panes and agents running.

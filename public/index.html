@@ -17,6 +17,7 @@
 <script src="/native-terminal.js"></script>
 <script src="/native-input.js"></script>
 <script src="/remote.js"></script>
+<script src="/expo.js"></script>
 <title>Hyprland Touch</title>
 <meta name="description" content="A Rosé Pine mobile OS prototype with touch workspaces, launcher, and SUPER keyboard.">
 <meta name="theme-color" content="#191724">
@@ -396,7 +397,7 @@
 
   <div style="position:absolute;inset:0;overflow:hidden">
 
-    <div sc-camel-on-click="{{ cHome.tap }}" style="position:absolute;inset:0;transform: {{ cHome.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cHome.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cHome.op }};pointer-events: {{ cHome.pe }};box-sizing:border-box;padding:100px 26px 0">
+    <div data-workspace="home" sc-camel-on-click="{{ cHome.tap }}" style="position:absolute;inset:0;transform: {{ cHome.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cHome.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cHome.op }};pointer-events: {{ cHome.pe }};box-sizing:border-box;padding:100px 26px 0">
       <div style="font-family:'Space Grotesk',sans-serif;font-size:76px;font-weight:500;letter-spacing:-3px;line-height:.9">13:37</div>
       <div style="font-family:'Space Grotesk',sans-serif;font-size:15px;color:var(--theme-rose);margin:12px 0 22px">Thursday, 10 September</div>
       <div style="display:flex;flex-direction:column;gap:10px">
@@ -426,18 +427,18 @@
       <div style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cHome.lab }};transition: {{ tr }};pointer-events:none">home</div>
     </div>
 
-    <div sc-camel-on-click="{{ cTerminal.tap }}" style="position:absolute;inset:0;transform: {{ cTerminal.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cTerminal.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cTerminal.op }};pointer-events: {{ cTerminal.pe }};box-sizing:border-box">
+    <div data-workspace="terminal" sc-camel-on-click="{{ cTerminal.tap }}" style="position:absolute;inset:0;transform: {{ cTerminal.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cTerminal.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-terminal);opacity: {{ cTerminal.op }};pointer-events: {{ cTerminal.pe }};box-sizing:border-box">
       <div id="remote-terminal-app" class="remote-app"></div>
       <div style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-terminal) 60%,transparent);opacity: {{ cTerminal.lab }};transition: {{ tr }};pointer-events:none">terminal</div>
     </div>
 
-    <div sc-camel-on-click="{{ cFirefox.tap }}" style="position:absolute;inset:0;transform: {{ cFirefox.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cFirefox.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cFirefox.op }};pointer-events: {{ cFirefox.pe }};box-sizing:border-box;display:flex;flex-direction:column">
+    <div data-workspace="firefox" sc-camel-on-click="{{ cFirefox.tap }}" style="position:absolute;inset:0;transform: {{ cFirefox.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cFirefox.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cFirefox.op }};pointer-events: {{ cFirefox.pe }};box-sizing:border-box;display:flex;flex-direction:column">
       <div style="flex:1;margin:62px 14px 0;border-radius:14px;background:repeating-linear-gradient(135deg,var(--theme-surface) 0 10px,var(--theme-background) 10px 20px);display:grid;place-items:center;font-size:11px;color:var(--theme-secondary)">page content</div>
       <div style="display:flex;align-items:center;gap:10px;margin:14px;padding:13px 16px;border-radius:14px;background:var(--theme-surface);border:1px solid var(--theme-border);font-size:12px"><span style="color:var(--theme-green)">🔒</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">wiki.archlinux.org/title/Wayland</span></div>
       <div style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cFirefox.lab }};transition: {{ tr }};pointer-events:none">firefox</div>
     </div>
 
-    <div sc-camel-on-click="{{ cPhone.tap }}" style="position:absolute;inset:0;transform: {{ cPhone.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cPhone.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cPhone.op }};pointer-events: {{ cPhone.pe }};box-sizing:border-box;display:flex;flex-direction:column;align-items:center;padding-top:112px">
+    <div data-workspace="phone" sc-camel-on-click="{{ cPhone.tap }}" style="position:absolute;inset:0;transform: {{ cPhone.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cPhone.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cPhone.op }};pointer-events: {{ cPhone.pe }};box-sizing:border-box;display:flex;flex-direction:column;align-items:center;padding-top:112px">
       <div style="font-family:'Space Grotesk',sans-serif;font-size:30px;letter-spacing:-.5px">+1 415 555 0134</div>
       <div style="font-size:11px;color:var(--theme-secondary);margin:6px 0 36px">san francisco, ca</div>
       <div style="display:grid;grid-template-columns:repeat(3,64px);gap:12px 24px"><sc-for list="{{ dial }}" as="d" hint-placeholder-count="12"><div style="width:64px;height:64px;border-radius:20px;background:var(--theme-surface);display:grid;place-items:center;font-size:22px">{{ d.l }}</div></sc-for></div>
@@ -445,7 +446,7 @@
       <div style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cPhone.lab }};transition: {{ tr }};pointer-events:none">phone</div>
     </div>
 
-    <div sc-camel-on-click="{{ cFiles.tap }}" style="position:absolute;inset:0;transform: {{ cFiles.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cFiles.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cFiles.op }};pointer-events: {{ cFiles.pe }};box-sizing:border-box">
+    <div data-workspace="files" sc-camel-on-click="{{ cFiles.tap }}" style="position:absolute;inset:0;transform: {{ cFiles.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cFiles.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cFiles.op }};pointer-events: {{ cFiles.pe }};box-sizing:border-box">
       <div style="display:flex;align-items:baseline;justify-content:space-between;padding:68px 18px 10px;font-size:12px"><div style="display:flex;gap:6px;color:var(--theme-secondary)"><span>~</span><span>/</span><span>src</span><span>/</span><span style="color:var(--theme-red);font-weight:600">mobile-hypr</span></div><span style="font-size:10px;color:var(--theme-dim)">9 items · {{ fileIdx }}/9</span></div>
       <div style="display:flex;flex-direction:column;padding:0 8px">
         <sc-for list="{{ fileRows }}" as="f" hint-placeholder-count="9"><div sc-camel-on-click="{{ f.on }}" style="display:flex;align-items:center;gap:12px;height:42px;padding:0 12px;border-radius:10px;background: {{ f.bg }};cursor:pointer"><div style="width:26px;height:26px;border-radius:8px;flex:none;display:grid;place-items:center;font-size:9px;font-weight:700;color: {{ f.gc }};background: {{ f.gbg }}">{{ f.g }}</div><div style="flex:1;min-width:0;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color: {{ f.c }}">{{ f.n }}</div><div style="font-size:10px;color:var(--theme-secondary);white-space:nowrap">{{ f.s }}</div><div style="font-size:10px;color:var(--theme-dim);white-space:nowrap;width:56px;text-align:right">{{ f.t }}</div></div></sc-for>
@@ -455,12 +456,12 @@
       <div style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cFiles.lab }};transition: {{ tr }};pointer-events:none">files</div>
     </div>
 
-    <div sc-camel-on-click="{{ cSettings.tap }}" style="position:absolute;inset:0;transform: {{ cSettings.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cSettings.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cSettings.op }};pointer-events: {{ cSettings.pe }};box-sizing:border-box">
+    <div data-workspace="settings" sc-camel-on-click="{{ cSettings.tap }}" style="position:absolute;inset:0;transform: {{ cSettings.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cSettings.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cSettings.op }};pointer-events: {{ cSettings.pe }};box-sizing:border-box">
       <div id="theme-settings" class="theme-settings"></div>
       <div style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cSettings.lab }};transition: {{ tr }};pointer-events:none">settings</div>
     </div>
 
-    <div sc-camel-on-click="{{ cHerd.tap }}" style="position:absolute;inset:0;transform: {{ cHerd.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cHerd.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cHerd.op }};pointer-events: {{ cHerd.pe }};box-sizing:border-box">
+    <div data-workspace="herd" sc-camel-on-click="{{ cHerd.tap }}" style="position:absolute;inset:0;transform: {{ cHerd.tf }};transform-origin:0 0;transition: {{ tr }};border:2px solid {{ cHerd.bd }};border-radius: {{ rad }};overflow:hidden;background:var(--theme-background);opacity: {{ cHerd.op }};pointer-events: {{ cHerd.pe }};box-sizing:border-box">
       <div id="remote-herdr-app" class="remote-app"></div>
       <div style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity: {{ cHerd.lab }};transition: {{ tr }};pointer-events:none">herd</div>
     </div>
@@ -528,16 +529,16 @@ class Component extends DCLogic {
     {g:'md',n:'README.md',s:'3.1K',t:'tue',perm:'-rw-r--r--',meta:'markdown · 96 lines',prev:[['# hyprland-touch','var(--theme-rose)'],['Arch + Hyprland on a phone.','var(--theme-secondary)'],['## install','var(--theme-rose)'],['./install.sh','var(--theme-secondary)']]},
     {g:'js',n:'waybar.jsonc',s:'1.8K',t:'tue',perm:'-rw-r--r--',meta:'jsonc · 64 lines',prev:[['{ "layer": "top",','var(--theme-secondary)'],['  "modules-left": ["hyprland/workspaces"],','var(--theme-secondary)'],['  "modules-right": ["network","battery"],','var(--theme-secondary)'],['  "height": 52 }','var(--theme-secondary)']]},
     {g:'png',n:'fastfetch.png',s:'218K',t:'12:41',perm:'-rw-r--r--',meta:'png · 1206×2622',prev:[['image preview · 1206×2622','var(--theme-dim)'],['sRGB · 8-bit','var(--theme-dim)']]}];
-  state = { ws:0, open:['home','terminal','firefox','phone'], ov:false, kb:false, sup:false, term:false, ctl:false, shade:null, launch:false, map:false, query:'', input:'', cursor:0, transcript:[], history:[], historyIndex:-1, draft:'', shift:false, fileSel:5, herdView:'list', herdG:0, pane:0, wifi:true, qs:{bluetooth:true,dnd:false,rotate:false,airplane:false,torch:false}, notifsCleared:false,
+  state = { ws:0, open:['home'], ov:false, kb:false, sup:false, term:false, ctl:false, shade:null, launch:false, map:false, query:'', input:'', cursor:0, transcript:[], history:[], historyIndex:-1, draft:'', shift:false, fileSel:5, herdView:'list', herdG:0, pane:0, wifi:true, qs:{bluetooth:true,dnd:false,rotate:false,airplane:false,torch:false}, notifsCleared:false,
     agents:[
       {ws:'mobile-hypr',m:'local',a:'claude',s:'working',t:'wiring edge gestures',tail:'▸ editing src/gestures.rs',el:'12m',lines:[['~/src/mobile-hypr ❯ claude','var(--theme-secondary)'],['› wire the edge gestures to hyprctl dispatch','var(--theme-foreground)'],['',''],['● Read src/gestures.rs (212 lines)','var(--theme-secondary)'],['● Read src/main.rs (88 lines)','var(--theme-secondary)'],['● Update src/gestures.rs +38 −4','var(--theme-secondary)'],['● Bash cargo check ✓ 0 warnings','var(--theme-secondary)'],['● Update src/gestures.rs +12 −0','var(--theme-secondary)'],['',''],['✻ Wiring the bottom-right zone to exec hyprctl dispatch…','var(--theme-green)'],['12m 04s · 48.2k tokens · esc to interrupt','var(--theme-dim)']]},
       {ws:'mobile-hypr',m:'local',a:'codex',s:'blocked',t:'waybar battery module',tail:'allow write to waybar/battery.rs?',el:'3m',ans:[{k:'n',l:'deny'},{k:'y',l:'allow once'},{k:'a',l:'allow always',p:true}],lines:[['~/src/mobile-hypr ❯ codex','var(--theme-secondary)'],['› add a battery module to waybar that reads /sys/class/power_supply','var(--theme-foreground)'],['',''],['• read waybar/config.jsonc','var(--theme-secondary)'],['• read waybar/modules/mod.rs','var(--theme-secondary)'],['• plan: battery.rs → register module → style.css','var(--theme-secondary)'],['',''],['┌ edit waybar/battery.rs','var(--theme-secondary)'],['│ + use std::fs;','var(--theme-green)'],['│ + const SYS_BAT: &str = "/sys/class/power_supply/BAT0";','var(--theme-green)'],['│ + pub fn read_capacity() -> u8 {','var(--theme-green)'],['│ +     fs::read_to_string(format!("{SYS_BAT}/capacity"))','var(--theme-green)'],['│ +         .map(|s| s.trim().parse().unwrap_or(0))','var(--theme-green)'],['│ − // TODO battery','var(--theme-red)'],['└ 6 lines','var(--theme-dim)'],['',''],['? Allow write to waybar/battery.rs? [y/n/a]','var(--theme-yellow)']]},
       {ws:'herdr-ios',m:'hetzner-1',a:'claude',s:'done',t:'swift bridge for socket api',tail:'+124 −31 · 3 files · tests pass',el:'41m',lines:[['~/src/herdr-ios ❯ claude','var(--theme-secondary)'],['› bridge the herdr socket api to swift','var(--theme-foreground)'],['',''],['● Write Sources/HerdrKit/Socket.swift +124','var(--theme-secondary)'],['● Update Package.swift +3 −1','var(--theme-secondary)'],['● Bash swift test ✓ 14 passed','var(--theme-secondary)'],['',''],['Done. Socket API bridged; ready to commit.','var(--theme-magenta)']]},
       {ws:'herdr-ios',m:'hetzner-1',a:'amp',s:'idle',t:'docs: agent guide',tail:'❯',el:'2h',lines:[['~/src/herdr-ios ❯ amp','var(--theme-secondary)'],['› draft docs/agent-guide.md','var(--theme-foreground)'],['● Write docs/agent-guide.md +212','var(--theme-secondary)'],['',''],['❯','var(--theme-foreground)']]},
       {ws:'dotfiles',m:'local',a:'claude',s:'blocked',t:'migrate to rosé pine',tail:'which variant? 1 main · 2 moon · 3 dawn',el:'1m',ans:[{k:'1',l:'main',p:true},{k:'2',l:'moon'},{k:'3',l:'dawn'}],lines:[['~/dotfiles ❯ claude','var(--theme-secondary)'],['› migrate the terminal theme to rosé pine','var(--theme-foreground)'],['',''],['● Read alacritty/alacritty.toml','var(--theme-secondary)'],['● Read nvim/lua/theme.lua','var(--theme-secondary)'],['',''],['? Which Rosé Pine variant for the terminal?','var(--theme-yellow)'],['  1 main   2 moon   3 dawn','var(--theme-secondary)']]}] };
-  componentDidMount(){ this.remote=window.HyprlandRemote?.attach(this); window.HyprlandThemes.attach() }
-  componentDidUpdate(){ this.remote?.update() }
-  componentWillUnmount(){ this.keyEnd();this.remote?.dispose() }
+  componentDidMount(){ this.remote=window.HyprlandRemote?.attach(this); window.HyprlandThemes.attach(); this.expo=window.HyprlandExpo.attach(this) }
+  componentDidUpdate(){ this.remote?.update(); this.expo?.update() }
+  componentWillUnmount(){ this.keyEnd();this.expo?.dispose();this.remote?.dispose() }
   ptr = null; wx = null;
   cancel=()=>{ this.ptr=null; this.ax=null; this.wx=null };
   aDown=e=>{ this.ax=e.clientX };
@@ -548,7 +549,8 @@ class Component extends DCLogic {
   cur(){ return this.state.open[this.state.ws] }
   go(i,open){ open=open||this.state.open; const n=open.length; this.set({open,ws:Math.max(0,Math.min(n-1,i)),ov:false,kb:false,sup:false,ctl:false,launch:false,shade:null,query:''}) }
   openApp(key){ const s=this.state; const i=s.open.indexOf(key); if(i>=0) return this.go(i); const open=[...s.open,key]; this.go(open.length-1,open) }
-  closeWs(){ const s=this.state, k=this.cur(); if(k==='home') return; const open=s.open.filter(x=>x!==k); this.go(Math.max(0,s.ws-1),open) }
+  async closeApp(k,expo=false){ if(k==='home'||!this.state.open.includes(k)||this.closing)return; this.closing=true; try{ await this.remote?.closeApp(k); const s=this.state,current=this.cur(),open=s.open.filter(x=>x!==k),ws=current===k?Math.max(0,s.ws-1):open.indexOf(current); this.set({open,ws,ov:expo,kb:false,sup:false,ctl:false}) }catch(e){ this.expo?.error('Could not close app. Check the HOST connection and try again.');this.set({}) }finally{this.closing=false} }
+  closeWs(){ this.closeApp(this.cur()) }
   down=e=>{ const r=e.currentTarget.getBoundingClientRect(); this.ptr={x:e.clientX-r.left,y:e.clientY-r.top,cx:e.clientX,cy:e.clientY,w:r.width,h:r.height} }
   up=e=>{ const p=this.ptr; if(!p) return; this.ptr=null; const dx=e.clientX-p.cx, dy=e.clientY-p.cy, s=this.state, E=Math.max(24,p.w*.08), T=40, third=p.w/3;
     if(s.shade && dy<-T) return this.set({shade:null});
@@ -698,7 +700,7 @@ class Component extends DCLogic {
       paneAns, paneAnsOp:pa.ans?1:0, paneAnsTf:pa.ans?'translateY(0)':'translateY(12px)', paneAnsPe:pa.ans?'auto':'none', paneReply:pa.ans?'or type a reply to '+pa.a+'…':'send a follow-up to '+pa.a+'…',
       prev:()=>this.go(s.ws-1), next:()=>this.go(s.ws+1), toggleOv:()=>this.set({ov:!s.ov,kb:false,launch:false}), toggleKb:()=>this.set({kb:!s.kb,sup:false,ov:false}), toggleSuper:()=>this.set({kb:true,sup:!s.sup,ov:false}),
       toggleLaunch:()=>this.set({launch:!s.launch,kb:!s.launch,sup:false,ov:false,shade:null,query:''}), toggleNotif:()=>this.set({shade:s.shade==='notif'?null:'notif',kb:false,ov:false,launch:false}), toggleQs:()=>this.set({shade:s.shade==='qs'?null:'qs',kb:false,ov:false,launch:false}), toggleMap:()=>this.set({map:!s.map}),
-      reset:()=>this.set({ws:0,open:['home','terminal','firefox','phone'],ov:false,kb:false,sup:false,term:false,ctl:false,shade:null,launch:false,query:'',herdView:'list',pane:0,herdG:0,notifsCleared:false})
+      reset:()=>this.set({ws:0,open:['home'],ov:false,kb:false,sup:false,term:false,ctl:false,shade:null,launch:false,query:'',herdView:'list',pane:0,herdG:0,notifsCleared:false})
     };
   }
 }

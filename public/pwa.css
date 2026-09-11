@@ -51,3 +51,8 @@ html, body { margin: 0; min-height: 100%; overscroll-behavior: none; }
 .touch-key.key-pressed:first-child::after { left: 0; transform: none; }
 .touch-key.key-pressed:last-child::after { left: auto; right: 0; transform: none; }
 .touch-key:focus-visible { outline: 2px solid var(--theme-green); outline-offset: -2px; }
+
+.expo-mode [data-workspace] { touch-action:none; }
+.expo-mode [data-workspace] > * { pointer-events:none !important; }
+.expo-mode [data-workspace].expo-lifted { box-shadow:0 14px 50px #0008; outline:5px solid var(--theme-accent); }
+.expo-notice { position:absolute; bottom:50px; left:24px; right:24px; z-index:30; padding:14px; border:1px solid var(--theme-red); border-radius:12px; color:var(--theme-foreground); background:var(--theme-surface); font-size:12px; line-height:1.5; }

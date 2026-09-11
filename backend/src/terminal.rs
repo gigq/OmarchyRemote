@@ -101,6 +101,17 @@ impl Terminal {
         writer.flush()?;
         Ok(())
     }
+    pub fn terminate(&self) -> Result<()> {
+        if self.output.lock().unwrap().exited {
+            return Ok(());
+        }
+        self.killer.lock().unwrap().kill()?;
+        let mut out = self.output.lock().unwrap();
+        out.exited = true;
+        out.sequence += 1;
+        let _ = self.events.send((out.sequence, Vec::new()));
+        Ok(())
+    }
     pub fn resize(&self, cols: u16, rows: u16) -> Result<()> {
         let cols = cols.clamp(20, 300);
         let rows = rows.clamp(4, 150);

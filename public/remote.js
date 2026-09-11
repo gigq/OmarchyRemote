@@ -66,7 +66,7 @@
       if(this.connecting||this.ws?.readyState===0||this.ws?.readyState===1||this.exited||this.disposed)return;
       clearTimeout(this.retry);this.connecting=true;this.status.textContent='HOST · connecting…';
       try{
-        const session=await api('terminal/session',{id:storage.get('omarchy-terminal-id')});storage.set('omarchy-terminal-id',session.id);
+        this.sessionRequest=api('terminal/session',{id:storage.get('omarchy-terminal-id')});const session=await this.sessionRequest;storage.set('omarchy-terminal-id',session.id);
         if(this.disposed)return;
         const ws=socket(`terminal/${session.id}/ws`);this.ws=ws;
         ws.onmessage=event=>{const m=JSON.parse(event.data);if(m.type==='screen'){
@@ -190,6 +190,16 @@
       this.logic=logic;this.terminal=null;this.herdr=null;
       this.foreground=()=>{if(!document.hidden){this.terminal?.resume();this.herdr?.resume()}};
       document.addEventListener('visibilitychange',this.foreground);window.addEventListener('online',this.foreground);this.update();
+    }
+    async closeApp(key){
+      const app=key==='terminal'?this.terminal:key==='herd'?this.herdr:null;
+      if(key==='terminal'){
+        const session=app?.sessionRequest?await app.sessionRequest:null;
+        const id=session?.id||storage.get('omarchy-terminal-id');
+        if(id)await api(`terminal/${encodeURIComponent(id)}/close`,{});
+        storage.set('omarchy-terminal-id',null);
+      }
+      if(app){app.dispose();app.root.replaceChildren();if(key==='terminal')this.terminal=null;else this.herdr=null}
     }
     createInput(root,message,send){return new NativeInput(root,{message,send,key:(key,mods)=>this.key(key,mods),focus:()=>{if(!this.logic.state.kb)this.logic.set({kb:true,sup:false})},hide:()=>this.logic.set({kb:false,sup:false})})}
     keyboard(){if(!this.logic.state.ov){this.logic.set({kb:true,sup:false});this.currentInput()?.focus()}}
