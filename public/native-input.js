@@ -13,7 +13,7 @@
       this.hideButton=button('⌄',()=>{this.field.blur();this.onHide()});this.hideButton.setAttribute('aria-label','Hide keyboard');
       const row=document.createElement('div');row.className='native-input-row';this.field=document.createElement('textarea');this.field.rows=2;this.field.className='native-input';this.field.setAttribute('autocomplete','off');this.field.setAttribute('inputmode','text');this.field.setAttribute('enterkeyhint','send');
       this.submit=document.createElement('button');this.submit.type='button';this.submit.className='native-send';this.submit.textContent='Send';this.submit.onpointerdown=e=>e.preventDefault();this.submit.onclick=()=>this.enter();row.append(this.field,this.submit);this.element.append(row);
-      const header=document.createElement('div');header.className='native-input-header';header.append(this.mode,this.hideButton);this.element.prepend(header);root.append(this.element);
+      const header=this.header=document.createElement('div');header.className='native-input-header';header.append(this.mode,this.hideButton);this.element.prepend(header);root.append(this.element);
       for(const type of ['pointerdown','touchstart','touchmove','touchend','click'])this.element.addEventListener(type,e=>e.stopPropagation(),{passive:true});
       this.field.onfocus=()=>this.onFocus();
       this.field.oncompositionstart=()=>{this.composing=true};
@@ -40,7 +40,11 @@
     clearCtrl(){this.ctrl=false;this.ctrlButton.setAttribute('aria-pressed','false')}
     sendText(text){if(this.ctrl&&text){this.key(Array.from(text)[0],{ctrl:true});text=Array.from(text).slice(1).join('');this.clearCtrl()}if(text)this.send(text,false)}
     rawInput(e){const text=this.field.value.split(sentinel).join('');if(text)this.sendText(text);else if(e?.inputType==='deleteContentBackward')this.key('⌫',{});this.reset()}
-    enter(){if(this.composing)return;if(this.message){this.saveDraft();if(this.send(this.draft,true)!==false){this.draft='';this.field.value=''}}else this.key('⏎',{});this.focus()}
+    enter(){if(this.composing||this.submit.disabled)return;if(this.message){this.saveDraft();if(this.send(this.draft,true)!==false){this.draft='';this.field.value=''}}else this.key('⏎',{});this.focus()}
+    attachImage(id,path){
+      this.saveDraft();const before=id===this.id?this.draft:(this.drafts.get(id)||'');const text=before+(before&&!before.endsWith('\n')?'\n':'')+'Image: '+path+'\n';
+      if(id===this.id){this.field.blur();this.message=true;this.draft=text;this.configure()}else this.drafts.set(id,text);
+    }
     focus(){this.element.hidden=false;this.field.focus({preventScroll:true});if(!this.message)this.field.setSelectionRange(this.field.value.length,this.field.value.length)}
     show(visible){this.element.hidden=!visible;if(!visible)this.field.blur()}
     select(id){this.saveDraft();if(this.id)this.drafts.set(this.id,this.draft);this.id=id;this.draft=this.drafts.get(id)||'';this.configure()}

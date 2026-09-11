@@ -41,7 +41,7 @@
 .native-terminal-row span { display:inline-block; height:100%; vertical-align:top; }
 
 .use-native-input .custom-keyboard { display:none; }
-.remote-app.native-typing.with-keyboard { bottom:calc(var(--keyboard-inset, 0px) + 8px); }
+.remote-app.native-typing.with-keyboard { bottom:max(40px, calc(var(--keyboard-inset, 0px) + 8px)); }
 .native-input-panel { flex:none; padding-top:6px; }
 .native-input-tools { display:flex; overflow-x:auto; gap:3px; touch-action:pan-x; }
 .native-input-tools button,.native-send { flex:none; min-width:44px; min-height:44px; border:1px solid var(--theme-border); border-radius:8px; color:var(--theme-foreground); background:var(--theme-surface-raised); font:13px system-ui; }
@@ -58,3 +58,34 @@
 .native-scroll-edge.right { right:0; }
 
 .herdr-input-bar:not(:has(button:not([hidden]), .remote-status:not(:empty))) { display:none; }
+
+.herdr-attach { display:grid; place-items:center; flex:none; min-width:36px; min-height:36px; padding:7px; }
+.herdr-detail-bar { gap:6px; }
+.herdr-detail-bar .herdr-pane-title { flex:1; }
+.remote-button:disabled,.native-send:disabled { opacity:.45; }
+
+.herdr-output > .herdr-latest { position:absolute; bottom:8px; right:8px; z-index:2; font-size:12px; }
+.native-input-header .herdr-latest { margin-left:auto; margin-right:8px; }
+
+.herdr-detail-bar .herdr-back { flex:none; min-width:36px; min-height:36px; padding:0 8px; font-size:26px; line-height:1; }
+
+.files-toolbar { display:flex; gap:7px; align-items:center; }
+.files-toolbar .remote-button { min-width:40px; min-height:40px; padding:6px 10px; }
+.files-toolbar .remote-button:nth-child(3) { margin-left:auto; }
+.files-path { font-size:12px; padding:12px 2px 8px; overflow:auto; white-space:nowrap; flex:none; user-select:text; }
+.files-content { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; touch-action:pan-y; padding-top:8px; }
+.files-entry { display:flex; align-items:center; gap:10px; width:100%; min-height:48px; border:0; border-bottom:1px solid var(--theme-border); background:transparent; color:var(--theme-foreground); text-align:left; font-family:inherit; font-size:12px; padding:10px 4px; }
+.files-name { flex:1; min-width:0; overflow-wrap:anywhere; }
+.files-icon { color:var(--theme-accent); font-size:20px; }
+.files-text { white-space:pre-wrap; overflow-wrap:anywhere; user-select:text; font:12px/1.6 'JetBrains Mono',monospace; }
+.files-image { max-width:100%; height:auto; display:block; margin-top:14px; }
+.files-actions { display:flex; gap:8px; font-size:12px; }
+.files-actions a { text-decoration:none; }
+.files-folder-form { display:flex; gap:6px; flex-wrap:wrap; position:absolute; inset:auto 0 max(0px, calc(var(--keyboard-inset, 0px) - 30px)); background:var(--theme-background); padding:12px 0; }
+.files-folder-form input { flex:1; min-width:120px; font:16px system-ui; padding:10px; background:var(--theme-surface); color:var(--theme-foreground); border:1px solid var(--theme-border); border-radius:8px; user-select:text; }
+.launcher-query { display:inline-flex; align-items:center; gap:0; min-width:0; overflow:hidden; white-space:pre; }
+.launcher-cursor { flex:none; width:8px; height:15px; background:var(--theme-magenta); }
+
+.host-tui-tools { display:flex; flex-wrap:wrap; gap:5px; padding-bottom:8px; }
+.host-tui-tools button { padding:7px; min-height:34px; font-size:11px; }
+.remote-app:has(.host-tui-tools) .native-terminal-row { font-size:var(--host-tui-font,12px); }

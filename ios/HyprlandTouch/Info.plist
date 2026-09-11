@@ -18,6 +18,10 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Use your approximate location to show local weather. Your city-level location is sent to your HOST server to fetch the forecast.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Take a photo to attach to your message. Photos you choose are uploaded to your HOST server.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

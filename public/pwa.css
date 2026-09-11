@@ -62,3 +62,12 @@ html, body { margin: 0; min-height: 100%; overscroll-behavior: none; }
 [data-workspace]::after { content:''; position:absolute; inset:54px 4px 34px; border:2px solid var(--pane-border); border-radius:10px; pointer-events:none; z-index:9; }
 .expo-mode [data-workspace]::after { inset:0; border-width:6px; border-radius:26px; }
 .expo-mode [data-workspace].expo-lifted { outline:none; }
+
+/* Match the iPhone 17 Pro indicator measured from the native screenshot (@3x). */
+.expo-swipe-hint { position:absolute; left:50%; bottom:8px; width:144px; height:5px; transform:translateX(-50%); border-radius:999px; background:var(--theme-accent); pointer-events:none; z-index:20; transition:opacity .15s ease, background-color .2s ease; }
+.system-keyboard-open .expo-swipe-hint { visibility:hidden; }
+@media (prefers-reduced-motion:reduce) { .expo-swipe-hint { transition:none; } }
+
+/* Keep composited Expo title gradients entirely inside the six-pixel frame.
+   WebKit may promote fading labels independently of the pseudo-element border. */
+.expo-mode .workspace-label { top:8px !important; left:8px !important; right:8px !important; padding:18px 20px !important; border-radius:18px 18px 0 0; z-index:1; }

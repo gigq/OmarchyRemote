@@ -4,10 +4,26 @@ One Rust service connects the mobile shell to apps on the host. `terminal.rs` ow
 
 The HTML development server on loopback 4187 forwards `/api/` HTTP and WebSocket traffic to this service on loopback 4188. Both remain behind the existing private Tailscale Serve address. The Node process handles static files and live reload only; PTYs, Herdr access, and app APIs live in Rust. A future production static frontend can use the same API contract.
 
+## Files API
+
+- `GET /api/files?path=&hidden=false`: list a home-relative or absolute directory inside HOME, directories first. Returns root, canonical path, parent and entries.
+- `GET /api/files/content?path=…`: regular-file bytes, up to 25 MiB; attachment/octet-stream, no-store, nosniff. The client renders text literally or uses an image blob.
+- `POST /api/files/upload?path=…&name=…`: raw file bytes, up to 25 MiB, creates a private file without replacing existing names. Shares the upload writer with Herdr image attachments.
+- `POST /api/files/folders` with `{ "path": "…", "name": "…" }`: creates a mode-0700 folder.
+
+- `GET /api/files/search?path=…&query=…&mode=names|contents|everywhere|fuzzy&hidden=false&regex=false&sensitive=false&glob=…`: bounded results with optional content line hits, timing and truncation state. Names searches the current directory; contents recurses; everywhere/fuzzy use HOME. Skips build/cache/VCS trees; limits 50,000 entries, 3 seconds, 32 MiB scanned text and 100 hits.
+- `GET /api/files/text?path=…`: UTF-8 text up to 1 MiB, SHA-256 version, permissions, owner UID and modification time.
+- `POST /api/files/text` with `{ "path": "…", "text": "…", "version": "…" }`: checks the original version and atomically replaces the file, preserving permission bits. Rejects conflicting external edits.
+- `POST /api/files/operate` with `{ "action": "copy|move|rename|trash", "paths": ["…"], "destination": "…", "name": "…" }`: up to 100 selections. Destination is used for copy/move; name for single-item rename. Returns completed paths and per-item errors. Never replaces destinations. Copy stages privately, then publishes atomically. Trash uses `gio trash` and remains recoverable on the host.
+- `POST /api/files/archive` with `{ "paths": ["…"] }`: ZIP attachment with HOME-relative paths, capped at 25 MiB. Copy/archive reject symlinks and special files, and cap trees at 10,000 entries.
+
+Paths are canonicalized and confined to HOME; external symlinks and the proxy-secret file (including aliases) are excluded. Upload names cannot contain path separators. Selection actions cannot operate on HOME or ancestors of the proxy secret. Writes are serialized within the backend; destination moves/renames use Linux no-replace semantics.
+
 ## App API v1
 
+- `POST /api/uploads/images`: raw image bytes (maximum 10 MiB), returning `{ "path": "/absolute/host/path" }`. Detects PNG/JPEG/GIF/WebP/HEIC/HEIF signatures; stores unique mode-0600 files under `$HOME/.local/share/omarchy-remote/uploads` (mode 0700). Does not send pane input or expose a download route. Files persist until removed on the host.
 - `GET /api/capabilities`: host and available app adapters.
-- `POST /api/terminal/session` with `{ "id": "optional previous ID" }`: create or resume a shell. Missing/expired IDs create a new session; the returned ID must replace the saved one.
+- `POST /api/terminal/session` with `{ "id": "optional previous ID", "app": "terminal" }`: create or resume a shell. Optional `cwd` selects a HOME-confined directory for a new Terminal shell. `app: "btop"` launches the fixed `/usr/bin/btop` executable in an independent session. `app: "services"` launches `$HOME/.cargo/bin/systemctl-tui --no-log`; `app: "lazydocker"`, `"dua"`, and `"lnav"` launch fixed commands for Docker, HOME disk usage, and a live host journal viewer. Other app values and cross-app resume IDs are rejected. Missing/expired IDs create a new session; the returned ID must replace the saved one.
 - `WS /api/terminal/{id}/ws`: receive `screen` (UTF-8 bytes plus dimensions), `output` (bytes), `exit`, and `error`; send `input` (`data` string) or `resize` (`cols`, `rows`). A screen snapshot restores the terminal after reconnection. PTYs remain alive across app closure and live reload, until shell exit or backend restart. Up to eight shells may be open. Reconnection restores the current screen, not previous client scrollback.
 - `GET /api/herdr/snapshot`: local Herdr workspaces, tabs, agents, and panes.
 - `GET /api/herdr/panes/{id}`: most recent 300 lines, with ANSI formatting.
@@ -27,6 +43,10 @@ Optional settings:
 - `OMARCHY_HERDR_SOCKET` defaults to `$HOME/.config/herdr/herdr.sock`.
 - `SHELL` selects the terminal shell. The installed service uses `/bin/bash` with the user's login configuration and starts in their home directory. Agent-specific environment and the proxy secret are removed from child shells.
 
+The additional TUI dependencies are `/usr/bin/lazydocker`, `/usr/bin/dua`, and `$HOME/.local/bin/lnav` (0.14.1 standalone upstream release). Lnav starts `journalctl --no-pager -f -n 1000 -o short-iso` using its command capture. Lnav waits for a frontend `ready` message after screen restoration and sizing, so its startup capability queries reach the client. Child PTYs receive host-side cursor-query replies so startup does not depend on a connected browser; frontend DSR replies are suppressed to avoid duplicate input.
+
+Install the Services dependency with `cargo install systemctl-tui --version 0.7.0 --locked` as the backend user. It runs without sudo and shows both system and user units; host permissions govern service actions.
+
 Build with `cargo build --release --manifest-path backend/Cargo.toml`. Run through the enabled `omarchy-remote.service`. Restart that service after changing Rust; running PTYs end on restart. Restart `hyprland-touch-dev.service` after proxy/server changes. Web asset saves require neither restart.
 
 Validation:
@@ -42,3 +62,18 @@ npm run build && npm test
 Backend integration tests require the services and local Herdr. They create a dedicated temporary Herdr workspace with `focus:false`, send test commands only there, and remove it afterward. Browser tests type into a separate shell and read existing Herdr panes without sending input to agents.
 
 Sources: [xterm.js API](https://xtermjs.org/docs/api/terminal/classes/terminal/), [portable-pty API](https://docs.rs/portable-pty/latest/portable_pty/), and the installed `herdr api schema --json` contract.
+
+## Browser adapters
+
+`GET /api/browser/snapshot` returns connected adapter instances with windows,
+workspaces and tabs. `POST /api/browser/action` accepts `instance_id`, `action`
+(create/close/focus/reload/pin/mute/move), and the relevant live `tab_id`,
+`window_id`, `url`, `value` or `index`. Workspace writes require the adapter's
+`workspace_write` capability. Commands use per-connection IDs, expiry and explicit
+acknowledgments. A timeout is ambiguous; refresh before retrying.
+
+The Vivaldi extension uses native messaging through the same Rust binary
+(`--browser-bridge`) and `$XDG_RUNTIME_DIR/omarchy-remote-browser.sock` (0600,
+peer UID checked). `OMARCHY_BROWSER_SOCKET` supports isolated testing. No proxy
+secret is passed to the browser. See `browser-extension/README.md` for installation,
+profile configuration, Vivaldi workspace metadata and URL-only phone navigation.

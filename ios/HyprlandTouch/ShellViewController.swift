@@ -1,6 +1,8 @@
 import UIKit
 import WebKit
 import OSLog
+import CoreLocation
+import SafariServices
 
 @MainActor
 private final class ShellWebView: WKWebView {
@@ -9,10 +11,116 @@ private final class ShellWebView: WKWebView {
 }
 
 @MainActor
+private final class WeatherDeviceBridge: NSObject, WKScriptMessageHandlerWithReply, CLLocationManagerDelegate {
+    private lazy var manager: CLLocationManager = {
+        let manager = CLLocationManager()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
+        return manager
+    }()
+    private let geocoder = CLGeocoder()
+    private var pending: (@MainActor @Sendable (Any?, String?) -> Void)?
+    private var timeout: DispatchWorkItem?
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage, replyHandler: @escaping @MainActor @Sendable (Any?, String?) -> Void) {
+        let origin = message.frameInfo.securityOrigin
+        guard message.frameInfo.isMainFrame,
+              (origin.protocol == "https" && origin.host == "your-host.your-tailnet.ts.net" && origin.port == 12443) || message.frameInfo.request.url?.isFileURL == true,
+              let body = message.body as? [String: Any] else {
+            replyHandler(nil, "Unsupported page")
+            return
+        }
+        if body["action"] as? String == "locale" {
+            let unit = UnitTemperature(forLocale: .current)
+            replyHandler(["unit": unit == .fahrenheit ? "f" : "c", "locale": Locale.current.identifier], nil)
+            return
+        }
+        guard body["action"] as? String == "location" else { replyHandler(nil, "Unknown request"); return }
+        guard pending == nil else { replyHandler(nil, "Location request already in progress"); return }
+        pending = replyHandler
+        let timer = DispatchWorkItem { [weak self] in self?.finish(nil, error: "Location timed out. Try again or choose a city.") }
+        timeout = timer
+        DispatchQueue.main.asyncAfter(deadline: .now() + 25, execute: timer)
+        if manager.authorizationStatus == .notDetermined {
+            if body["requestPermission"] as? Bool == true { manager.requestWhenInUseAuthorization() }
+            else { finish(nil, error: "Tap Use phone location to allow location access.") }
+        } else { requestAuthorizedLocation() }
+    }
+    private func requestAuthorizedLocation() {
+        switch manager.authorizationStatus {
+        case .authorizedAlways, .authorizedWhenInUse: manager.requestLocation()
+        case .denied, .restricted: finish(nil, error: "Location access is off. Enable it in iOS Settings or choose a city.")
+        default: break
+        }
+    }
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        if pending != nil { requestAuthorizedLocation() }
+    }
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard pending != nil, let location = locations.last, location.horizontalAccuracy >= 0 else { return }
+        let coordinate = location.coordinate
+        // City-level coordinates are enough for a weather forecast.
+        let lat = (coordinate.latitude * 100).rounded() / 100
+        let lon = (coordinate.longitude * 100).rounded() / 100
+        geocoder.reverseGeocodeLocation(location) { [weak self] places, _ in
+            Task { @MainActor in
+                let name = places?.first?.locality ?? places?.first?.subAdministrativeArea ?? "Current location"
+                self?.finish(["lat": lat, "lon": lon, "name": name], error: nil)
+            }
+        }
+    }
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        if (error as? CLError)?.code == .locationUnknown { return }
+        finish(nil, error: "Could not find your location. Try again or choose a city.")
+    }
+    private func finish(_ value: [String: Any]?, error: String?) {
+        let reply = pending
+        pending = nil
+        timeout?.cancel()
+        timeout = nil
+        manager.stopUpdatingLocation()
+        geocoder.cancelGeocode()
+        reply?(value, error)
+    }
+}
+
+@MainActor
+private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithReply {
+    weak var presenter: UIViewController?
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage, replyHandler: @escaping @MainActor @Sendable (Any?, String?) -> Void) {
+        let origin = message.frameInfo.securityOrigin
+        guard message.frameInfo.isMainFrame,
+              (origin.protocol == "https" && origin.host == "your-host.your-tailnet.ts.net" && origin.port == 12443) || message.frameInfo.request.url?.isFileURL == true,
+              let body = message.body as? [String: Any],
+              let raw = body["url"] as? String, let url = URL(string: raw),
+              ["https", "http"].contains(url.scheme?.lowercased() ?? ""), url.host != nil,
+              let presenter, presenter.presentedViewController == nil else {
+            replyHandler(nil, "Cannot open this page")
+            return
+        }
+        // Untrusted websites run in Safari's isolated view, without shell message handlers.
+        let browser = SFSafariViewController(url: url)
+        func color(_ key: String) -> UIColor? {
+            guard let rgb = body[key] as? [Double], rgb.count == 3,
+                  rgb.allSatisfy({ $0.isFinite && (0...255).contains($0) }) else { return nil }
+            return UIColor(red: rgb[0] / 255, green: rgb[1] / 255, blue: rgb[2] / 255, alpha: 1)
+        }
+        browser.preferredBarTintColor = color("background")
+        browser.preferredControlTintColor = color("accent")
+        browser.dismissButtonStyle = .close
+        browser.modalPresentationStyle = .fullScreen
+        presenter.present(browser, animated: true)
+        replyHandler(["opened": true], nil)
+    }
+}
+
+@MainActor
 final class ShellViewController: UIViewController, WKNavigationDelegate {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "HyprlandTouch", category: "Shell")
     private let background = UIColor(red: 25 / 255, green: 23 / 255, blue: 36 / 255, alpha: 1)
     private var webView: WKWebView!
+    private let weatherDevice = WeatherDeviceBridge()
+    private let browserDevice = BrowserDeviceBridge()
     private var webRoot: URL?
     private let retryButton = UIButton(type: .system)
     private let sourceButton = UIButton(type: .system)
@@ -43,6 +151,9 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
+        browserDevice.presenter = self
+        configuration.userContentController.addScriptMessageHandler(browserDevice, contentWorld: .page, name: "browserDevice")
+        configuration.userContentController.addScriptMessageHandler(weatherDevice, contentWorld: .page, name: "weatherDevice")
         webView = ShellWebView(frame: .zero, configuration: configuration)
         webView.translatesAutoresizingMaskIntoConstraints = false
         webView.navigationDelegate = self
@@ -238,7 +349,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     func webView(
         _ webView: WKWebView,
         decidePolicyFor navigationAction: WKNavigationAction,
-        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
         guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
         if let live = developmentURL,
@@ -256,7 +367,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         }
     }
 
-    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping @MainActor @Sendable (WKNavigationResponsePolicy) -> Void) {
         if navigationResponse.isForMainFrame,
            let response = navigationResponse.response as? HTTPURLResponse,
            !(200..<300).contains(response.statusCode) {

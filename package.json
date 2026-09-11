@@ -8,7 +8,8 @@
     "test": "node --test scripts/worker.test.mjs scripts/keyboard.test.mjs scripts/remote-client.test.mjs",
     "test:live": "node --test scripts/live-server.test.mjs",
     "test:backend": "node --test scripts/backend.test.mjs",
-    "test:ui": "playwright test"
+    "test:ui": "playwright test",
+    "test:browser-adapter": "node --test scripts/browser-integration.test.mjs"
   },
   "dependencies": {
     "@xterm/addon-fit": "0.11.0",

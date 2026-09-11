@@ -25,7 +25,7 @@ test('control editing and hide/reopen keep input',()=>{
 });
 test('launcher and super routing remain functional',()=>{
  const c=terminal();c.set({launch:true});type(c,'term');assert.equal(c.state.query,'term');assert.equal(c.state.input,'');c.type('⏎');assert.equal(c.cur(),'terminal');
- c.set({sup:true});const w=c.renderVals().kbRows.flatMap(r=>r.keys).find(k=>k.l==='web');w.on();assert.equal(c.cur(),'firefox');
+ c.set({sup:true});const w=c.renderVals().kbRows.flatMap(r=>r.keys).find(k=>k.l==='files');w.on();assert.equal(c.cur(),'files');
 });
 test('held delete repeats and pointer cancellation stops it',async()=>{
  const c=terminal();type(c,'abcdefghij');const event={button:0,pointerId:1,preventDefault(){},stopPropagation(){},currentTarget:{setPointerCapture(){}}};
@@ -49,4 +49,13 @@ test('bottom swipes favor expo while keyboard stays in the outer corners',()=>{
       assert.equal(c.state.kb,true);assert.equal(c.state.sup,fraction>.5);assert.equal(c.state.ov,false);
     }
   }
+});
+
+
+test('workspace limit preserves existing navigation and permits opening after close',async()=>{
+ const c=terminal();for(const key of Object.keys(c.APPS))c.openApp(key);
+ assert.equal(c.state.open.length,10);
+ c.APPS.extra={n:'extra'};c.openApp('extra');assert.equal(c.state.open.length,10);assert.ok(!c.state.open.includes('extra'));
+ c.openApp('files');assert.equal(c.cur(),'files');
+ await c.closeApp('files');c.openApp('extra');assert.equal(c.state.open.length,10);assert.equal(c.cur(),'extra');
 });

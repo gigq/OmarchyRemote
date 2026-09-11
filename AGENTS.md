@@ -1,3 +1,9 @@
+# Feature commits
+
+- Commit each completed feature or fix after its relevant checks pass, before reporting it finished. Do not accumulate unrelated completed work in the working tree.
+- Honor explicit requests to leave an experiment uncommitted. Preserve unrelated in-progress changes and keep each commit focused.
+- A request to commit does not imply pushing or publishing.
+
 # Prototype iteration
 
 The installed development iPhone app loads `https://your-host.your-tailnet.ts.net:12443/native/` over Tailscale. The persistent HOST user service is `hyprland-touch-dev.service`; its source server is `scripts/serve.mjs` on loopback port 4187.
@@ -16,7 +22,7 @@ The hosted Sites PWA is a separate delivery path. Publish it only when that is p
 
 - One Rust backend in `backend/` serves all host apps. Terminal owns PTYs; Herdr uses the local Unix socket. Add future app adapters under this shared backend, not separate servers per app.
 - `omarchy-remote.service` is enabled on loopback 4188. The existing Node server proxies `/api/` and WebSockets through the same Tailscale URL.
-- `public/remote.js` and `public/remote.css` own the real app views. `public/native-terminal.js` renders xterm buffers into native overflow views; `public/native-input.js` owns system-keyboard input and pane drafts. The exported component owns shell gestures and the launcher/SUPER custom keyboard.
+- `public/remote.js` and `public/remote.css` own the real app views. `public/native-terminal.js` renders xterm buffers into native overflow views; `public/native-input.js` owns system-keyboard input and pane drafts. `public/dashboard.js` and `public/dashboard.css` own Home summaries, pinned apps, notifications, and the native-input launcher. The exported component owns shell gestures and the SUPER custom keyboard.
 - Build changed Rust with `cargo build --release --manifest-path backend/Cargo.toml`, then restart `omarchy-remote.service`. This ends backend-owned shells; finish isolated tests before restarting. HTML edits preserve running shells.
 - Never print or embed `~/.config/omarchy-remote/backend.env`; its proxy secret is server-only. Both services load it.
 - `npm run test:backend` creates and deletes its own test workspace in Herdr. Never send QA prompts, approvals, or test input into existing agent panes. `npm run test:ui` uses headless Chromium and reads existing Herdr panes without typing into them.

@@ -5,7 +5,7 @@ async function drag(p,from,to,hold=0){await p.mouse.move(from.x,from.y);await p.
 const center=async el=>{const r=await el.boundingBox();return{x:r.x+r.width/2,y:r.y+r.height/2}};
 test('Home-only startup, toss dismissal, long press reorder and protected Home',async({page:p})=>{
  await p.route('**/api/**',r=>r.abort());await p.goto('/native/');
- await expect(card(p,'terminal')).toHaveCSS('opacity','0');await expect(card(p,'firefox')).toHaveCSS('opacity','0');
+ await expect(card(p,'terminal')).toHaveCSS('opacity','0');await expect(card(p,'firefox')).toHaveCount(0);await expect(card(p,'phone')).toHaveCount(0);
  await p.getByText('settings',{exact:true}).first().click();await expo(p);
  let a=await center(card(p,'settings'));await drag(p,a,{x:a.x,y:a.y-30});await expect(card(p,'settings')).toHaveCSS('opacity','1');await drag(p,a,{x:a.x,y:a.y-115});await expect(card(p,'settings')).toHaveCSS('opacity','0');await expect(p.locator('#touch-shell')).toHaveClass(/expo-mode/);
  a=await center(card(p,'home'));await drag(p,a,{x:a.x,y:a.y-115});await expect(card(p,'home')).toHaveCSS('opacity','1');

@@ -29,7 +29,7 @@ test('Herdr touch history stays anchored during updates and typed text is visibl
   const created=await herdr('workspace.create',{label:'Mobile scrolling test',cwd:'/tmp',focus:false});workspace=created.workspace.workspace_id;
   const snap=(await herdr('session.snapshot',{})).snapshot;const pane=snap.panes.find(p=>p.workspace_id===workspace).pane_id;
   await herdr('pane.send_input',{pane_id:pane,text:'seq 1 160',keys:['Enter']});
-  await captureTerminals(page);await page.goto('/native/');await page.getByText('herd',{exact:true}).first().click();await page.locator('.herdr-group').filter({hasText:'Mobile scrolling test'}).locator('.herdr-pane').click();
+  await captureTerminals(page);await page.goto('/native/');await page.getByText('herdr',{exact:true}).first().click();await page.locator('.herdr-group').filter({hasText:'Mobile scrolling test'}).locator('.herdr-pane').click();
   await expect.poll(async()=>(await state(page)).bottom).toBeGreaterThan(90);
   await drag(page,300,650);await expect.poll(async()=>{const s=await state(page);return s.bottom-s.top}).toBeGreaterThan(10);
   await expect(page.locator('#remote-herdr-app')).not.toHaveClass(/with-keyboard/);
@@ -54,9 +54,9 @@ test('Herdr touch history stays anchored during updates and typed text is visibl
   await key(page,'⏎');await expect.poll(async()=>{const r=await herdr('pane.read',{pane_id:pane,source:'recent',lines:5,format:'text'});return r.read.text}).toContain('\nhello');
   const fitting=page.getByRole('button',{name:'Fit to Phone',exact:true});
   await expect(fitting).toHaveAttribute('aria-pressed','true');
-  await fitting.click();await expect(fitting).toHaveText('Original Columns');
+  await fitting.click();await expect(fitting).toHaveText('Original');
   expect(await page.evaluate(()=>localStorage.getItem('omarchy-herdr-fit'))).toBe('false');
-  await fitting.click();await expect(fitting).toHaveText('Fit to Phone');
+  await fitting.click();await expect(fitting).toHaveText('Fit');
   expect(await page.evaluate(()=>localStorage.getItem('omarchy-herdr-fit'))).toBe('true');
   await page.screenshot({path:'artifacts/browser/herdr-input-visible.png'});
  }finally{if(workspace)await herdr('workspace.close',{workspace_id:workspace})}

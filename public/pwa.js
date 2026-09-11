@@ -45,7 +45,8 @@ if (!window.__HYPRLAND_DEV__ && 'serviceWorker' in navigator && window.isSecureC
 function fitNativeKeyboard(){
   const viewport=window.visualViewport;
   const scale=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--canvas-scale'))||1;
-  const inset=viewport?Math.max(0,window.innerHeight-viewport.height-viewport.offsetTop):0;
+  const inset=viewport?Math.max(0,window.innerHeight-viewport.height):0;
+  document.documentElement.classList.toggle('system-keyboard-open',inset>80);
   document.documentElement.style.setProperty('--keyboard-inset',`${inset/scale}px`);
 }
 window.visualViewport?.addEventListener('resize',fitNativeKeyboard);

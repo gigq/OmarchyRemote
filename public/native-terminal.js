@@ -105,6 +105,7 @@
         for(let x=entry.start;x<entry.end;x++){
           const c=line.getCell(x,cell);if(!c||!c.getWidth())continue;
           let fg=c.isFgDefault()?(this.term.options.theme.foreground||'#e0def4'):color(c.getFgColor(),c.isFgRGB()),bg=c.isBgDefault()?'transparent':color(c.getBgColor(),c.isBgRGB());
+          if(this.colorTransform){fg=this.colorTransform(fg,false);bg=this.colorTransform(bg,true);if(bg!=='transparent')fg='var(--theme-foreground)';if(this.themeBoxBorders&&/^[\u2500-\u257f]+$/.test(c.getChars()))fg='var(--theme-accent)'}
           if(c.isInverse())[fg,bg]=[bg==='transparent'?(this.term.options.theme.background||'#15131f'):bg,fg];
           const cursor=this.cursorVisible&&!term.options.disableStdin&&entry.source===b.baseY+b.cursorY&&x===b.cursorX;
           const decoration=[c.isUnderline()?'underline':'',c.isStrikethrough()?'line-through':'',c.isOverline()?'overline':''].filter(Boolean).join(' ')||'none';

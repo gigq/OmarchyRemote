@@ -1,10 +1,16 @@
+mod ansi;
+mod browser;
+mod files;
+mod files_ops;
 mod herdr;
 mod terminal;
+mod uploads;
+mod widgets;
 
 use axum::{
     Json, Router,
     extract::{
-        DefaultBodyLimit, Path, State, WebSocketUpgrade,
+        DefaultBodyLimit, Path, Query, State, WebSocketUpgrade,
         ws::{Message, WebSocket},
     },
     http::StatusCode,
@@ -29,6 +35,7 @@ struct App {
     origins: Arc<Vec<String>>,
     sessions: Sessions,
     herdr: herdr::Herdr,
+    widgets: widgets::Widgets,
 }
 type ApiError = (StatusCode, Json<Value>);
 fn error(e: impl std::fmt::Display) -> ApiError {
@@ -82,13 +89,50 @@ fn authorized_browser(
         client == Some("1")
     }
 }
+async fn image_upload(body: axum::body::Bytes) -> Result<Json<Value>, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        let dir = uploads::directory().map_err(error)?;
+        let path = uploads::store(&dir, &body).map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error":e.to_string()})),
+            )
+        })?;
+        Ok(Json(json!({"path":path})))
+    })
+    .await
+    .map_err(error)?
+}
+async fn widget_snapshot(State(app): State<App>) -> Json<Value> {
+    Json(app.widgets.lock().unwrap().clone())
+}
+#[derive(Deserialize)]
+struct CityQuery {
+    name: String,
+}
+async fn widget_cities(Query(q): Query<CityQuery>) -> Result<Json<Value>, ApiError> {
+    widgets::cities(&q.name).await.map(Json).map_err(error)
+}
+#[derive(Deserialize)]
+struct WeatherQuery {
+    lat: f64,
+    lon: f64,
+}
+async fn widget_weather(Query(q): Query<WeatherQuery>) -> Result<Json<Value>, ApiError> {
+    widgets::weather(q.lat, q.lon)
+        .await
+        .map(Json)
+        .map_err(error)
+}
 async fn capabilities() -> Json<Value> {
     Json(
-        json!({"version":1,"host":std::env::var("HOSTNAME").unwrap_or_else(|_|"host".into()),"apps":[{"id":"terminal","name":"Terminal","features":["pty","resize","reconnect"]},{"id":"herdr","name":"Herdr","features":["workspaces","agents","panes","input"]}]}),
+        json!({"version":1,"host":std::env::var("HOSTNAME").unwrap_or_else(|_|"host".into()),"apps":[{"id":"browser","name":"Browser","features":["tabs","windows","workspaces","close","move","create","pin","mute"]},{"id":"lazydocker","name":"Lazydocker","features":["docker","reconnect"]},{"id":"dua","name":"dua","features":["disk-usage","reconnect"]},{"id":"lnav","name":"lnav","features":["logs","reconnect"]},{"id":"services","name":"Services","features":["systemd","reconnect"]},{"id":"btop","name":"btop","features":["monitor","reconnect"]},{"id":"files","name":"Files","features":["browse","preview","upload","mkdir","search","fuzzy","selection","archive","move","copy","rename","trash","edit"]},{"id":"terminal","name":"Terminal","features":["pty","resize","reconnect"]},{"id":"herdr","name":"Herdr","features":["workspaces","agents","panes","input"]}]}),
     )
 }
 #[derive(Deserialize)]
 struct SessionRequest {
+    cwd: Option<String>,
+    app: Option<String>,
     id: Option<String>,
 }
 async fn session(
@@ -97,10 +141,23 @@ async fn session(
 ) -> Result<Json<Value>, ApiError> {
     let sessions = app.sessions.clone();
     tokio::task::spawn_blocking(move || {
+        let program = req.app.as_deref().unwrap_or("terminal");
+        if !["terminal", "btop", "services", "lazydocker", "dua", "lnav"].contains(&program) {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error":"Unknown host app"})),
+            ));
+        }
         let mut sessions = sessions.lock().unwrap();
         if let Some(id) = req.id
             && let Some(terminal) = sessions.get(&id)
         {
+            if terminal.program != program {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error":"Session belongs to another app"})),
+                ));
+            }
             return Ok(Json(
                 json!({"id":id,"exited":terminal.output.lock().unwrap().exited,"resumed":true}),
             ));
@@ -112,7 +169,16 @@ async fn session(
                 Json(json!({"error":"Eight shells are already open. Exit an unused shell first."})),
             ));
         }
-        let terminal = Terminal::spawn().map_err(error)?;
+        let cwd = if let Some(path) = req.cwd {
+            let path = files::resolve(&files::root().map_err(error)?, &path).map_err(error)?;
+            if !path.is_dir() {
+                return Err(error("Choose a folder"));
+            }
+            Some(path)
+        } else {
+            None
+        };
+        let terminal = Terminal::spawn(program, cwd).map_err(error)?;
         let id = uuid::Uuid::new_v4().to_string();
         sessions.insert(id.clone(), terminal);
         Ok(Json(json!({"id":id,"exited":false,"resumed":false})))
@@ -161,7 +227,16 @@ async fn terminal_socket(mut socket: WebSocket, terminal: Arc<Terminal>) {
         (
             terminal.events.subscribe(),
             out.sequence,
-            out.parser.screen().contents_formatted(),
+            {
+                let screen = out.parser.screen();
+                let mut bytes = if screen.alternate_screen() {
+                    b"\x1b[?1049h".to_vec()
+                } else {
+                    Vec::new()
+                };
+                bytes.extend(screen.state_formatted());
+                bytes
+            },
             cols,
             rows,
             out.exited,
@@ -189,6 +264,7 @@ async fn terminal_socket(mut socket: WebSocket, terminal: Arc<Terminal>) {
                 Some(Ok(Message::Text(text)))=>{
                     let result=match serde_json::from_str::<Value>(&text) {
                         Ok(v)=>match v["type"].as_str(){
+                            Some("ready")=>terminal.start(),
                             Some("input")=>terminal.input(v["data"].as_str().unwrap_or("").as_bytes()),
                             Some("resize")=>terminal.resize(v["cols"].as_u64().unwrap_or(80).min(300) as u16,v["rows"].as_u64().unwrap_or(24).min(150) as u16),
                             _=>Err(anyhow::anyhow!("Unknown terminal message")),
@@ -295,6 +371,10 @@ async fn herdr_socket(mut socket: WebSocket, herdr: herdr::Herdr) {
 }
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    if std::env::args().nth(1).as_deref() == Some("--browser-bridge") {
+        return browser::native_bridge();
+    }
+    browser::start().await?;
     let token = std::env::var("OMARCHY_PROXY_TOKEN").expect("OMARCHY_PROXY_TOKEN is required");
     assert!(
         token.len() >= 32,
@@ -319,9 +399,35 @@ async fn main() -> anyhow::Result<()> {
         origins: Arc::new(origins),
         sessions: Arc::new(Mutex::new(HashMap::new())),
         herdr: herdr::Herdr { path },
+        widgets: widgets::start(),
     };
     let router = Router::new()
         .route("/api/capabilities", get(capabilities))
+        .route("/api/browser/snapshot", get(browser::snapshot))
+        .route("/api/browser/action", post(browser::action))
+        .route(
+            "/api/uploads/images",
+            post(image_upload).layer(DefaultBodyLimit::max(uploads::MAX_BYTES)),
+        )
+        .route("/api/files", get(files::list))
+        .route("/api/files/search", get(files_ops::search))
+        .route("/api/files/operate", post(files_ops::operate))
+        .route("/api/files/archive", post(files_ops::archive))
+        .route(
+            "/api/files/text",
+            get(files_ops::text)
+                .post(files_ops::save)
+                .layer(DefaultBodyLimit::max(2 * 1024 * 1024)),
+        )
+        .route("/api/files/content", get(files::content))
+        .route("/api/files/folders", post(files::mkdir))
+        .route(
+            "/api/files/upload",
+            post(files::upload).layer(DefaultBodyLimit::max(files::MAX_BYTES)),
+        )
+        .route("/api/widgets", get(widget_snapshot))
+        .route("/api/widgets/cities", get(widget_cities))
+        .route("/api/widgets/weather", get(widget_weather))
         .route("/api/terminal/session", post(session))
         .route("/api/terminal/{id}/ws", get(terminal_upgrade))
         .route("/api/terminal/{id}/close", post(terminal_close))

@@ -1,0 +1,36 @@
+import {test,expect} from '@playwright/test';
+import {mkdtemp,mkdir,rm,writeFile,readFile} from 'node:fs/promises';
+async function menu(p,name){await p.getByRole('button',{name:'Files menu',exact:true}).click();await p.getByRole('button',{name,exact:true}).click()}
+test('Files redesign supports search, editing, selections, ZIP and destination actions',async({page:p})=>{
+ const dir=await mkdtemp(process.env.HOME+'/omarchy-files-redesign-');
+ try{
+  await mkdir(dir+'/dest');await writeFile(dir+'/alpha.js','const answer = 42;\n// needle test\n');await writeFile(dir+'/beta.txt','second file');
+  await p.addInitScript(path=>{localStorage.setItem('omarchy-files-path',path);localStorage.setItem('omarchy-files-mode','"browse"');Object.defineProperty(navigator,'canShare',{value:()=>true});Object.defineProperty(navigator,'share',{value:async({files})=>window.zipShare={name:files[0].name,bytes:[...new Uint8Array(await files[0].arrayBuffer())].slice(0,4)}})},dir);
+  await p.goto('/native/');await p.getByText('files',{exact:true}).first().click();await expect(p.locator('.files-path')).toHaveAttribute('data-path',dir);await expect(p.locator('.files-entry').first()).toContainText('dest');await p.waitForTimeout(400);await p.screenshot({path:'artifacts/files-handoff/after-list.png'});
+  const search=p.getByRole('searchbox',{name:'Search files'});await search.fill('needle');await p.getByRole('button',{name:'contents',exact:true}).click();await expect(p.locator('.files-search-hit')).toContainText('needle test');await p.screenshot({path:'artifacts/files-handoff/after-search.png'});await p.locator('.files-search-hit').click();await expect(p.locator('.files-code-row.highlighted')).toContainText('needle');await p.screenshot({path:'artifacts/files-handoff/after-preview.png'});
+  await p.getByRole('button',{name:'Edit file'}).click();await p.getByRole('textbox',{name:'File contents'}).fill('const answer = 43;\n');const save=p.getByRole('button',{name:'Save changes'});const box=await save.boundingBox();await p.mouse.move(box.x+box.width/2,box.y+box.height/2);await p.mouse.down();await expect(p.getByRole('textbox',{name:'File contents'})).toBeFocused();await p.mouse.up();await expect(p.locator('.files-status')).toContainText('Saved to HOST');expect(await readFile(dir+'/alpha.js','utf8')).toBe('const answer = 43;\n');
+  await p.getByRole('button',{name:'Edit file'}).click();await p.getByRole('textbox',{name:'File contents'}).fill('touch saved');await p.getByRole('button',{name:'Save changes'}).tap();await expect(p.locator('.files-status')).toContainText('Saved to HOST');expect(await readFile(dir+'/alpha.js','utf8')).toBe('touch saved');await expect(p.locator('.files-details')).toContainText('11 B');expect(await p.evaluate(()=>JSON.parse(localStorage.getItem('omarchy-files-recents')).find(e=>e.name==='alpha.js').size)).toBe(11);
+  await p.getByRole('button',{name:'Edit file'}).click();await p.getByRole('textbox',{name:'File contents'}).fill('draft kept');await writeFile(dir+'/alpha.js','external change');await p.getByRole('button',{name:'Save changes'}).click();await expect(p.locator('.files-status')).toContainText('File changed');await expect(p.getByRole('textbox',{name:'File contents'})).toHaveValue('draft kept');await p.getByRole('button',{name:'Cancel editing'}).click();await p.getByRole('button',{name:'Discard',exact:true}).click();
+  await p.getByRole('button',{name:'Parent folder'}).click();await p.getByRole('button',{name:'Select files'}).click();await p.getByRole('button',{name:'alpha.js',exact:true}).click();await p.getByRole('button',{name:'beta.txt',exact:true}).click();await expect(p.locator('.files-heading')).toContainText('2 selected');await p.screenshot({path:'artifacts/files-handoff/after-selection.png'});
+  await p.getByRole('button',{name:'↓ get',exact:true}).click();await p.getByRole('dialog',{name:'ZIP ready'}).getByRole('button',{name:'Save…',exact:true}).click();await expect.poll(()=>p.evaluate(()=>window.zipShare?.bytes)).toEqual([80,75,3,4]);
+  await p.getByRole('button',{name:'copy',exact:true}).click();await p.getByRole('textbox',{name:'Destination folder'}).fill(dir+'/dest');await p.getByRole('dialog',{name:'Copy items'}).getByRole('button',{name:'Copy',exact:true}).click();await expect(p.locator('.files-status')).toContainText('2 completed');expect(await readFile(dir+'/dest/beta.txt','utf8')).toBe('second file');
+  await menu(p,'fuzzy finder');await expect(p.locator('.files-scopes')).toContainText('fuzzy');await expect(p.locator('.files-content')).toContainText('RECENT');await p.screenshot({path:'artifacts/files-handoff/after-fuzzy.png'});
+ }finally{await rm(dir,{recursive:true,force:true})}
+});
+
+test('selection patterns, rename, move and terminal here affect only chosen files',async({page:p})=>{
+ const dir=await mkdtemp(process.env.HOME+'/omarchy-files-actions-');let session;
+ try{
+  await mkdir(dir+'/dest');await writeFile(dir+'/a1.txt','chosen');await writeFile(dir+'/a12.txt','keep');
+  await p.addInitScript(path=>localStorage.setItem('omarchy-files-path',path),dir);
+  await p.goto('/native/');await p.getByText('files',{exact:true}).first().click();await p.getByRole('button',{name:'Select files'}).click();
+  await p.getByRole('button',{name:'Select by pattern'}).click();await p.getByRole('textbox',{name:'Pattern',exact:true}).fill('a?.txt');await p.getByRole('dialog').getByRole('button',{name:'Select',exact:true}).click();await expect(p.locator('.files-heading')).toContainText('1 selected');
+  await p.getByRole('button',{name:'rename',exact:true}).click();await p.getByRole('textbox',{name:'New name'}).fill('renamed.txt');await p.getByRole('dialog').getByRole('button',{name:'Rename',exact:true}).click();await expect(p.getByRole('button',{name:'renamed.txt',exact:true})).toBeVisible();
+  await p.getByRole('button',{name:'Select files'}).click();await p.getByRole('button',{name:'renamed.txt',exact:true}).click();await p.getByRole('button',{name:'move',exact:true}).click();await p.getByRole('textbox',{name:'Destination folder'}).fill(dir+'/dest');await p.getByRole('dialog').getByRole('button',{name:'Move',exact:true}).click();await expect(p.locator('.files-status')).toContainText('1 completed');expect(await readFile(dir+'/dest/renamed.txt','utf8')).toBe('chosen');expect(await readFile(dir+'/a12.txt','utf8')).toBe('keep');
+  await menu(p,'terminal here');const request=p.waitForResponse(r=>r.url().endsWith('/api/terminal/session'));await p.getByRole('button',{name:'Open shell',exact:true}).click();session=(await(await request).json()).id;
+  // Inspect the isolated PTY's process cwd without typing into any existing shell.
+  const {execFileSync}=await import('node:child_process');const {readlink}=await import('node:fs/promises');
+  const pid=execFileSync('systemctl',['--user','show','omarchy-remote.service','--property=MainPID','--value'],{encoding:'utf8'}).trim();
+  await expect.poll(async()=>{const children=execFileSync('pgrep',['-P',pid],{encoding:'utf8'}).trim().split('\n');return Promise.all(children.map(id=>readlink('/proc/'+id+'/cwd').catch(()=>'')))}).toContain(dir);
+ }finally{if(session)await p.request.post('/api/terminal/'+session+'/close',{headers:{'X-Hyprland-Client':'1'},data:{}});await rm(dir,{recursive:true,force:true})}
+});

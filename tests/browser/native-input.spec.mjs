@@ -25,3 +25,13 @@ test('direct keys, delete, Ctrl and IME commit are sent once',async({page})=>{
  expect(await page.evaluate(()=>sent.map(s=>s.text).join(''))).toBe('abc日本');
  expect(await page.evaluate(()=>keys)).toEqual([{key:'⌫',mods:{}},{key:'⏎',mods:{}},{key:'c',mods:{ctrl:true}}]);
 });
+test('image paths append to the original draft without sending or replacing text',async({page})=>{
+ const field=page.locator('.native-input');await page.evaluate(()=>input.select('one'));await field.fill('Look at this');
+ await page.evaluate(()=>input.select('two'));await field.fill('Other draft');
+ await page.evaluate(()=>input.attachImage('one','/tmp/image-one.png'));await expect(field).toHaveValue('Other draft');
+ await page.evaluate(()=>input.select('one'));await expect(field).toHaveValue('Look at this\nImage: /tmp/image-one.png\n');
+ await page.evaluate(()=>input.attachImage('one','/tmp/image-two.png'));expect(await page.evaluate(()=>sent)).toEqual([]);
+ await page.evaluate(()=>input.submit.disabled=true);await field.press('Enter');expect(await page.evaluate(()=>sent)).toEqual([]);
+ await page.evaluate(()=>input.submit.disabled=false);await field.press('Enter');
+ expect(await page.evaluate(()=>sent)).toEqual([{text:'Look at this\nImage: /tmp/image-one.png\nImage: /tmp/image-two.png\n',enter:true}]);
+});
