@@ -18,12 +18,12 @@ test('Home-only startup, toss dismissal, long press reorder and protected Home',
  await card(p,'settings').click();await expect(p.locator('#touch-shell')).not.toHaveClass(/expo-mode/);await expect(p.locator('.theme-settings')).toBeVisible();
 });
 test('dismissing Terminal closes its session and reopening starts a fresh shell',async({page:p})=>{
- await p.goto('/native/');await p.getByText('terminal',{exact:true}).first().click();await expect(p.locator('#remote-terminal-app')).toContainText('HOST · connected');
+ await p.goto('/native/');await p.getByText('terminal',{exact:true}).first().click();await expect(p.locator('#remote-terminal-app')).toContainText('· connected');
  const first=await p.evaluate(()=>localStorage.getItem('omarchy-terminal-id'));
  try{
   await expo(p);const a=await center(card(p,'terminal'));await drag(p,a,{x:a.x,y:a.y-120});
   await expect(card(p,'terminal')).toHaveCSS('opacity','0');await expect.poll(()=>p.evaluate(()=>localStorage.getItem('omarchy-terminal-id'))).toBeNull();
-  await card(p,'home').click();await p.getByText('terminal',{exact:true}).first().click();await expect(p.locator('#remote-terminal-app')).toContainText('HOST · connected');
+  await card(p,'home').click();await p.getByText('terminal',{exact:true}).first().click();await expect(p.locator('#remote-terminal-app')).toContainText('· connected');
   expect(await p.evaluate(()=>localStorage.getItem('omarchy-terminal-id'))).not.toBe(first);
  }finally{
   const id=await p.evaluate(()=>localStorage.getItem('omarchy-terminal-id'));for(const key of new Set([first,id].filter(Boolean)))await p.request.post(`/api/terminal/${key}/close`,{headers:{'X-Hyprland-Client':'1'},data:{}});

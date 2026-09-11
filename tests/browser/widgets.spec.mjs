@@ -12,7 +12,7 @@ test('clock advances, widgets show host data, and weather location/units persist
  await p.getByRole('button',{name:'Choose city',exact:true}).click();await p.getByRole('textbox',{name:'City name'}).fill('Chicago');await p.getByRole('button',{name:'Search',exact:true}).click();await p.getByRole('button',{name:'Chicago, Illinois, United States',exact:true}).click();await expect(p.locator('#widget-weather')).toContainText('20°');await p.getByRole('button',{name:'°C',exact:true}).click();await expect(p.locator('#widget-weather')).toContainText('68°');
  await p.screenshot({path:'artifacts/browser/widgets-weather.png'});
  await p.reload();await expect(p.locator('#widget-weather')).toContainText('Chicago');await expect(p.locator('#widget-weather')).toContainText('68°');
- await p.route('**/api/widgets',r=>r.abort());await p.clock.runFor(3100);await expect(p.locator('#widget-metrics')).toContainText('HOST unavailable');await expect(p.locator('#widget-metrics')).not.toContainText('25%');
+ await p.route('**/api/widgets',r=>r.abort());await p.clock.runFor(3100);await expect(p.locator('#widget-metrics')).toContainText('unavailable');await expect(p.locator('#widget-metrics')).not.toContainText('25%');
 });
 
 test('phone location uses coordinates, defaults to locale units, and keeps city search after denial',async({page:p,context})=>{

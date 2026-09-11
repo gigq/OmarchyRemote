@@ -4,6 +4,23 @@ import OSLog
 import CoreLocation
 import SafariServices
 
+/// Where the live shell comes from: the `OmarchyRemoteURL` Info.plist key (the address the
+/// backend is published at, for example a Tailscale Serve URL). Debug builds load it and
+/// fall back to the bundled copy; page-to-app bridges only answer that origin or the bundle.
+enum ShellSource {
+    static let liveURL: URL? = {
+        guard let raw = Bundle.main.object(forInfoDictionaryKey: "OmarchyRemoteURL") as? String,
+              let url = URL(string: raw.trimmingCharacters(in: .whitespacesAndNewlines)), url.host != nil else { return nil }
+        return url
+    }()
+    static var hostLabel: String { liveURL?.host ?? "the host" }
+    static func trusts(_ origin: WKSecurityOrigin) -> Bool {
+        guard let live = liveURL, let scheme = live.scheme, let host = live.host else { return false }
+        let port = live.port ?? (scheme == "https" ? 443 : 80)
+        return origin.protocol == scheme && origin.host == host && origin.port == port
+    }
+}
+
 @MainActor
 private final class ShellWebView: WKWebView {
     // The shell supplies its own mode and dismissal controls above the keyboard.
@@ -25,7 +42,7 @@ private final class WeatherDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage, replyHandler: @escaping @MainActor @Sendable (Any?, String?) -> Void) {
         let origin = message.frameInfo.securityOrigin
         guard message.frameInfo.isMainFrame,
-              (origin.protocol == "https" && origin.host == "your-host.your-tailnet.ts.net" && origin.port == 12443) || message.frameInfo.request.url?.isFileURL == true,
+              ShellSource.trusts(origin) || message.frameInfo.request.url?.isFileURL == true,
               let body = message.body as? [String: Any] else {
             replyHandler(nil, "Unsupported page")
             return
@@ -90,7 +107,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage, replyHandler: @escaping @MainActor @Sendable (Any?, String?) -> Void) {
         let origin = message.frameInfo.securityOrigin
         guard message.frameInfo.isMainFrame,
-              (origin.protocol == "https" && origin.host == "your-host.your-tailnet.ts.net" && origin.port == 12443) || message.frameInfo.request.url?.isFileURL == true,
+              ShellSource.trusts(origin) || message.frameInfo.request.url?.isFileURL == true,
               let body = message.body as? [String: Any],
               let raw = body["url"] as? String, let url = URL(string: raw),
               ["https", "http"].contains(url.scheme?.lowercased() ?? ""), url.host != nil,
@@ -130,7 +147,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     private var usingOfflineFallback = false
     private var developmentURL: URL? {
         #if DEBUG
-        URL(string: "https://your-host.your-tailnet.ts.net:12443/native/")
+        ShellSource.liveURL
         #else
         nil
         #endif
@@ -198,7 +215,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
             retryButton.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -48),
             retryButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 56)
         ])
-        sourceButton.setTitle("Offline copy · Retry HOST", for: .normal)
+        sourceButton.setTitle("Offline copy · Retry live", for: .normal)
         sourceButton.setTitleColor(.white, for: .normal)
         sourceButton.titleLabel?.font = .preferredFont(forTextStyle: .caption1)
         sourceButton.backgroundColor = background
@@ -273,7 +290,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         webView.stopLoading()
         usingOfflineFallback = true
         sourceButton.isHidden = false
-        logger.notice("HOST unavailable; using bundled prototype")
+        logger.notice("Live shell unavailable; using bundled copy")
         loadBundledShell()
     }
 
@@ -288,8 +305,8 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
 
     @objc private func showSourceMenu(_ gesture: UILongPressGestureRecognizer) {
         guard gesture.state == .began, presentedViewController == nil else { return }
-        let menu = UIAlertController(title: "Prototype source", message: "Live mode reloads when files change on HOST. Connect Tailscale on your iPhone to use it.", preferredStyle: .actionSheet)
-        menu.addAction(UIAlertAction(title: "Live from HOST", style: .default) { [weak self] _ in self?.retryLive() })
+        let menu = UIAlertController(title: "Prototype source", message: "Live mode loads the shell from \(ShellSource.hostLabel) and reloads when its files change. Connect to that host's network (for example Tailscale) to use it.", preferredStyle: .actionSheet)
+        menu.addAction(UIAlertAction(title: "Live from \(ShellSource.hostLabel)", style: .default) { [weak self] _ in self?.retryLive() })
         menu.addAction(UIAlertAction(title: "Bundled offline copy", style: .default) { [weak self] _ in
             UserDefaults.standard.set(true, forKey: "useBundledPrototype")
             self?.loadShell()
@@ -318,7 +335,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
             if result as? Bool == true {
                 self.loadTimeout?.cancel()
                 self.remoteNavigation = nil
-                self.logger.info("Loaded Hyprland shell: live from HOST (rendered)")
+                self.logger.info("Loaded Hyprland shell: live from \(ShellSource.hostLabel) (rendered)")
             } else if attemptsRemaining > 0 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
                     self?.verifyLiveShell(generation: generation, attemptsRemaining: attemptsRemaining - 1)

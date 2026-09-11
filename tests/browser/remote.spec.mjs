@@ -6,20 +6,20 @@ async function key(page,label){const field=page.locator('.native-input:visible')
 test('custom keyboard drives the real shell and resumes after page reload',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('/native/');await page.getByText('terminal',{exact:true}).first().click();
- await expect(page.locator('#remote-terminal-app')).toContainText('HOST · connected');
+ await expect(page.locator('#remote-terminal-app')).toContainText('· connected');
  try{
  await page.locator('.remote-terminal').click();
  for(const k of ['e','c','h','o','space','h','e','l','l','o','⏎'])await key(page,k);
  await expect.poll(()=>visibleText(page)).toContain('hello');
  await page.screenshot({path:'artifacts/browser/terminal-live.png'});
  const id=await page.evaluate(()=>localStorage.getItem('omarchy-terminal-id'));
- await page.reload();await page.getByText('terminal',{exact:true}).first().click();await expect(page.locator('#remote-terminal-app')).toContainText('HOST · connected');
+ await page.reload();await page.getByText('terminal',{exact:true}).first().click();await expect(page.locator('#remote-terminal-app')).toContainText('· connected');
  expect(await page.evaluate(()=>localStorage.getItem('omarchy-terminal-id'))).toBe(id);
  await expect.poll(()=>visibleText(page)).toContain('hello');
  await page.locator('.remote-terminal').click();for(const k of ['e','x','i','t','⏎'])await key(page,k);
  await expect(page.locator('#remote-terminal-app')).toContainText('Shell exited');
  await page.reload();await page.getByText('terminal',{exact:true}).first().click();await expect(page.locator('#remote-terminal-app')).toContainText('Shell exited');
- await page.getByRole('button',{name:'New shell',exact:true}).click();await expect(page.locator('#remote-terminal-app')).toContainText('HOST · connected');
+ await page.getByRole('button',{name:'New shell',exact:true}).click();await expect(page.locator('#remote-terminal-app')).toContainText('· connected');
  await page.locator('.remote-terminal').click();for(const k of ['e','x','i','t','⏎'])await key(page,k);await expect(page.locator('#remote-terminal-app')).toContainText('Shell exited');
  expect(errors).toEqual([]);
  }finally{if(!await page.locator('#remote-terminal-app').textContent().then(t=>t.includes('Shell exited'))){await exitShell(page);await expect(page.locator('#remote-terminal-app')).toContainText('Shell exited')}}

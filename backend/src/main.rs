@@ -126,7 +126,9 @@ async fn widget_weather(Query(q): Query<WeatherQuery>) -> Result<Json<Value>, Ap
         .map_err(error)
 }
 async fn capabilities() -> Json<Value> {
-    Json(json!({"version":1,"host":apps::host_name(),"apps":apps::capabilities()}))
+    Json(
+        json!({"version":1,"host":apps::host_name(),"home":apps::home().map(|h|h.to_string_lossy().into_owned()).unwrap_or_default(),"apps":apps::capabilities()}),
+    )
 }
 #[derive(Deserialize)]
 struct SessionRequest {

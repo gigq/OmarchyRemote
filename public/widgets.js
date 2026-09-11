@@ -34,7 +34,7 @@
   async api(path){const response=await fetch('/api/'+path,{headers:{'X-Hyprland-Client':'1'},signal:AbortSignal.any([this.abort.signal,AbortSignal.timeout(12000)])});const data=await response.json();if(!response.ok)throw Error(data.error||'Unavailable');return data}
   async poll(){
    if(this.busy||document.hidden||this.logic.cur()!=='home'||this.logic.state.ov)return;this.busy=true;
-   try{const data=await this.api('widgets');this.renderMetrics(data.metrics);this.renderTailscale(data.tailscale);this.renderCodexbar(data.codexbar);this.deck.refresh()}catch{for(const k of ['metrics','tailscale','codexbar'])this.roots[k].replaceChildren(node('strong','',k==='metrics'?'Host metrics':'Tailscale'),node('p','widget-muted','HOST unavailable · reconnecting…'))}finally{this.busy=false}
+   try{const data=await this.api('widgets');this.renderMetrics(data.metrics);this.renderTailscale(data.tailscale);this.renderCodexbar(data.codexbar);this.deck.refresh()}catch{for(const k of ['metrics','tailscale','codexbar'])this.roots[k].replaceChildren(node('strong','',k==='metrics'?'Host metrics':'Tailscale'),node('p','widget-muted',HyprlandApps.host.name+' unavailable · reconnecting…'))}finally{this.busy=false}
    if(this.location&&Date.now()>(this.nextWeather||0))this.loadWeather();
   }
   header(root,title,detail){root.replaceChildren();const h=node('div','widget-line');h.append(node('strong','',title),node('span','widget-muted widget-truncate',detail));root.append(h)}
@@ -50,7 +50,7 @@
    for(const type of ['pointerdown','touchstart','touchmove','touchend'])list.addEventListener(type,e=>e.stopPropagation(),{passive:true});root.append(list);root.append(node('div','widget-muted',(p.error?'Unavailable · last update ':'Updated ')+(p.updated_at?stamp(Date.parse(p.updated_at)/1000):'—')));
   }
   renderMetrics(m){
-   const root=this.roots.metrics;this.header(root,'btop',m?.host||'HOST');if(!m||m.error){root.append(node('p','widget-muted',m?.error||'Unavailable'));return}
+   const root=this.roots.metrics;this.header(root,'btop',m?.host||HyprlandApps.host.name);if(!m||m.error){root.append(node('p','widget-muted',m?.error||'Unavailable'));return}
    const up=Math.floor(m.uptime/3600);const uptime=up>=24?Math.floor(up/24)+'d '+up%24+'h':up+'h '+Math.floor(m.uptime/60)%60+'m';const info=`${m.cores} cores${number(m.temperature)?' · '+Math.round(m.temperature)+'°C':''} · up ${uptime}`;
    root.append(node('div','widget-muted',info));
    for(const [name,value,label,color] of [['cpu',m.cpu_percent,percent(m.cpu_percent),'green'],['mem',100*m.memory_used/m.memory_total,bytes(m.memory_used)+' / '+bytes(m.memory_total),'magenta'],['disk',100*m.disk_used/m.disk_total,bytes(m.disk_used)+' / '+bytes(m.disk_total),'red']]){
@@ -60,7 +60,7 @@
   }
   renderTailscale(t){
    const root=this.roots.tailscale;const scroll=root.querySelector('.tailscale-peers')?.scrollTop||0;this.header(root,'tailscale',t?.error?'Unavailable':t?.state==='Running'?'connected':t?.state||'unknown');if(!t||t.error){root.append(node('p','widget-muted',t?.error||'Unavailable'));return}
-   root.append(node('div','widget-muted widget-truncate',`${t.host||'HOST'} · ${t.ip||'No address'}`));const peers=node('div','tailscale-peers');
+   root.append(node('div','widget-muted widget-truncate',`${t.host||HyprlandApps.host.name} · ${t.ip||'No address'}`));const peers=node('div','tailscale-peers');
    for(const p of (t.peers||[])){const row=node('div','tailscale-peer');const dot=node('i');dot.style.background=p.online?'var(--theme-green)':'var(--theme-dim)';row.append(dot,node('span','widget-truncate',p.name),node('span','widget-muted',p.online?'online':'offline'));peers.append(row)}
    if(!t.peers?.length)peers.append(node('span','widget-muted','No peers'));for(const type of ['pointerdown','touchstart','touchmove','touchend'])peers.addEventListener(type,e=>e.stopPropagation(),{passive:true});root.append(peers);peers.scrollTop=scroll;
    root.append(node('div','widget-muted',`${(t.peers||[]).filter(p=>p.online).length}/${t.peers?.length||0} online · DNS ${t.magic_dns?'on':'off'} · exit ${t.exit_node||'none'}`));

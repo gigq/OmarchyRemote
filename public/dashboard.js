@@ -10,7 +10,7 @@
   constructor(logic){
    this.logic=logic;this.abort=new AbortController();this.dismissed=read('omarchy-inbox-dismissed',[]);this.muted=read('omarchy-inbox-muted',false);this.snapshot=null;
    this.home=mount('home-attention');this.metrics=mount('home-metrics');this.launch=mount('dashboard-launcher');this.inbox=mount('dashboard-notifications');this.buildLauncher();
-   const host=el('div','home-host','HOST · connecting…');this.host=host;this.home.parentElement.insertBefore(host,this.home.parentElement.querySelector('[data-live-date]'));
+   const host=el('div','home-host',HyprlandApps.host.name+' · connecting…');this.host=host;this.home.parentElement.insertBefore(host,this.home.parentElement.querySelector('[data-live-date]'));
    this.home.append(el('p','dashboard-muted','Connecting to Herd…'));this.drawInbox();const pins=read('omarchy-home-pins',null);if(Array.isArray(pins))logic.set({homePins:[...new Set(pins.filter(k=>k!=='home'&&logic.APPS[k]))]});this.timer=setInterval(()=>this.poll(),5000);this.poll();
    this.visibility=()=>{if(!document.hidden)this.poll()};document.addEventListener('visibilitychange',this.visibility);
   }
@@ -19,9 +19,9 @@
    for(const type of ['pointerdown','pointerup','touchstart','touchmove','touchend'])panel.addEventListener(type,e=>e.stopPropagation(),{passive:true});mount('touch-shell').append(panel);draw();
   }
   button(label,fn,cls=''){const b=el('button','dashboard-button '+cls,label);b.type='button';b.onclick=e=>{e.stopPropagation();fn()};return b}
-  async api(path){const r=await fetch('/api/'+path,{headers:{'X-Hyprland-Client':'1'},signal:AbortSignal.any([this.abort.signal,AbortSignal.timeout(8000)])});if(!r.ok)throw Error('HOST unavailable');return r.json()}
+  async api(path){const r=await fetch('/api/'+path,{headers:{'X-Hyprland-Client':'1'},signal:AbortSignal.any([this.abort.signal,AbortSignal.timeout(8000)])});if(!r.ok)throw Error(HyprlandApps.host.name+' unavailable');return r.json()}
   async poll(){if(this.busy||document.hidden)return;this.busy=true;try{const [herd,widgets]=await Promise.allSettled([this.api('herdr/snapshot'),this.api('widgets')]);if(herd.status==='fulfilled'){this.snapshot=herd.value;this.online=true;this.drawHome();this.drawInbox()}else{this.online=false;this.drawHome();this.drawInbox()}
-   if(widgets.status==='fulfilled'){const m=widgets.value.metrics;if(m&&!m.error){const hours=Math.floor(m.uptime/3600);this.host.replaceChildren(el('span','','● HOST'),el('span','', 'up '+Math.floor(hours/24)+'d '+hours%24+'h'));const pct=n=>Number.isFinite(n)?Math.round(n)+'%':'—';this.metrics.replaceChildren(...[['cpu',pct(m.cpu_percent)],['mem',pct(m.memory_used/m.memory_total*100)],['disk',pct(m.disk_used/m.disk_total*100)],['',Number.isFinite(m.temperature)?Math.round(m.temperature)+'°C':'']].map(([label,value])=>el('span','',label+' '+value)));}else this.host.textContent='HOST · metrics unavailable'}else{this.host.textContent='HOST · disconnected';this.metrics.textContent='Host metrics unavailable'}
+   if(widgets.status==='fulfilled'){const m=widgets.value.metrics;if(m&&!m.error){const hours=Math.floor(m.uptime/3600);this.host.replaceChildren(el('span','','● '+HyprlandApps.host.name),el('span','', 'up '+Math.floor(hours/24)+'d '+hours%24+'h'));const pct=n=>Number.isFinite(n)?Math.round(n)+'%':'—';this.metrics.replaceChildren(...[['cpu',pct(m.cpu_percent)],['mem',pct(m.memory_used/m.memory_total*100)],['disk',pct(m.disk_used/m.disk_total*100)],['',Number.isFinite(m.temperature)?Math.round(m.temperature)+'°C':'']].map(([label,value])=>el('span','',label+' '+value)));}else this.host.textContent=HyprlandApps.host.name+' · metrics unavailable'}else{this.host.textContent=HyprlandApps.host.name+' · disconnected';this.metrics.textContent='Host metrics unavailable'}
    }finally{this.busy=false}
   }
   panes(){return this.snapshot?HyprlandRemote.orderHerdr(this.snapshot).flatMap(w=>w.panes):[]}

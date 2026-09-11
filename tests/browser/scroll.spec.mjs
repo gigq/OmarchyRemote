@@ -8,7 +8,7 @@ async function stopCoast(page){const cdp=await page.context().newCDPSession(page
 async function key(page,label){const field=page.locator('.native-input:visible');if(label==='⏎')await field.press('Enter');else await field.pressSequentially(label==='space'?' ':label)}
 
 test('Terminal touch drags read history without opening the keyboard',async({page})=>{
- await captureTerminals(page);await page.goto('/native/');await page.getByText('terminal',{exact:true}).first().click();await expect(page.locator('#remote-terminal-app')).toContainText('HOST · connected');
+ await captureTerminals(page);await page.goto('/native/');await page.getByText('terminal',{exact:true}).first().click();await expect(page.locator('#remote-terminal-app')).toContainText('· connected');
  try{
   await page.evaluate(()=>qaTerms[0].input('seq 1 160\r'));
   await expect.poll(async()=>(await state(page)).bottom).toBeGreaterThan(90);

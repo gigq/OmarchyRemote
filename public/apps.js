@@ -26,5 +26,10 @@
   // placeLatest and dispose; the bridge calls whichever exist.
   const provide=(key,provider)=>{const app=catalog[key];if(!app)throw Error('Unknown app: '+key);app.provider=provider;return app};
   const DEFAULT_PINS=['terminal','files','browser','herdr','btop','services','lazydocker','dua','lnav','settings'];
-  window.HyprlandApps={catalog,define,provide,get:key=>catalog[key]||null,keys:()=>Object.keys(catalog),DEFAULT_PINS};
+  // The connected host, filled from /api/capabilities by the bridge; `hyprland-host` fires on
+  // document when it changes so status lines can repaint.
+  const host={name:'host',home:''};
+  const setHost=caps=>{if(caps?.host)host.name=caps.host;if(caps?.home)host.home=caps.home;document.dispatchEvent(new CustomEvent('hyprland-host',{detail:host}))};
+  const tilde=path=>host.home&&path&&(path===host.home||path.startsWith(host.home+'/'))?'~'+path.slice(host.home.length):path||'';
+  window.HyprlandApps={catalog,define,provide,get:key=>catalog[key]||null,keys:()=>Object.keys(catalog),DEFAULT_PINS,host,setHost,tilde};
 })();

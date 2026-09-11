@@ -77,7 +77,7 @@
   };
   class TerminalApp {
     constructor(root,bridge,app='terminal',storageKey=null){
-      this.app=app;this.storageKey=storageKey||'omarchy-'+app+'-id';this.bridge=bridge;this.root=root;this.status=node('span','remote-status','HOST · connecting…');this.host=node('div','remote-terminal');
+      this.app=app;this.storageKey=storageKey||'omarchy-'+app+'-id';this.bridge=bridge;this.root=root;this.status=node('span','remote-status');this.setStatus('connecting…');this.host=node('div','remote-terminal');
       this.restart=button(app==='terminal'?'New shell':`Restart ${app}`,()=>{if(this.exited){storage.set(this.storageKey,null);this.exited=false;this.connect()}});this.restart.hidden=true;
       this.latest=button('↓ Latest',()=>{this.stopTouchScroll.cancel();this.term.scrollToBottom()});this.latest.hidden=true;
       const bar=node('div','remote-bar');bar.append(this.status,this.latest,this.restart);root.append(bar,this.host);
@@ -99,22 +99,24 @@
     resize(){if(this.restoring)return;if(!this.host.clientHeight||!this.host.clientWidth)return;try{if(this.app!=='terminal'){const minCols=HOST_TUIS[this.app].cols;const font=this.tuiFit?Math.min(12,(this.host.clientWidth-4)/(minCols*.60375)):12;this.term.options.fontSize=font;this.host.style.setProperty('--host-tui-font',font+'px');const d=this.fit.proposeDimensions();if(d)this.term.resize(Math.max(minCols,d.cols),Math.max(24,d.rows))}else this.fit.fit()}catch{}}
     async connect(){
       if(this.connecting||this.ws?.readyState===0||this.ws?.readyState===1||this.exited||this.disposed)return;
-      clearTimeout(this.retry);this.connecting=true;this.status.textContent='HOST · connecting…';
+      clearTimeout(this.retry);this.connecting=true;this.setStatus('connecting…');
       try{
         this.sessionRequest=api('terminal/session',{id:storage.get(this.storageKey),app:this.app,cwd:this.app==='terminal'?storage.get('omarchy-terminal-cwd'):null});const session=await this.sessionRequest;storage.set(this.storageKey,session.id);
         if(this.disposed)return;
         const ws=socket(`terminal/${session.id}/ws`);this.ws=ws;
         ws.onmessage=event=>{if(this.ws!==ws||this.disposed)return;const m=JSON.parse(event.data);if(m.type==='screen'){
           this.restoring=true;this.term.reset();this.term.resize(m.cols,m.rows);this.term.write(new Uint8Array(m.data),()=>{this.restoring=false;this.resize();if(ws.readyState===1){ws.send(JSON.stringify({type:'resize',cols:this.term.cols,rows:this.term.rows}));ws.send(JSON.stringify({type:'ready'}))}});
-          this.ready=true;this.status.textContent='HOST · connected';this.restart.hidden=true;if(m.exited)this.exit();
+          this.ready=true;this.setStatus('connected');this.restart.hidden=true;if(m.exited)this.exit();
         }else if(m.type==='output')this.term.write(new Uint8Array(m.data));else if(m.type==='exit')this.exit();else if(m.type==='error')this.status.textContent=m.message};
-        ws.onclose=()=>{if(this.ws!==ws)return;this.ready=false;if(!this.exited&&!this.disposed){this.status.textContent='HOST disconnected · reconnecting…';this.retry=setTimeout(()=>this.connect(),1500)}};
+        ws.onclose=()=>{if(this.ws!==ws)return;this.ready=false;if(!this.exited&&!this.disposed){this.setStatus('disconnected · reconnecting…');this.retry=setTimeout(()=>this.connect(),1500)}};
         ws.onerror=()=>ws.close();
-      }catch(e){this.status.textContent='HOST unavailable · retrying…';this.retry=setTimeout(()=>this.connect(),2500)}finally{this.connecting=false}
+      }catch(e){this.setStatus('unavailable · retrying…');this.retry=setTimeout(()=>this.connect(),2500)}finally{this.connecting=false}
     }
     resume(){if(this.connecting||this.exited||this.disposed)return;const old=this.ws;this.ws=null;this.ready=false;old?.close();this.connect()}
     exit(){this.exited=true;this.ready=false;this.ws?.close();this.status.textContent=this.app==='terminal'?'Shell exited':`${this.app} exited`;this.restart.hidden=false;}
     key(input){return this.input(input.data)}
+    setStatus(text){this.statusText=text;this.status.textContent=`${HyprlandApps.host.name} · ${text}`}
+    hostChanged(){this.setStatus(this.statusText)}
     input(data){this.stopTouchScroll.cancel();if(this.ready&&this.ws?.readyState===1){this.ws.send(JSON.stringify({type:'input',data}));this.term.scrollToBottom();return true}else this.status.textContent=this.exited?'App exited · use Restart':'Disconnected · input was not sent';return false;}
     dispose(){this.disposed=true;clearTimeout(this.retry);this.ws?.close();this.resizeObserver.disconnect();this.stopTouchScroll();this.nativeInput.dispose();this.term.dispose()}
   }
@@ -178,7 +180,7 @@
       const ws=socket('herdr/ws');this.ws=ws;this.status.textContent='connecting…';
       ws.onopen=()=>{if(this.selected)this.send({type:'select',pane_id:this.selected})};
       ws.onmessage=event=>{const m=JSON.parse(event.data);
-        if(m.type==='snapshot'){this.online=true;this.snapshot=m.snapshot;this.status.textContent=`HOST · ${m.snapshot.panes.length} panes`;this.renderList();if(this.selected){const pane=this.snapshot.panes.find(p=>p.pane_id===this.selected);if(pane)this.showDetail(pane);else this.select(null)}}
+        if(m.type==='snapshot'){this.online=true;this.snapshot=m.snapshot;this.setStatus(`${m.snapshot.panes.length} panes`);this.renderList();if(this.selected){const pane=this.snapshot.panes.find(p=>p.pane_id===this.selected);if(pane)this.showDetail(pane);else this.select(null)}}
         else if(m.type==='pane'&&m.pane_id===this.selected){this.online=true;this.renderOutput(m.read);}
         else if(m.type==='ack'){this.pending.delete(m.id);this.inputStatus.textContent=''}
         else if(m.type==='input_error'){this.pending.delete(m.id);this.inputStatus.textContent=m.message||'Input failed'}
@@ -199,13 +201,13 @@
         const panes=workspace.panes.filter(p=>(this.filter==='all'||paneGroup(p)===this.filter)&&[p.terminal_title_stripped,p.agent,p.cwd,p.foreground_cwd,workspace.label,this.snapshot.tabs.find(t=>t.tab_id===p.tab_id)?.label].join(' ').toLowerCase().includes(this.search.value.toLowerCase()));if(!panes.length)continue;
         const group=node('section','herdr-group');const heading=node('div','herdr-group-title');heading.append(node('strong','',workspace.label||workspace.workspace_id),node('span','remote-status',`${panes.length} panes`));group.append(heading);
         for(const pane of panes){const tab=this.snapshot.tabs.find(t=>t.tab_id===pane.tab_id);const row=button('',()=>this.select(pane.pane_id));row.className='herdr-pane';
-          const icon=node('span','herdr-agent-icon','●');icon.dataset.group=paneGroup(pane);const info=node('span','herdr-pane-info');const label=node('span','herdr-name-line');label.append(node('strong','',pane.terminal_title_stripped||tab?.label||pane.pane_id),node('span','herdr-provider',pane.agent||'shell'));info.append(label,node('span','remote-status',`${tab?.label||'terminal'} · ${(pane.foreground_cwd||pane.cwd||'').replace('/home/user','~')}`));
+          const icon=node('span','herdr-agent-icon','●');icon.dataset.group=paneGroup(pane);const info=node('span','herdr-pane-info');const label=node('span','herdr-name-line');label.append(node('strong','',pane.terminal_title_stripped||tab?.label||pane.pane_id),node('span','herdr-provider',pane.agent||'shell'));info.append(label,node('span','remote-status',`${tab?.label||'terminal'} · ${HyprlandApps.tilde(pane.foreground_cwd||pane.cwd)}`));
           const status=node('span','herdr-state',pane.agent_status||'unknown');status.dataset.state=pane.agent_status||'unknown';row.append(icon,info,status);group.append(row)}
         this.list.append(group);
       }
       if(!this.list.children.length)this.list.append(node('p','remote-empty','No matching panes.'));this.list.scrollTop=scroll;
     }
-    showDetail(pane){this.filters.hidden=true;this.search.hidden=true;this.list.hidden=true;this.detail.hidden=false;this.title.textContent=pane.terminal_title_stripped||pane.pane_id;const signature=JSON.stringify([pane.pane_id,pane.agent_status,pane.cwd,this.snapshot?.panes.map(p=>[p.pane_id,p.workspace_id,p.agent_status,p.terminal_title_stripped])]);if(signature!==this.detailSignature){this.detailSignature=signature;this.metadata.textContent=`${pane.agent||'shell'} · ${pane.agent_status||'unknown'} · ${(pane.foreground_cwd||pane.cwd||'').replace('/home/user','~')}`;this.paneTabs.replaceChildren();const siblings=this.snapshot.panes.filter(p=>p.workspace_id===pane.workspace_id);this.paneTabs.hidden=siblings.length<=1;for(const p of siblings){const b=button(p.terminal_title_stripped||p.pane_id,()=>this.select(p.pane_id));b.setAttribute('aria-pressed',String(p.pane_id===pane.pane_id));this.paneTabs.append(b)}}}
+    showDetail(pane){this.filters.hidden=true;this.search.hidden=true;this.list.hidden=true;this.detail.hidden=false;this.title.textContent=pane.terminal_title_stripped||pane.pane_id;const signature=JSON.stringify([pane.pane_id,pane.agent_status,pane.cwd,this.snapshot?.panes.map(p=>[p.pane_id,p.workspace_id,p.agent_status,p.terminal_title_stripped])]);if(signature!==this.detailSignature){this.detailSignature=signature;this.metadata.textContent=`${pane.agent||'shell'} · ${pane.agent_status||'unknown'} · ${HyprlandApps.tilde(pane.foreground_cwd||pane.cwd)}`;this.paneTabs.replaceChildren();const siblings=this.snapshot.panes.filter(p=>p.workspace_id===pane.workspace_id);this.paneTabs.hidden=siblings.length<=1;for(const p of siblings){const b=button(p.terminal_title_stripped||p.pane_id,()=>this.select(p.pane_id));b.setAttribute('aria-pressed',String(p.pane_id===pane.pane_id));this.paneTabs.append(b)}}}
     select(id){
       this.stopTouchScroll.cancel();
       this.nativeInput.select(id);this.nativeInput.submit.disabled=!!this.uploading&&this.uploadPane===id;this.selected=id;storage.set('omarchy-herdr-pane',id);this.lastRead=null;this.queuedRead=null;this.followOutput=true;this.output.scrollLeft=0;this.term.reset();this.inputStatus.textContent='';
@@ -271,6 +273,8 @@
       }
     }
     key(input){return this.input(input)}
+    setStatus(text){this.statusText=text;this.status.textContent=`${HyprlandApps.host.name} · ${text}`}
+    hostChanged(){this.setStatus(this.statusText)}
     input(input){
       if(!this.selected){this.status.textContent='Select a pane to type';return false}
       if(!this.online||this.ws?.readyState!==1){this.inputStatus.textContent='Disconnected · input was not sent';return false}
@@ -286,7 +290,10 @@
     constructor(logic){
       this.logic=logic;this.apps={};
       this.foreground=()=>{if(!document.hidden)for(const app of Object.values(this.apps))app.resume?.()};
-      document.addEventListener('visibilitychange',this.foreground);window.addEventListener('online',this.foreground);this.update();
+      document.addEventListener('visibilitychange',this.foreground);window.addEventListener('online',this.foreground);
+      this.hostChanged=()=>{for(const app of Object.values(this.apps))app.hostChanged?.()};document.addEventListener('hyprland-host',this.hostChanged);
+      if(location.protocol!=='file:')fetch('/api/capabilities',{headers:{'X-Hyprland-Client':'1'}}).then(r=>r.ok?r.json():null).then(caps=>{if(caps)HyprlandApps.setHost(caps)}).catch(()=>{});
+      this.update();
     }
     app(key){return this.apps[key]||null}
     async closeApp(key){
@@ -306,7 +313,7 @@
         if(root){root.classList.toggle('with-keyboard',kb&&!ov);root.classList.toggle('native-typing',native)}
       }
       if(location.protocol==='file:'){
-        for(const spec of Object.values(HyprlandApps.catalog)){if(spec.offline)continue;const root=mount(spec.mount);if(root&&!root.textContent)root.append(node('p','remote-empty','Connect to HOST to use this app.'))}
+        for(const spec of Object.values(HyprlandApps.catalog)){if(spec.offline)continue;const root=mount(spec.mount);if(root&&!root.textContent)root.append(node('p','remote-empty','Connect to the host to use this app.'))}
         return;
       }
       const visible=s.desk&&window.HyprlandDesk?(window.HyprlandDesk.desks(s)[s.ws]||[current]):[current];
@@ -327,7 +334,7 @@
     }
     async openTerminalAt(path){await this.closeApp('terminal');storage.set('omarchy-terminal-cwd',path);this.logic.openApp('terminal')}
     key(key,mods){const input=keyInput(key,mods);if(!input)return;this.apps[this.logic.cur()]?.key?.(input)}
-    dispose(){for(const app of Object.values(this.apps))app.dispose?.();document.removeEventListener('visibilitychange',this.foreground);window.removeEventListener('online',this.foreground)}
+    dispose(){for(const app of Object.values(this.apps))app.dispose?.();document.removeEventListener('visibilitychange',this.foreground);window.removeEventListener('online',this.foreground);document.removeEventListener('hyprland-host',this.hostChanged)}
   }
   // Host TUIs share TerminalApp; each one is a catalog app whose session the backend spawns by id.
   const closeSession=async(key,app)=>{const session=app?.sessionRequest?await app.sessionRequest:null;const id=session?.id||storage.get('omarchy-'+key+'-id');if(id)await api(`terminal/${encodeURIComponent(id)}/close`,{});storage.set('omarchy-'+key+'-id',null)};
