@@ -32,7 +32,7 @@
 <link rel="stylesheet" href="/widgets.css">
 <link rel="stylesheet" href="/desk.css">
 <title>Hyprland Touch</title>
-<meta name="description" content="A Rosé Pine mobile OS prototype with touch workspaces, launcher, and SUPER keyboard.">
+<meta name="description" content="Touch shell for an Omarchy desktop: terminal, files, browser tabs, Herdr agents, and host TUIs from a phone or tablet.">
 <meta name="theme-color" content="#191724">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -403,7 +403,7 @@
 <div id="touch-shell" sc-camel-on-pointer-cancel="{{ cancel }}" sc-camel-on-pointer-down="{{ down }}" sc-camel-on-pointer-up="{{ up }}" style="width:402px;height:var(--canvas-height,874px);position:relative;background:var(--theme-background);color:var(--theme-foreground);font-family:'JetBrains Mono',ui-monospace,monospace;touch-action:none;user-select:none;overflow:hidden;cursor:default">
   <div class="shell-topbar" style="position:absolute;top:0;left:0;right:0;height:52px;box-sizing:border-box;z-index:15;background:var(--theme-background);display:flex;align-items:center;justify-content:space-between;padding:7px 22px 0 14px;font-size:12px;color:var(--theme-secondary)">
     <div class="workspace-switcher" style="width:112px;display:grid;grid-template-columns:repeat(5,20px);gap:3px"><sc-for list="{{ pills }}" as="w" hint-placeholder-count="4"><div sc-camel-on-click="{{ w.on }}" class="workspace-pill" style="width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font-size:11px;font-weight:600;background: {{ w.bg }};color: {{ w.c }};transition:background .3s,color .3s;cursor:pointer">{{ w.i }}</div></sc-for><span class="desk-ws-label">{{ wsLabel }}</span></div>
-    <div style="display:flex;gap:10px;align-items:center;height:24px;white-space:nowrap"><sc-if value="{{ isWifi }}" hint-placeholder-val="{{ true }}"><svg width="17" height="13" sc-camel-view-box="0 0 16 12" fill="none" style="display:block"><path d="M1.50 4.50A9.2 9.2 0 0 1 14.50 4.50" stroke="var(--theme-foreground)" stroke-width="1.9" stroke-linecap="round"></path><path d="M3.76 6.76A6 6 0 0 1 12.24 6.76" stroke="var(--theme-foreground)" stroke-width="1.9" stroke-linecap="round"></path><path d="M5.95 8.95A2.9 2.9 0 0 1 10.05 8.95" stroke="var(--theme-foreground)" stroke-width="1.9" stroke-linecap="round"></path><circle cx="8" cy="11" r="1.1" fill="var(--theme-foreground)"></circle></svg></sc-if><sc-if value="{{ isCell }}" hint-placeholder-val="{{ false }}"><span style="color:var(--theme-foreground);font-weight:600;font-size:11px;letter-spacing:.5px">{{ netLabel }}</span></sc-if><sc-if value="{{ isOff }}" hint-placeholder-val="{{ false }}"><span style="color:var(--theme-red);font-size:11px">offline</span></sc-if><span style="color:var(--theme-foreground);font-weight:500" data-live-time>—</span><span style="color:var(--theme-green)">87%</span></div>
+    <div style="display:flex;gap:10px;align-items:center;height:24px;white-space:nowrap"><sc-if value="{{ isWifi }}" hint-placeholder-val="{{ true }}"><svg width="17" height="13" sc-camel-view-box="0 0 16 12" fill="none" style="display:block"><path d="M1.50 4.50A9.2 9.2 0 0 1 14.50 4.50" stroke="var(--theme-foreground)" stroke-width="1.9" stroke-linecap="round"></path><path d="M3.76 6.76A6 6 0 0 1 12.24 6.76" stroke="var(--theme-foreground)" stroke-width="1.9" stroke-linecap="round"></path><path d="M5.95 8.95A2.9 2.9 0 0 1 10.05 8.95" stroke="var(--theme-foreground)" stroke-width="1.9" stroke-linecap="round"></path><circle cx="8" cy="11" r="1.1" fill="var(--theme-foreground)"></circle></svg></sc-if><sc-if value="{{ isOff }}" hint-placeholder-val="{{ false }}"><span style="color:var(--theme-red);font-size:11px">offline</span></sc-if><span style="color:var(--theme-foreground);font-weight:500" data-live-time>—</span></div>
   </div>
 
   <div style="position:absolute;inset:0;overflow:hidden">
@@ -435,68 +435,24 @@
   </div>
 
   <div class="shell-shade" style="position:absolute;left:0;right:0;top:52px;z-index:14;background:color-mix(in srgb, var(--theme-surface) 96%, transparent);border:1px solid var(--theme-border);border-top:0;border-radius:0 0 28px 28px;transform: {{ shadeQTf }};transition: {{ tr }};padding:14px 18px 18px;display:flex;flex-direction:column;gap:10px;box-sizing:border-box">
-    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--theme-secondary);padding:0 4px"><span>quick settings</span><span>87% · 4h 12m</span></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px"><sc-for list="{{ qsToggles }}" as="t" hint-placeholder-count="6"><div sc-camel-on-click="{{ t.on }}" style="height:64px;border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;justify-content:space-between;background: {{ t.bg }};color: {{ t.c }};cursor:pointer;transition:background .2s,color .2s;box-sizing:border-box"><div style="font-size:12px;font-weight:600">{{ t.n }}</div><div style="font-size:10px;opacity:.75">{{ t.state }}</div></div></sc-for></div>
-    <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
-      <div style="display:flex;align-items:center;gap:12px;font-size:11px;color:var(--theme-secondary)"><span style="width:64px">brightness</span><div style="flex:1;height:6px;border-radius:3px;background:var(--theme-surface-raised);position:relative"><div style="position:absolute;left:0;top:0;bottom:0;width:62%;border-radius:3px;background:var(--theme-yellow)"></div></div></div>
-      <div style="display:flex;align-items:center;gap:12px;font-size:11px;color:var(--theme-secondary)"><span style="width:64px">volume</span><div style="flex:1;height:6px;border-radius:3px;background:var(--theme-surface-raised);position:relative"><div style="position:absolute;left:0;top:0;bottom:0;width:35%;border-radius:3px;background:var(--theme-magenta)"></div></div></div>
-    </div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--theme-secondary);padding:0 4px"><span>quick settings</span></div>
     <div style="display:flex;gap:8px;margin-top:4px"><div sc-camel-on-click="{{ openSettings }}" style="flex:1;padding:12px;border-radius:12px;background:var(--theme-background);border:1px solid var(--theme-surface-raised);font-size:11px;cursor:pointer"><div style="color:var(--theme-secondary);margin-bottom:2px">theme</div><div data-theme-name>Prototype</div></div><div sc-camel-on-click="{{ openSettings }}" style="flex:1;padding:12px;border-radius:12px;background:var(--theme-background);border:1px solid var(--theme-surface-raised);font-size:11px;cursor:pointer"><div style="color:var(--theme-secondary);margin-bottom:2px">all settings</div><div>{{ openCount }} workspaces · touch</div></div></div>
   </div>
 
-  <div style="position:absolute;inset:0;z-index:30;pointer-events:none;opacity: {{ mapOp }};transition:opacity .3s;font-size:10px;font-weight:600;letter-spacing:.3px">
-    <div style="position:absolute;top:0;left:0;width:33.3%;height:96px;background:color-mix(in srgb, var(--theme-magenta) 28%, transparent);border:1px dashed var(--theme-magenta);border-radius:0 0 12px 0;display:flex;align-items:flex-end;padding:8px;color:var(--theme-foreground);box-sizing:border-box">↓ notifications</div>
-    <div style="position:absolute;top:0;left:33.3%;width:33.4%;height:96px;background:color-mix(in srgb, var(--theme-green) 28%, transparent);border:1px dashed var(--theme-green);display:flex;align-items:flex-end;justify-content:center;padding:8px;color:var(--theme-foreground);text-align:center;box-sizing:border-box">↓ launcher</div>
-    <div style="position:absolute;top:0;right:0;width:33.3%;height:96px;background:color-mix(in srgb, var(--theme-yellow) 28%, transparent);border:1px dashed var(--theme-yellow);border-radius:0 0 0 12px;display:flex;align-items:flex-end;justify-content:flex-end;padding:8px;color:var(--theme-foreground);box-sizing:border-box">↓ quick settings</div>
-    <div style="position:absolute;bottom:0;left:0;width:15%;height:120px;background:color-mix(in srgb, var(--theme-magenta) 28%, transparent);border:1px dashed var(--theme-magenta);border-radius:0 12px 0 0;display:flex;align-items:flex-start;padding:10px 8px;color:var(--theme-foreground);box-sizing:border-box">↑ keys</div>
-    <div style="position:absolute;bottom:0;left:15%;width:70%;height:120px;background:color-mix(in srgb, var(--theme-foreground) 18%, transparent);border:1px dashed var(--theme-secondary);display:flex;align-items:flex-start;justify-content:center;padding:10px 8px;color:var(--theme-foreground);box-sizing:border-box">↑ expo</div>
-    <div style="position:absolute;bottom:0;right:0;width:15%;height:120px;background:color-mix(in srgb, var(--theme-rose) 28%, transparent);border:1px dashed var(--theme-rose);border-radius:12px 0 0 0;display:flex;align-items:flex-start;justify-content:flex-end;padding:10px 8px;color:var(--theme-foreground);box-sizing:border-box">↑ SUPER</div>
-    <div style="position:absolute;left:0;top:130px;bottom:140px;width:26px;background:color-mix(in srgb, var(--theme-rose) 20%, transparent);border-right:1px dashed var(--theme-rose);display:flex;align-items:center;justify-content:center;color:var(--theme-foreground);writing-mode:vertical-rl;transform:rotate(180deg)">→ prev ws</div>
-    <div style="position:absolute;right:0;top:130px;bottom:140px;width:26px;background:color-mix(in srgb, var(--theme-rose) 20%, transparent);border-left:1px dashed var(--theme-rose);display:flex;align-items:center;justify-content:center;color:var(--theme-foreground);writing-mode:vertical-rl">← next ws</div>
-    <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:6px 10px;border-radius:8px;background:color-mix(in srgb, var(--theme-background) 90%, transparent);border:1px solid var(--theme-border);color:var(--theme-secondary);font-weight:400;white-space:nowrap">PWA · start swipes inside the screen</div>
-  </div>
 </div>
-</div>
-<div class="demo-controls" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;max-width:420px"><div sc-camel-on-click="{{ prev }}" style="padding:6px 11px;border-radius:999px;background:#1c1c22;border:1px solid #2c2c34;color:#c9c7c2;font-size:11px;cursor:pointer">◂ ws</div><div sc-camel-on-click="{{ next }}" style="padding:6px 11px;border-radius:999px;background:#1c1c22;border:1px solid #2c2c34;color:#c9c7c2;font-size:11px;cursor:pointer">ws ▸</div><div sc-camel-on-click="{{ toggleOv }}" style="padding:6px 11px;border-radius:999px;background:#1c1c22;border:1px solid #2c2c34;color:#c9c7c2;font-size:11px;cursor:pointer">expo</div><div sc-camel-on-click="{{ toggleKb }}" style="padding:6px 11px;border-radius:999px;background:#1c1c22;border:1px solid #2c2c34;color:#c9c7c2;font-size:11px;cursor:pointer">keyboard</div><div sc-camel-on-click="{{ toggleSuper }}" style="padding:6px 11px;border-radius:999px;background:#1c1c22;border:1px solid #2c2c34;color:#c9c7c2;font-size:11px;cursor:pointer">SUPER keys</div><div sc-camel-on-click="{{ toggleLaunch }}" style="padding:6px 11px;border-radius:999px;background:#1c1c22;border:1px solid #2c2c34;color:#c9c7c2;font-size:11px;cursor:pointer">launcher</div><div sc-camel-on-click="{{ toggleNotif }}" style="padding:6px 11px;border-radius:999px;background:#1c1c22;border:1px solid #2c2c34;color:#c9c7c2;font-size:11px;cursor:pointer">notifs</div><div sc-camel-on-click="{{ toggleQs }}" style="padding:6px 11px;border-radius:999px;background:#1c1c22;border:1px solid #2c2c34;color:#c9c7c2;font-size:11px;cursor:pointer">quick settings</div><div sc-camel-on-click="{{ toggleMap }}" style="padding:6px 11px;border-radius:999px;background:#1c1c22;border:1px solid #2c2c34;color:#c9c7c2;font-size:11px;cursor:pointer">gesture map</div><div sc-camel-on-click="{{ reset }}" style="padding:6px 11px;border-radius:999px;background:#1c1c22;border:1px solid #2c2c34;color:#c9c7c2;font-size:11px;cursor:pointer">reset</div></div>
-</div>
-<div class="prototype-notes" style="max-width:380px;font-size:12px;line-height:1.7;color:rgba(255,255,255,.6);display:flex;flex-direction:column;gap:14px">
-  <div><div style="font-size:14px;color:#e6e4df;font-weight:600;margin-bottom:6px">Hyprland-touch · integrated prototype</div>Everything chosen so far in one phone: the 7a shell (top bar, colored workspaces, edge bars, gesture map), the 2a keyboard with SUPER binds and the terminal layer, the 6a launcher, files as 8a, settings as 9c, the agent manager as 10a with the 11a pane.</div>
-  <div><div style="color:#e6e4df;font-weight:500;margin-bottom:4px">Gestures</div>Left / right edge: previous / next workspace. Bottom-left up: keyboard. Bottom-middle up: expo. Bottom-right up: keyboard with SUPER held. Top-left down: notifications. Top-middle down: launcher. Top-right down: quick settings. On an agent pane, swipe anywhere on the pane to move between panes.</div>
-  <div><div style="color:#e6e4df;font-weight:500;margin-bottom:4px">What is live</div>Workspaces open when launched (from home tiles, the launcher, or SUPER + a letter) and get their color, pill, and edge bar. Type in the launcher with the on-screen keyboard; ⏎ opens the first match. SUPER + q closes the current workspace. Wi‑Fi toggles in quick settings switch the status bar to 5G. In files, tap rows to select. In herd, tap an agent to open its pane and answer a blocked agent with the buttons; the herd list and the notification update.</div>
-  <div><div style="color:#e6e4df;font-weight:500;margin-bottom:4px">SUPER binds</div>q close · t / ⏎ terminal · e files · s settings · a agents · h / l or ← → workspace · ↑ expo · ↓ home · space launcher</div>
 </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script="" data-props="{&quot;network&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;wifi&quot;,&quot;5G&quot;,&quot;LTE&quot;,&quot;3G&quot;,&quot;offline&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Status bar&quot;},&quot;barWidth&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:2,&quot;min&quot;:1,&quot;max&quot;:12,&quot;step&quot;:1,&quot;unit&quot;:&quot;px&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Edge bars&quot;},&quot;barGlow&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0,&quot;min&quot;:0,&quot;max&quot;:40,&quot;step&quot;:1,&quot;unit&quot;:&quot;px&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Edge bars&quot;},&quot;barOpacity&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0.75,&quot;min&quot;:0.2,&quot;max&quot;:1,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Edge bars&quot;},&quot;slowMotion&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Demo&quot;}}">
+<script type="text/x-dc" data-dc-script="">
 class Component extends DCLogic {
   APPS = window.HyprlandApps.catalog; // see public/apps.js
   T = {bg:'var(--theme-background)',sf:'var(--theme-surface)',sf2:'var(--theme-surface-raised)',bd:'var(--theme-border)',fg:'var(--theme-foreground)',mu:'var(--theme-secondary)',dim:'var(--theme-dim)',love:'var(--theme-red)',gold:'var(--theme-yellow)',rose:'var(--theme-rose)',foam:'var(--theme-green)',iris:'var(--theme-magenta)'};
-  FILES = [
-    {g:'dir',n:'config',s:'12 items',t:'13:02',dir:true,prev:[['hypr/','var(--theme-foreground)'],['waybar/','var(--theme-foreground)'],['walker/','var(--theme-foreground)'],['alacritty/','var(--theme-foreground)']]},
-    {g:'dir',n:'dotfiles',s:'48 items',t:'yesterday',dir:true,prev:[['.zshrc','var(--theme-foreground)'],['.gitconfig','var(--theme-foreground)'],['nvim/','var(--theme-foreground)'],['+45 more','var(--theme-dim)']]},
-    {g:'dir',n:'screenshots',s:'207 items',t:'12:41',dir:true,prev:[['2026-09-10_12-41.png','var(--theme-foreground)'],['2026-09-10_11-03.png','var(--theme-foreground)'],['+205 more','var(--theme-dim)']]},
-    {g:'dir',n:'wallpapers',s:'31 items',t:'mon',dir:true,prev:[['rose-pine-forest.jpg','var(--theme-foreground)'],['moon-tide.png','var(--theme-foreground)'],['+29 more','var(--theme-dim)']]},
-    {g:'cf',n:'hyprland.conf',s:'4.2K',t:'13:02',perm:'-rw-r--r--',meta:'conf · 188 lines',prev:[['general {','var(--theme-magenta)'],['    gaps_out = 8','var(--theme-secondary)'],['    border_size = 2','var(--theme-secondary)'],['    layout = touch','var(--theme-secondary)']]},
-    {g:'sh',n:'install.sh',s:'12K',t:'13:02',perm:'-rwxr-xr-x',meta:'bash · 312 lines',prev:[['#!/usr/bin/env bash','var(--theme-magenta)'],['set -euo pipefail','var(--theme-green)'],['echo "installing hyprland-touch…"','var(--theme-yellow)'],['sudo pacman -S --needed hyprland waybar walker','var(--theme-secondary)']]},
-    {g:'md',n:'README.md',s:'3.1K',t:'tue',perm:'-rw-r--r--',meta:'markdown · 96 lines',prev:[['# hyprland-touch','var(--theme-rose)'],['Arch + Hyprland on a phone.','var(--theme-secondary)'],['## install','var(--theme-rose)'],['./install.sh','var(--theme-secondary)']]},
-    {g:'js',n:'waybar.jsonc',s:'1.8K',t:'tue',perm:'-rw-r--r--',meta:'jsonc · 64 lines',prev:[['{ "layer": "top",','var(--theme-secondary)'],['  "modules-left": ["hyprland/workspaces"],','var(--theme-secondary)'],['  "modules-right": ["network","battery"],','var(--theme-secondary)'],['  "height": 52 }','var(--theme-secondary)']]},
-    {g:'png',n:'fastfetch.png',s:'218K',t:'12:41',perm:'-rw-r--r--',meta:'png · 1206×2622',prev:[['image preview · 1206×2622','var(--theme-dim)'],['sRGB · 8-bit','var(--theme-dim)']]}];
-  state = { ws:0, open:['home'], desk:!!window.HyprlandDesk?.isDesk(), deskW:window.innerWidth, deskH:window.innerHeight, tiles:{}, focus:null, full:[], ov:false, kb:false, sup:false, term:false, ctl:false, shade:null, launch:false, map:false, query:'', input:'', cursor:0, transcript:[], history:[], historyIndex:-1, draft:'', shift:false, fileSel:5, herdView:'list', herdG:0, pane:0, wifi:true, qs:{bluetooth:true,dnd:false,rotate:false,airplane:false,torch:false}, notifsCleared:false,
-    agents:[
-      {ws:'mobile-hypr',m:'local',a:'claude',s:'working',t:'wiring edge gestures',tail:'▸ editing src/gestures.rs',el:'12m',lines:[['~/src/mobile-hypr ❯ claude','var(--theme-secondary)'],['› wire the edge gestures to hyprctl dispatch','var(--theme-foreground)'],['',''],['● Read src/gestures.rs (212 lines)','var(--theme-secondary)'],['● Read src/main.rs (88 lines)','var(--theme-secondary)'],['● Update src/gestures.rs +38 −4','var(--theme-secondary)'],['● Bash cargo check ✓ 0 warnings','var(--theme-secondary)'],['● Update src/gestures.rs +12 −0','var(--theme-secondary)'],['',''],['✻ Wiring the bottom-right zone to exec hyprctl dispatch…','var(--theme-green)'],['12m 04s · 48.2k tokens · esc to interrupt','var(--theme-dim)']]},
-      {ws:'mobile-hypr',m:'local',a:'codex',s:'blocked',t:'waybar battery module',tail:'allow write to waybar/battery.rs?',el:'3m',ans:[{k:'n',l:'deny'},{k:'y',l:'allow once'},{k:'a',l:'allow always',p:true}],lines:[['~/src/mobile-hypr ❯ codex','var(--theme-secondary)'],['› add a battery module to waybar that reads /sys/class/power_supply','var(--theme-foreground)'],['',''],['• read waybar/config.jsonc','var(--theme-secondary)'],['• read waybar/modules/mod.rs','var(--theme-secondary)'],['• plan: battery.rs → register module → style.css','var(--theme-secondary)'],['',''],['┌ edit waybar/battery.rs','var(--theme-secondary)'],['│ + use std::fs;','var(--theme-green)'],['│ + const SYS_BAT: &str = "/sys/class/power_supply/BAT0";','var(--theme-green)'],['│ + pub fn read_capacity() -> u8 {','var(--theme-green)'],['│ +     fs::read_to_string(format!("{SYS_BAT}/capacity"))','var(--theme-green)'],['│ +         .map(|s| s.trim().parse().unwrap_or(0))','var(--theme-green)'],['│ − // TODO battery','var(--theme-red)'],['└ 6 lines','var(--theme-dim)'],['',''],['? Allow write to waybar/battery.rs? [y/n/a]','var(--theme-yellow)']]},
-      {ws:'herdr-ios',m:'hetzner-1',a:'claude',s:'done',t:'swift bridge for socket api',tail:'+124 −31 · 3 files · tests pass',el:'41m',lines:[['~/src/herdr-ios ❯ claude','var(--theme-secondary)'],['› bridge the herdr socket api to swift','var(--theme-foreground)'],['',''],['● Write Sources/HerdrKit/Socket.swift +124','var(--theme-secondary)'],['● Update Package.swift +3 −1','var(--theme-secondary)'],['● Bash swift test ✓ 14 passed','var(--theme-secondary)'],['',''],['Done. Socket API bridged; ready to commit.','var(--theme-magenta)']]},
-      {ws:'herdr-ios',m:'hetzner-1',a:'amp',s:'idle',t:'docs: agent guide',tail:'❯',el:'2h',lines:[['~/src/herdr-ios ❯ amp','var(--theme-secondary)'],['› draft docs/agent-guide.md','var(--theme-foreground)'],['● Write docs/agent-guide.md +212','var(--theme-secondary)'],['',''],['❯','var(--theme-foreground)']]},
-      {ws:'dotfiles',m:'local',a:'claude',s:'blocked',t:'migrate to rosé pine',tail:'which variant? 1 main · 2 moon · 3 dawn',el:'1m',ans:[{k:'1',l:'main',p:true},{k:'2',l:'moon'},{k:'3',l:'dawn'}],lines:[['~/dotfiles ❯ claude','var(--theme-secondary)'],['› migrate the terminal theme to rosé pine','var(--theme-foreground)'],['',''],['● Read alacritty/alacritty.toml','var(--theme-secondary)'],['● Read nvim/lua/theme.lua','var(--theme-secondary)'],['',''],['? Which Rosé Pine variant for the terminal?','var(--theme-yellow)'],['  1 main   2 moon   3 dawn','var(--theme-secondary)']]}] };
-  componentDidMount(){ this.hostChanged=()=>this.set({});document.addEventListener('hyprland-host',this.hostChanged); this.cards=window.HyprlandCards?.attach(this); this.remote=window.HyprlandRemote?.attach(this); window.HyprlandThemes.attach(); this.expo=window.HyprlandExpo.attach(this); this.widgets=window.HyprlandWidgets.attach(this); this.dashboard=window.HyprlandDashboard.attach(this); this.desk=window.HyprlandDesk?.attach(this) }
+  state = { ws:0, open:['home'], desk:!!window.HyprlandDesk?.isDesk(), deskW:window.innerWidth, deskH:window.innerHeight, tiles:{}, focus:null, full:[], ov:false, kb:false, sup:false, term:false, ctl:false, shade:null, launch:false, query:'', shift:false };
+  componentDidMount(){ this.hostChanged=()=>this.set({});document.addEventListener('hyprland-host',this.hostChanged);window.addEventListener('online',this.hostChanged);window.addEventListener('offline',this.hostChanged); this.cards=window.HyprlandCards?.attach(this); this.remote=window.HyprlandRemote?.attach(this); window.HyprlandThemes.attach(); this.expo=window.HyprlandExpo.attach(this); this.widgets=window.HyprlandWidgets.attach(this); this.dashboard=window.HyprlandDashboard.attach(this); this.desk=window.HyprlandDesk?.attach(this) }
   componentDidUpdate(){ this.cards?.update(); this.remote?.update(); this.expo?.update(); this.widgets?.update(); this.dashboard?.update(); this.desk?.update() }
-  componentWillUnmount(){ document.removeEventListener('hyprland-host',this.hostChanged);this.keyEnd();this.desk?.dispose();this.cards?.dispose();this.dashboard?.dispose();this.widgets?.dispose();this.expo?.dispose();this.remote?.dispose() }
+  componentWillUnmount(){ document.removeEventListener('hyprland-host',this.hostChanged);window.removeEventListener('online',this.hostChanged);window.removeEventListener('offline',this.hostChanged);this.keyEnd();this.desk?.dispose();this.cards?.dispose();this.dashboard?.dispose();this.widgets?.dispose();this.expo?.dispose();this.remote?.dispose() }
   ptr = null; wx = null;
-  cancel=()=>{ this.ptr=null; this.ax=null; this.wx=null };
-  aDown=e=>{ this.ax=e.clientX };
-  aUp=e=>{ if(this.ax==null) return; const dx=e.clientX-this.ax; this.ax=null; const p=this.state.appPage||0; if(dx<-40) this.set({appPage:Math.min(2,p+1)}); else if(dx>40) this.set({appPage:Math.max(0,p-1)}) };
-  wDown=e=>{ this.wx=e.clientX };
-  wUp=e=>{ if(this.wx==null) return; const dx=e.clientX-this.wx; this.wx=null; const w=this.state.widget||0; if(dx<-40) this.set({widget:Math.min(2,w+1)}); else if(dx>40) this.set({widget:Math.max(0,w-1)}) };
+  cancel=()=>{ this.ptr=null };
   set(p){ this.setState(p) }
   cur(){ const s=this.state; return s.desk&&window.HyprlandDesk?window.HyprlandDesk.cur(s):s.open[s.ws] }
   reset(){ return {ov:false,kb:false,sup:false,ctl:false,launch:false,shade:null,query:''} }
@@ -518,11 +474,6 @@ class Component extends DCLogic {
     if(p.x<E && dx>T) return this.go(s.ws-1);
     if(p.x>p.w-E && dx<-T) return this.go(s.ws+1);
   }
-  groups(){ const g=[]; this.state.agents.forEach((a,i)=>{ let x=g.find(q=>q.ws===a.ws); if(!x){ x={ws:a.ws,m:a.m,list:[]}; g.push(x) } x.list.push({...a,i}) }); return g }
-  paneList(){ return (this.groups()[this.state.herdG]||{list:[]}).list }
-  answer(i,k){ const agents=this.state.agents.map((a,j)=>j!==i?a:{...a,s:'working',tail:'▸ continuing after "'+k+'"',el:'now',ans:null,lines:[...a.lines,['› '+k,'var(--theme-magenta)'],['● applying…','var(--theme-secondary)']]}); this.set({agents}) }
-  scrollPrompt(){ requestAnimationFrame(()=>{ const el=document.getElementById('terminal-scroll'), caret=document.getElementById('terminal-caret'); if(el&&caret){ const r=el.getBoundingClientRect(), c=caret.getBoundingClientRect(); if(c.bottom>r.bottom-20) el.scrollTop+=c.bottom-r.bottom+20; else if(c.top<r.top+20) el.scrollTop-=r.top+20-c.top } }) }
-  edit(input,cursor){ this.set({input,cursor,historyIndex:-1}); this.scrollPrompt() }
   showKey(e,label){
     clearTimeout(this.previewTimer);
     this.previewKey?.classList.remove('key-pressed');
@@ -550,43 +501,12 @@ class Component extends DCLogic {
       if(l==='space'||Array.from(l).length===1) this.set({query:s.query+(l==='space'?' ':s.shift?this.shifted(l):l),shift:false});
       return;
     }
-    if(this.cur()!=='terminal') return;
-    const chars=Array.from(s.input), pos=s.cursor;
-    if(s.ctl){
-      this.set({ctl:false});
-      if(l==='a') return this.set({cursor:0});
-      if(l==='e') return this.set({cursor:chars.length});
-      if(l==='u') return this.edit(chars.slice(pos).join(''),0);
-      if(l==='k') return this.edit(chars.slice(0,pos).join(''),pos);
-      if(l==='l') { this.set({transcript:[]}); return }
-      if(l==='c') { this.set({transcript:[...s.transcript,'~ ❯ '+s.input+'^C'].slice(-200)}); return this.edit('',0) }
-      return;
-    }
-    if(l==='←'||l==='→'||l==='home'||l==='end'){ this.set({cursor:l==='home'?0:l==='end'?chars.length:Math.max(0,Math.min(chars.length,pos+(l==='←'?-1:1)))}); this.scrollPrompt(); return }
-    if(l==='↑'||l==='↓'){
-      if(!s.history.length) return;
-      const i=l==='↑'?Math.min(s.history.length-1,s.historyIndex+1):Math.max(-1,s.historyIndex-1);
-      const input=i<0?s.draft:s.history[s.history.length-1-i];
-      this.set({input,cursor:Array.from(input).length,historyIndex:i,...(s.historyIndex<0&&i>=0?{draft:s.input}:{})}); this.scrollPrompt(); return;
-    }
-    if(l==='⌫'){ if(pos){ chars.splice(pos-1,1); this.edit(chars.join(''),pos-1) } return }
-    if(l==='⏎'){
-      const cmd=s.input.trim(); let output=[];
-      if(cmd==='help') output=['Keyboard test · local demo','Try: echo hello, clear, pwd, date','↑/↓ history · ←/→ cursor · hold ⌫ to delete','ctrl + a/e/u/k/c/l · Shift for uppercase'];
-      else if(cmd==='pwd') output=['/home/mobile'];
-      else if(cmd==='date') output=[new Date().toLocaleString()];
-      else if(cmd==='echo'||cmd.startsWith('echo ')) output=[cmd.slice(5)];
-      else if(cmd&&cmd!=='clear') output=['Input received: '+s.input];
-      this.set({transcript:cmd==='clear'?[]:[...s.transcript,'~ ❯ '+s.input,...output].slice(-200),history:cmd?[...s.history, s.input].slice(-100):s.history,draft:''});
-      this.edit('',0); return;
-    }
-    if(l==='space'||l==='tab'||Array.from(l).length===1){ const text=l==='space'?' ':l==='tab'?'  ':s.shift?this.shifted(l):l; chars.splice(pos,0,...Array.from(text)); this.edit(chars.join(''),pos+Array.from(text).length); this.set({shift:false}) }
   }
   matches(){ const q=this.state.query.trim().toLowerCase(); return Object.keys(this.APPS).filter(k=>k!=='home' && (this.APPS[k].name.includes(q)||this.APPS[k].description.includes(q))) }
   // Card geometry for every catalog app (public/cards.js paints it); the desk replaces it above 600 px.
   layout(){
-    const s=this.state, P=this.props, A=this.APPS;
-    const dur=P.slowMotion?'1.4s':'.5s', ease='cubic-bezier(.22,.9,.24,1)', tr=`transform ${dur} ${ease}, opacity ${dur} ${ease}, border-color .3s, border-radius ${dur} ${ease}`;
+    const s=this.state, A=this.APPS;
+    const dur='.5s', ease='cubic-bezier(.22,.9,.24,1)', tr=`transform ${dur} ${ease}, opacity ${dur} ${ease}, border-color .3s, border-radius ${dur} ${ease}`;
     const n=s.open.length, cols=n<=4?2:3, sc=n<=4?.35:n>9?.19:.26, x0=n<=4?45:29, dx=n<=4?171:120, y0=n<=4?104:n>9?80:96, dy=n<=4?328:n>9?190:243;
     const cards={};
     Object.keys(A).forEach(k=>{ const i=s.open.indexOf(k), on=i>=0;
@@ -595,14 +515,12 @@ class Component extends DCLogic {
     return {cards,tr,rad:s.ov?'28px':'0px',D};
   }
   renderVals(){
-    const s=this.state, P=this.props, T=this.T, A=this.APPS, cur=this.cur();
+    const s=this.state, T=this.T, A=this.APPS, cur=this.cur();
     const {tr,rad,D}=this.layout(), n=s.open.length;
-    const wsC=i=>A[s.open[i]]?'var(--theme-secondary)':'transparent';
-    const glow=P.barGlow??0, barW=P.barWidth??2, barOp=P.barOpacity??.75;
     const pills=D?D.pills:s.open.map((k,i)=>({i:i+1,col:T.mu,bg:i===s.ws?T.sf2:'transparent',c:i===s.ws?T.fg:T.mu,on:()=>{ if(i===this.state.ws) this.set({ov:!this.state.ov,kb:false}); else this.go(i) }}));
-    const netP=P.network||'auto'; const net=netP==='auto'?(s.wifi?'wifi':'5G'):netP;
+    const online=typeof navigator==='undefined'||navigator.onLine!==false;
     // keyboard
-    const bind={q:'close',e:'files',s:'settings',a:'agents',t:'term',h:'ws ←',l:'ws →',space:'launch','⏎':'term','←':'ws ←','→':'ws →','↑':'expo','↓':'home'};
+    const bind={q:'close',e:'files',s:'settings',a:'herdr',t:'term',h:'ws ←',l:'ws →',space:'launch','⏎':'term','←':'ws ←','→':'ws →','↑':'expo','↓':'home'};
     const act={q:()=>this.closeWs(),e:()=>this.openApp('files'),s:()=>this.openApp('settings'),a:()=>this.openApp('herdr'),t:()=>this.openApp('terminal'),'⏎':()=>this.openApp('terminal'),h:()=>this.go(s.ws-1),l:()=>this.go(s.ws+1),'←':()=>this.go(s.ws-1),'→':()=>this.go(s.ws+1),'↑':()=>this.set({ov:true,kb:false,sup:false}),'↓':()=>this.go(0),space:()=>this.set({launch:true,sup:false})};
     const R=(str,w)=>str.split(' ').map(l=>({l,w:w||1}));
     const key=x=>{ if(x.l==='SUPER') return {l:'super',w:1.5,fs:'11px',bg:s.sup?T.rose:T.bd,c:s.sup?T.bg:T.fg,on:()=>this.set({sup:!this.state.sup})};
@@ -616,52 +534,18 @@ class Component extends DCLogic {
     const termRows=[R('1 2 3 4 5 6 7 8 9 0'),R('- / : ; ( ) $ & @ "'),R('CTRL ← ↓ ↑ → ⇧ home end tab ⌫').map(x=>({...x,fs:'10px'}))];
     const abcRows=[R('q w e r t y u i o p'),R('a s d f g h j k l'),[{l:'⇧',w:1.5},...R('z x c v b n m'),{l:'⌫',w:1.5}]];
     const kbRows=[...(s.term?termRows:abcRows),[{l:'SUPER'},{l:'LAYER'},{l:'esc'},{l:'space',w:3},{l:'.'},{l:'⏎',w:1.5}]].map(r=>({keys:r.map(x=>{const k=key(x); return {...k,down:e=>{if(e.button===0)this.showKey(e,k.l);this.pressKey(e,k.on,!s.sup&&['⌫','←','→'].includes(x.l))},click:e=>{e.stopPropagation();if(e.detail===0){this.showKey(e,k.l);k.on();this.keyEnd(e)}}}})}));
-    // launcher
     const m=this.matches();
-    const launchResults=m.slice(0,4).map((k,i)=>({g:A[k].glyph,n:A[k].name,d:A[k].description,c:A[k].color,bg:i===0?T.sf2:'transparent',hint:i===0?'⏎':(s.open.includes(k)?'ws '+(s.open.indexOf(k)+1):'open'),on:()=>this.openApp(k)}));
-    // files
-    const F=this.FILES, sel=F[s.fileSel];
-    const fileRows=F.map((f,i)=>({g:f.dir?'▸':f.g,n:f.dir?f.n+'/':f.n,s:f.s,t:f.t,bg:i===s.fileSel?T.sf2:'transparent',c:i===s.fileSel?T.love:T.fg,gc:f.dir?T.bg:T.mu,gbg:f.dir?T.love:T.sf2,on:()=>this.set({fileSel:i})}));
-    // herd
-    const ST={working:{c:T.foam,l:'working'},blocked:{c:T.gold,l:'needs you'},done:{c:T.iris,l:'done'},idle:{c:T.dim,l:'idle'}};
-    const groups=this.groups();
-    const herdGroups=groups.map((g,gi)=>({ws:g.ws,m:g.m,mc:g.m==='local'?T.mu:'var(--theme-accent)',bd:g.list.some(a=>a.s==='blocked')?T.gold:T.bd,count:g.list.length,list:g.list.map((a,pi)=>({a:a.a,t:a.t,tail:a.tail,el:a.el,c:ST[a.s].c,nc:a.s==='blocked'?T.gold:T.fg,tc:a.s==='blocked'?T.fg:T.dim,on:()=>this.set({herdView:'pane',herdG:gi,pane:pi})}))}));
-    const cnt=k=>s.agents.filter(a=>a.s===k).length;
-    const herdSummary=[['blocked',T.gold],['working',T.foam],['done',T.iris],['idle',T.dim]].map(([k,c])=>({n:cnt(k),l:k==='blocked'?'need you':k,c}));
-    const panes=this.paneList(), pa=panes[s.pane]||panes[0]||{s:'idle',a:'',ws:'',m:'',lines:[]}, g=groups[s.herdG]||{ws:'',m:''};
-    const paneAns=(pa.ans||[]).map(o=>({k:o.k,l:o.l,bg:o.p?T.gold:T.sf2,c:o.p?T.bg:T.fg,fw:o.p?600:400,kbg:o.p?'color-mix(in srgb, var(--theme-background) 18%, transparent)':T.bg,kc:o.p?T.bg:T.mu,on:()=>this.answer(pa.i,o.k)}));
-    const blockedCodex=false;
-    const notifsAll=[ blockedCodex?{g:'cx',bg:T.gold,app:'herdr · codex',t:'3m',title:'codex needs you',body:'allow write to waybar/battery.rs?',on:()=>{ this.set({shade:null,herdView:'pane',herdG:0,pane:1}); this.openApp('herdr') }}:null,
-      {g:'pk',bg:T.foam,app:'pacman',t:'12m',title:'12 updates available',body:'linux-mobile 6.12.4 · hyprland 0.52.1 · firefox 143',on:()=>this.openApp('settings')},
-      {g:'sg',bg:T.iris,app:'signal',t:'now',title:'maya',body:'did you get the fastfetch theme working?',on:()=>{}} ].filter(Boolean);
-    const notifs=s.notifsCleared?[]:notifsAll;
-    const qsDefs=[['wi-fi',s.wifi,()=>this.set({wifi:!this.state.wifi})],...Object.keys(s.qs).map(k=>[k,s.qs[k],()=>this.set({qs:{...this.state.qs,[k]:!this.state.qs[k]}})])];
-    const qsToggles=qsDefs.map(([n,on,f])=>({n,on:f,bg:on?T.rose:T.sf2,c:on?T.bg:T.fg,state:on?'on':'off'}));
     const homeKeys=s.homePins||window.HyprlandApps.DEFAULT_PINS;
     return {
       swipeHintOpacity:s.ov||s.kb||s.launch||s.shade?0:1,
-      keyEnd:this.keyEnd, terminalHeight:s.kb&&!s.ov?'calc(100% - 273px)':'100%', terminalLines:s.transcript, terminalBefore:Array.from(s.input).slice(0,s.cursor).join(''), terminalCursor:Array.from(s.input)[s.cursor]||' ', terminalAfter:Array.from(s.input).slice(s.cursor+1).join(''), down:this.down, up:this.up, cancel:this.cancel, tr, rad, ovOp:s.ov?1:0, openCount:n,
-      pills, wsLabel:D?D.label:'', isWifi:net==='wifi', isCell:!['wifi','offline'].includes(net), isOff:net==='offline', netLabel:net,
-      barW:barW+'px', prevC:wsC(s.ws-1), prevOp:s.ws>0?barOp:0, prevGlow:s.ws>0&&glow>0?`0 0 ${glow}px ${wsC(s.ws-1)}`:'none', nextC:wsC(s.ws+1), nextOp:s.ws<n-1?barOp:0, nextGlow:s.ws<n-1&&glow>0?`0 0 ${glow}px ${wsC(s.ws+1)}`:'none',
+      keyEnd:this.keyEnd, down:this.down, up:this.up, cancel:this.cancel, tr, rad, openCount:n,
+      pills, wsLabel:D?D.label:'', isWifi:online, isOff:!online,
       managePins:()=>this.dashboard?.managePins(),homeApps:homeKeys.filter(k=>A[k]).map(k=>({g:A[k].glyph,n:A[k].name,c:A[k].color,op:1,badge:k==='herdr'?(s.herdAttention||0):'',badgeDisplay:k==='herdr'&&s.herdAttention?'block':'none',on:()=>this.openApp(k)})),
-      aDown:this.aDown, aUp:this.aUp, appsTf:`translateX(${-(s.appPage||0)*(100/3)}%)`, appDots:[0,1,2].map(i=>({w:i===(s.appPage||0)?'16px':'5px',c:i===(s.appPage||0)?T.rose:T.bd,on:()=>this.set({appPage:i})})), wDown:this.wDown, wUp:this.wUp, widgetTf:`translateX(${-(s.widget||0)*(100/3)}%)`, widgetDots:['weather','btop','tailscale'].map((nm,i)=>({w:i===(s.widget||0)?'16px':'5px',c:i===(s.widget||0)?T.rose:T.bd,on:()=>this.set({widget:i})})),
-      openLaunch:()=>this.openLauncher(), dial:'1 2 3 4 5 6 7 8 9 * 0 #'.split(' ').map(l=>({l})),
-      kbOn:()=>{if(!this.state.ov){this.set({kb:true,sup:false});this.scrollPrompt()}}, kbOff:()=>this.set({kb:false,launch:false,sup:false,ctl:false,query:''}),
+      kbOn:()=>{if(!this.state.ov)this.set({kb:true,sup:false})}, kbOff:()=>this.set({kb:false,launch:false,sup:false,ctl:false,query:''}),
       kbTf:s.kb?'translateY(0)':'translateY(105%)', kbRows, supC:s.sup?T.rose:(s.ctl?T.iris:T.mu), supMsg:s.sup?'SUPER · tap a key to run its binding':(s.ctl?'CTRL held · tap a letter':(s.launch?'typing into the launcher':(A[cur]?.native?window.HyprlandApps.host.name+' · '+(A[cur].typing||A[cur].name):'touch keyboard'))),
-      launchTf:s.launch?'translateY(0)':'translateY(-104%)', query:s.query, matchCount:m.length, launchResults, closeAll:()=>this.set({launch:false,kb:false,shade:null,query:''}),
-      shadeNTf:s.shade==='notif'?'translateY(0)':'translateY(-104%)', shadeQTf:s.shade==='qs'?'translateY(0)':'translateY(-104%)', notifs, notifCount:notifs.length, clearNotifs:()=>this.set({notifsCleared:true}),
-      qsToggles, openSettings:()=>this.openApp('settings'), mapOp:s.map?1:0,
-      fileRows, fileIdx:s.fileSel+1, fileName:sel.n, fileMeta:sel.dir?sel.s:sel.meta, filePrev:sel.prev.map(([t,c])=>({t,c})), filePerm:sel.dir?'drwxr-xr-x':sel.perm, fileSize:sel.s,
-      toggleWifi:()=>this.set({wifi:!this.state.wifi}), wifiBg:s.wifi?'var(--theme-accent)':T.sf2, wifiKnob:s.wifi?'17px':'3px', wifiKnobC:s.wifi?T.bg:T.mu, wifiName:s.wifi?'eduroam':'off', wifiSub:s.wifi?'wpa2-ent · 5 GHz':'using cellular · 5G',
-      herdCount:s.agents.length, herdSummary, herdGroups, herdListTf:s.herdView==='list'?'translateX(0)':'translateX(-25%)', herdListOp:s.herdView==='list'?1:0,
-      herdPaneTf:s.herdView==='pane'?'translateX(0)':'translateX(100%)', herdPaneOp:s.herdView==='pane'?1:0, herdPanePe:s.herdView==='pane'?'auto':'none', herdBack:()=>this.set({herdView:'list'}),
-      paneAgent:pa.a, paneWs:g.ws, paneM:g.m, paneIdx:s.pane+1, paneCount:panes.length, paneStateC:ST[pa.s].c, paneStateL:ST[pa.s].l,
-      paneDots:panes.map((p,i)=>({w:i===s.pane?'16px':'5px',c:ST[p.s].c,on:()=>this.set({pane:i})})), paneTf:`translateX(${-s.pane*(100/Math.max(1,panes.length))}%)`, paneStripW:(panes.length*100)+'%',
-      panes:panes.map(p=>({c:ST[p.s].c,lines:p.lines.map(([t,c])=>({t:t||' ',c:c||T.fg}))})), paneBottom:pa.ans?'140px':'96px',
-      paneAns, paneAnsOp:pa.ans?1:0, paneAnsTf:pa.ans?'translateY(0)':'translateY(12px)', paneAnsPe:pa.ans?'auto':'none', paneReply:pa.ans?'or type a reply to '+pa.a+'…':'send a follow-up to '+pa.a+'…',
-      prev:()=>this.go(s.ws-1), next:()=>this.go(s.ws+1), toggleOv:()=>this.set({ov:!s.ov,kb:false,launch:false}), toggleKb:()=>this.set({kb:!s.kb,sup:false,ov:false}), toggleSuper:()=>this.set({kb:true,sup:!s.sup,ov:false}),
-      toggleLaunch:()=>this.set({launch:!s.launch,kb:!s.launch,sup:false,ov:false,shade:null,query:''}), toggleNotif:()=>this.set({shade:s.shade==='notif'?null:'notif',kb:false,ov:false,launch:false}), toggleQs:()=>this.set({shade:s.shade==='qs'?null:'qs',kb:false,ov:false,launch:false}), toggleMap:()=>this.set({map:!s.map}),
-      reset:()=>this.set({ws:0,open:['home'],ov:false,kb:false,sup:false,term:false,ctl:false,shade:null,launch:false,query:'',herdView:'list',pane:0,herdG:0,notifsCleared:false})
+      launchTf:s.launch?'translateY(0)':'translateY(-104%)', matchCount:m.length,
+      shadeNTf:s.shade==='notif'?'translateY(0)':'translateY(-104%)', shadeQTf:s.shade==='qs'?'translateY(0)':'translateY(-104%)',
+      openSettings:()=>this.openApp('settings')
     };
   }
 }

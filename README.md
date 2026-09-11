@@ -1,6 +1,6 @@
 # Hyprland Touch PWA
 
-An installable version of `Hyprland Touch Prototype.html`, the original Claude Design export. The original export is preserved unchanged. The runnable source is `public/index.html`; it retains the exported design runtime and interaction logic, with the decorative phone frame removed and local fonts and React dependencies.
+The shell source is `public/index.html`; it started as a Claude Design export and keeps that design runtime (`x-dc` templates over React) with local fonts and no CDN dependencies.
 
 ## iPhone
 

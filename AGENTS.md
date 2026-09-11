@@ -8,7 +8,7 @@
 
 The installed development iPhone app loads `https://your-host.your-tailnet.ts.net:12443/native/` over Tailscale. The persistent HOST user service is `hyprland-touch-dev.service`; its source server is `scripts/serve.mjs` on loopback port 4187.
 
-- Edit `public/index.html` for the live prototype. The original `Hyprland Touch Prototype.html` is an archival export.
+- Edit `public/index.html` for the shell template and component; app modules live in `public/*.js`.
 - Shared styles/behavior are `public/pwa.css` and `public/pwa.js`; native layout overrides are `ios/WebOverrides/native.css`.
 - Saves automatically reload connected app views. For HTML/CSS/JS changes, use this loop; no Xcode build, iPhone reinstall, or Sites publication is needed.
 - Restart the user service after editing server code or the reload client in `scripts/`. Do not leave the service stopped after testing an outage.
