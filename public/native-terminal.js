@@ -2,9 +2,11 @@
    velocity simulation, or per-frame scroll-position animation. */
 (() => {
   const palette=['#26233a','#eb6f92','#9ccfd8','#f6c177','#31748f','#c4a7e7','#9ccfd8','#e0def4','#6e6a86','#ff0000','#00ff00','#ffff00','#0000ff','#ff00ff','#00ffff','#ffffff'];
+  let activePalette=window.HyprlandThemes?.palette()||palette;
+  window.addEventListener('hyprland-theme-change',()=>{activePalette=window.HyprlandThemes.palette()});
   const color=(n,rgb)=>{
     if(rgb)return '#'+n.toString(16).padStart(6,'0');
-    if(n<16)return palette[n];
+    if(n<16)return activePalette[n];
     if(n>=232){const v=8+(n-232)*10;return `rgb(${v},${v},${v})`}
     n-=16;const c=v=>v?55+40*v:0;return `rgb(${c(Math.floor(n/36))},${c(Math.floor(n/6)%6)},${c(n%6)})`;
   };
@@ -16,7 +18,8 @@
       this.content=document.createElement('div');this.content.className='native-terminal-content';this.scroller.append(this.content);host.append(this.scroller);
       this.edges=['left','right'].map(side=>{const edge=document.createElement('div');edge.className='native-scroll-edge '+side;edge.setAttribute('aria-hidden','true');host.append(edge);return edge});
       term.element.classList.add('terminal-parser');term.element.setAttribute('aria-hidden','true');term.textarea.tabIndex=-1;
-      this.abort=new AbortController();const listen=(type,fn,options={})=>this.scroller.addEventListener(type,fn,{...options,signal:this.abort.signal});
+      this.abort=new AbortController();
+      window.addEventListener('hyprland-theme-change',()=>{term.options.theme=window.HyprlandThemes.terminalTheme();this.schedule(true)},{signal:this.abort.signal});const listen=(type,fn,options={})=>this.scroller.addEventListener(type,fn,{...options,signal:this.abort.signal});
       listen('scroll',()=>{
         if(this.expected!==undefined&&Math.abs(this.scroller.scrollTop-this.expected)<1){this.expected=undefined;this.schedule();return}
         if(this.viewportHeight!==this.scroller.clientHeight){this.schedule();return}
@@ -101,11 +104,11 @@
         const runs=[];let run;
         for(let x=entry.start;x<entry.end;x++){
           const c=line.getCell(x,cell);if(!c||!c.getWidth())continue;
-          let fg=c.isFgDefault()?'#e0def4':color(c.getFgColor(),c.isFgRGB()),bg=c.isBgDefault()?'transparent':color(c.getBgColor(),c.isBgRGB());
-          if(c.isInverse())[fg,bg]=[bg==='transparent'?'#15131f':bg,fg];
+          let fg=c.isFgDefault()?(this.term.options.theme.foreground||'#e0def4'):color(c.getFgColor(),c.isFgRGB()),bg=c.isBgDefault()?'transparent':color(c.getBgColor(),c.isBgRGB());
+          if(c.isInverse())[fg,bg]=[bg==='transparent'?(this.term.options.theme.background||'#15131f'):bg,fg];
           const cursor=this.cursorVisible&&!term.options.disableStdin&&entry.source===b.baseY+b.cursorY&&x===b.cursorX;
           const decoration=[c.isUnderline()?'underline':'',c.isStrikethrough()?'line-through':'',c.isOverline()?'overline':''].filter(Boolean).join(' ')||'none';
-          const style=`color:${fg};background:${bg};font-weight:${c.isBold()?700:400};font-style:${c.isItalic()?'italic':'normal'};opacity:${c.isDim()?.5:1};text-decoration:${decoration};${cursor?'box-shadow:inset 0 0 0 1px #ebbcba;':''}`;
+          const style=`color:${fg};background:${bg};font-weight:${c.isBold()?700:400};font-style:${c.isItalic()?'italic':'normal'};opacity:${c.isDim()?.5:1};text-decoration:${decoration};${cursor?`box-shadow:inset 0 0 0 1px ${this.term.options.theme.cursor||'#ebbcba'};`:''}`;
           const chars=c.isInvisible()?' '.repeat(c.getWidth()):(c.getChars()||' ');
           if(run&&run.style===style&&c.getWidth()===1&&run.simple){run.text+=chars;run.width++}
           else{run={style,text:chars,width:c.getWidth(),simple:c.getWidth()===1};runs.push(run)}

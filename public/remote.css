@@ -1,41 +1,41 @@
 .remote-app { position:absolute; inset:58px 10px 40px; display:flex; flex-direction:column; min-height:0; }
 .remote-app.with-keyboard { bottom:281px; }
 .remote-bar { min-height:30px; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:0 4px 8px; font-size:13px; }
-.remote-status { font-size:10px; color:#908caa; overflow-wrap:anywhere; }
+.remote-status { font-size:10px; color:var(--theme-secondary); overflow-wrap:anywhere; }
 .remote-terminal { flex:1; min-height:0; overflow:hidden; }
-.remote-button { font:inherit; border:1px solid #403d52; border-radius:8px; color:#e0def4; background:#26233a; padding:9px 10px; cursor:pointer; }
-.remote-button:active,.herdr-pane:active { background:#403d52; }
+.remote-button { font:inherit; border:1px solid var(--theme-border); border-radius:8px; color:var(--theme-foreground); background:var(--theme-surface-raised); padding:9px 10px; cursor:pointer; }
+.remote-button:active,.herdr-pane:active { background:var(--theme-border); }
 .remote-app [hidden] { display:none !important; }
-.remote-empty { padding:30px 12px; font-size:13px; color:#908caa; }
+.remote-empty { padding:30px 12px; font-size:13px; color:var(--theme-secondary); }
 .herdr-list { flex:1; overflow-y:auto; overscroll-behavior:contain; padding:0 2px 10px; }
-.herdr-group { border:1px solid #403d52; border-radius:14px; margin:0 0 12px; padding:10px; background:#1f1d2e; }
-.herdr-group-title { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12px; color:#9ccfd8; padding:2px 2px 8px; }
-.herdr-pane { width:100%; display:flex; align-items:center; text-align:left; gap:8px; border:0; border-top:1px solid #26233a; padding:12px 0; background:transparent; color:#e0def4; font:inherit; cursor:pointer; }
-.herdr-agent-icon { flex:none; width:38px; font-size:10px; color:#c4a7e7; }
+.herdr-group { border:1px solid var(--theme-border); border-radius:14px; margin:0 0 12px; padding:10px; background:var(--theme-surface); }
+.herdr-group-title { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12px; color:var(--theme-green); padding:2px 2px 8px; }
+.herdr-pane { width:100%; display:flex; align-items:center; text-align:left; gap:8px; border:0; border-top:1px solid var(--theme-surface-raised); padding:12px 0; background:transparent; color:var(--theme-foreground); font:inherit; cursor:pointer; }
+.herdr-agent-icon { flex:none; width:38px; font-size:10px; color:var(--theme-magenta); }
 .herdr-pane-info { min-width:0; flex:1; display:flex; flex-direction:column; gap:5px; }
 .herdr-pane-info strong { font-size:11px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .herdr-pane-info .remote-status { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.herdr-state { font-size:9px; color:#908caa; }
-.herdr-state[data-state="working"] { color:#9ccfd8; }
-.herdr-state[data-state="blocked"] { color:#f6c177; }
-.herdr-state[data-state="done"] { color:#c4a7e7; }
+.herdr-state { font-size:9px; color:var(--theme-secondary); }
+.herdr-state[data-state="working"] { color:var(--theme-green); }
+.herdr-state[data-state="blocked"] { color:var(--theme-yellow); }
+.herdr-state[data-state="done"] { color:var(--theme-magenta); }
 .herdr-detail { display:flex; flex-direction:column; flex:1; min-height:0; }
 .herdr-detail-bar { display:flex; align-items:center; gap:10px; padding:0 0 10px; }
 .herdr-detail-bar button { white-space:nowrap; font-size:11px; }
 .herdr-pane-title { min-width:0; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.herdr-output { flex:1; min-height:0; overflow-x:auto; overflow-y:hidden; background:#15131f; border:1px solid #403d52; border-radius:10px; overscroll-behavior:contain; }
+.herdr-output { flex:1; min-height:0; overflow-x:auto; overflow-y:hidden; background:var(--theme-terminal); border:1px solid var(--theme-border); border-radius:10px; overscroll-behavior:contain; }
 .herdr-canvas { height:100%; }
 .herdr-input-bar { display:flex; align-items:center; gap:10px; padding-top:8px; }
 .herdr-input-bar button { font-size:11px; white-space:nowrap; }
 .remote-app .xterm { height:100%; }
 .remote-app .xterm-viewport { overscroll-behavior:contain; }
 
-.remote-app .xterm-viewport { background:#15131f !important; }
+.remote-app .xterm-viewport { background:var(--theme-terminal) !important; }
 
 /* xterm retains parsing and measurement; its native overflow view owns scrolling. */
 .remote-terminal,.herdr-output { position:relative; overflow:hidden; }
 .terminal-parser { visibility:hidden; pointer-events:none; position:absolute !important; inset:0; }
-.native-terminal-scroll { position:absolute; inset:0; overflow:auto; overscroll-behavior:contain; touch-action:pan-x pan-y; -webkit-overflow-scrolling:touch; overflow-anchor:none; background:#15131f; }
+.native-terminal-scroll { position:absolute; inset:0; overflow:auto; overscroll-behavior:contain; touch-action:pan-x pan-y; -webkit-overflow-scrolling:touch; overflow-anchor:none; background:var(--theme-terminal); }
 .native-terminal-content { position:relative; min-width:100%; }
 .native-terminal-row { position:absolute; left:0; font:12px 'JetBrains Mono',monospace; white-space:pre; }
 .native-terminal-row span { display:inline-block; height:100%; vertical-align:top; }
@@ -44,14 +44,14 @@
 .remote-app.native-typing.with-keyboard { bottom:calc(var(--keyboard-inset, 0px) + 8px); }
 .native-input-panel { flex:none; padding-top:6px; }
 .native-input-tools { display:flex; overflow-x:auto; gap:3px; touch-action:pan-x; }
-.native-input-tools button,.native-send { flex:none; min-width:44px; min-height:44px; border:1px solid #403d52; border-radius:8px; color:#e0def4; background:#26233a; font:13px system-ui; }
-.native-input-tools button[aria-pressed=true] { background:#c4a7e7; color:#191724; }
+.native-input-tools button,.native-send { flex:none; min-width:44px; min-height:44px; border:1px solid var(--theme-border); border-radius:8px; color:var(--theme-foreground); background:var(--theme-surface-raised); font:13px system-ui; }
+.native-input-tools button[aria-pressed=true] { background:var(--theme-magenta); color:var(--theme-background); }
 .native-input-row { display:flex; gap:6px; margin-top:5px; align-items:stretch; }
-.native-input { box-sizing:border-box; width:100%; min-width:0; min-height:44px; resize:none; border:1px solid #403d52; border-radius:10px; padding:10px; background:#1f1d2e; color:#e0def4; font:16px/22px system-ui; -webkit-user-select:text; user-select:text; -webkit-touch-callout:default; touch-action:auto; }
-.native-input:focus { outline:1px solid #9ccfd8; }
+.native-input { box-sizing:border-box; width:100%; min-width:0; min-height:44px; resize:none; border:1px solid var(--theme-border); border-radius:10px; padding:10px; background:var(--theme-surface); color:var(--theme-foreground); font:16px/22px system-ui; -webkit-user-select:text; user-select:text; -webkit-touch-callout:default; touch-action:auto; }
+.native-input:focus { outline:1px solid var(--theme-green); }
 .native-send { padding:0 10px; }
 .native-input-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
-.native-input-header button { min-height:36px; min-width:44px; border:0; border-radius:8px; background:#26233a; color:#e0def4; padding:0 10px; font:13px system-ui; }
+.native-input-header button { min-height:36px; min-width:44px; border:0; border-radius:8px; background:var(--theme-surface-raised); color:var(--theme-foreground); padding:0 10px; font:13px system-ui; }
 .native-input-tools button { flex:1; }
 .native-scroll-edge { position:absolute; top:0; bottom:0; width:20px; z-index:1; touch-action:none; }
 .native-scroll-edge.left { left:0; }

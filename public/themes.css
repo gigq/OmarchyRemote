@@ -1,0 +1,36 @@
+:root {
+  --theme-background: #191724;
+  --theme-terminal: #15131f;
+  --theme-surface: #1f1d2e;
+  --theme-surface-raised: #26233a;
+  --theme-border: #403d52;
+  --theme-foreground: #e0def4;
+  --theme-secondary: #908caa;
+  --theme-dim: #6e6a86;
+  --theme-red: #eb6f92;
+  --theme-yellow: #f6c177;
+  --theme-rose: #ebbcba;
+  --theme-green: #9ccfd8;
+  --theme-magenta: #c4a7e7;
+  --theme-accent: #3e8fb0;
+  --theme-blue: #31748f;
+  --theme-cyan: #56949f;
+}
+.theme-settings { position:absolute; inset:58px 20px 44px; overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; padding:8px 0 20px; }
+.theme-settings header { padding:0 4px 22px; }
+.theme-eyebrow { color:var(--theme-accent); font-size:11px; }
+.theme-settings h1 { font:500 32px 'Space Grotesk',sans-serif; letter-spacing:-1px; margin:14px 0 6px; }
+.theme-settings p { color:var(--theme-secondary); font-size:12px; line-height:1.6; margin:0; }
+.theme-current { display:flex; justify-content:space-between; padding-top:22px; font-size:12px; color:var(--theme-secondary); }
+.theme-current strong { font-weight:500; color:var(--theme-foreground); }
+.theme-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.theme-choice { text-align:left; min-width:0; padding:5px; border:1px solid var(--theme-border); border-radius:13px; background:var(--theme-surface); color:var(--theme-foreground); font:11px 'JetBrains Mono',monospace; cursor:pointer; touch-action:pan-y; }
+.theme-choice[aria-pressed=true] { border:2px solid var(--theme-accent); padding:4px; }
+.theme-choice:focus-visible { outline:2px solid var(--theme-accent); outline-offset:3px; }
+.theme-preview { height:70px; border-radius:8px; padding:12px; background:var(--preview-bg); color:var(--preview-fg); box-sizing:border-box; }
+.theme-prompt { color:var(--preview-accent); }
+.theme-swatches { display:flex; gap:4px; margin-top:12px; }
+.theme-swatches i { flex:1; height:7px; border-radius:2px; }
+.theme-label { display:flex; justify-content:space-between; gap:4px; align-items:center; min-height:36px; padding:2px 5px; }
+.theme-check { color:var(--theme-accent); }
+.theme-settings .theme-note { font-size:10px; padding:20px 4px 0; }

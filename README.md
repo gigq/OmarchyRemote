@@ -61,3 +61,13 @@ The Sites project ID is in `.openai/hosting.json`. Use the Sites packaging and p
 ## Validation
 
 Automated checks cover manifest and icons, all precache URLs, offline shell delivery, and HTTP routing. The exported React runtime and launcher/settings/map/reset controls were also exercised in a DOM environment without runtime errors. Native simulator results are recorded in `ios/VALIDATION.md`.
+
+Theme selection lives in Settings and persists on the device (`omarchy-theme`).
+The shared CSS tokens also drive the launcher, custom keyboard, Terminal and Herdr;
+ANSI indexed colors update immediately, while explicit RGB output retains the host
+application's colors. Web controls follow the palette’s light/dark color scheme; the installed native
+wrapper still requests a dark iOS keyboard.
+The portable catalog includes all 22 installed Omarchy palettes plus the original
+prototype. Refresh it with `python scripts/import-themes.py`; stock palettes come
+from `/usr/share/omarchy/themes`, with `~/.config/omarchy/themes` overlays applied.
+This copies color definitions only and does not change HOST's desktop theme.

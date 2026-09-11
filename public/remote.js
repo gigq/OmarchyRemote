@@ -11,7 +11,7 @@
   };
   const socket=path=>new WebSocket(`${location.protocol==='https:'?'wss:':'ws:'}//${location.host}/api/${path}`);
   function terminal(host,readonly=false){
-    const t=new Terminal({fontFamily:'"JetBrains Mono", monospace',fontSize:12,lineHeight:1.15,theme,scrollback:3000,cursorBlink:!readonly,disableStdin:readonly,allowProposedApi:false});
+    const t=new Terminal({fontFamily:'"JetBrains Mono", monospace',fontSize:12,lineHeight:1.15,theme:window.HyprlandThemes?.terminalTheme()||theme,scrollback:3000,cursorBlink:!readonly,disableStdin:readonly,allowProposedApi:false});
     t.open(host);t.textarea?.setAttribute('inputmode','none');t.textarea?.setAttribute('autocapitalize','off');
     return t;
   }
