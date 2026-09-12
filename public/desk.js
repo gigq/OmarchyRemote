@@ -6,6 +6,7 @@
   const CHROME={top:60,side:24,bottom:26,gap:12};
   const APPLE=/Mac|iPhone|iPad|iPod/i.test(navigator.platform||'')||/Macintosh|iPad|iPhone/.test(navigator.userAgent);
   const MOD=APPLE?'⌘':'Ctrl+Alt';
+  const NATIVE=!!window.webkit?.messageHandlers?.shellKeyboard;
   const {mount,node}=window.HyprlandUtil;
   const isDesk=()=>Math.min(window.innerWidth,window.innerHeight)>=MIN_SIDE;
 
@@ -107,7 +108,7 @@
     {group:'Workspaces',keys:'1…9 / 0',code:/^Digit[0-9]$/,label:'Switch to workspace',run:(d,e)=>d.logic.go((Number(e.code.slice(5))||10)-1)},
     {group:'Workspaces',keys:'[ / ]',code:/^Bracket(Left|Right)$/,label:'Previous / next workspace',run:(d,e)=>d.logic.go(d.logic.state.ws+(e.code==='BracketLeft'?-1:1))},
     {group:'Workspaces',keys:'E',code:/^KeyE$/,label:'Expo overview',run:d=>d.logic.set({ov:!d.logic.state.ov,kb:false,sup:false,launch:false,shade:null})},
-    {group:'Windows',keys:'⇧ 1…9 / 0',shift:true,code:/^Digit[0-9]$/,desk:true,label:'Move window to workspace',run:(d,e)=>d.moveWindow((Number(e.code.slice(5))||10)-1)},
+    {group:'Windows',keys:NATIVE?'⌥ 1…9 / 0':'⇧ 1…9 / 0',shift:!NATIVE,alt:NATIVE,code:/^Digit[0-9]$/,desk:true,label:'Move window to workspace',run:(d,e)=>d.moveWindow((Number(e.code.slice(5))||10)-1)},
     {group:'Windows',keys:'⇧ [ / ]',shift:true,code:/^Bracket(Left|Right)$/,desk:true,label:'Move window to previous / next workspace',run:(d,e)=>d.moveWindow(d.logic.state.ws+(e.code==='BracketLeft'?-1:1))},
     {group:'Windows',keys:'← ↑ ↓ →',code:/^Arrow/,label:'Focus window in direction',run:(d,e)=>d.focusDir(e.code.slice(5).toLowerCase())},
     {group:'Windows',keys:'⇧ ← ↑ ↓ →',shift:true,code:/^Arrow/,desk:true,label:'Swap window in direction',run:(d,e)=>d.swapDir(e.code.slice(5).toLowerCase())},
@@ -115,9 +116,10 @@
     {group:'Windows',keys:'⇧ J',shift:true,code:/^KeyJ$/,desk:true,label:'Previous window in workspace',run:d=>d.cycle(-1)},
     {group:'Windows',keys:'F',code:/^KeyF$/,desk:true,label:'Toggle fullscreen window',run:d=>d.toggleFull()},
     {group:'Windows',keys:'W',code:/^KeyW$/,label:'Close window',run:d=>d.logic.closeWs()},
-    {group:'Windows',keys:'⌫',code:/^Backspace$/,label:'Close window (when the browser owns ⌘W)',run:d=>d.logic.closeWs()},
-    {group:'Apps',keys:'↩',code:/^(Enter|NumpadEnter)$/,label:'Terminal',run:d=>d.logic.openApp('terminal')},
-    {group:'Apps',keys:'⇧ ↩',shift:true,code:/^(Enter|NumpadEnter)$/,label:'Browser',run:d=>d.logic.openApp('browser')},
+    {group:'Windows',browserOnly:true,keys:'⌫',code:/^Backspace$/,label:'Close window (when the browser owns ⌘W)',run:d=>d.logic.closeWs()},
+    {group:'Apps',keys:'T',code:/^KeyT$/,label:'Terminal',run:d=>d.logic.openApp('terminal')},
+    {group:'Apps',browserOnly:true,keys:'↩',code:/^(Enter|NumpadEnter)$/,label:'Terminal',run:d=>d.logic.openApp('terminal')},
+    {group:'Apps',browserOnly:true,keys:'⇧ ↩',shift:true,code:/^(Enter|NumpadEnter)$/,label:'Browser',run:d=>d.logic.openApp('browser')},
     {group:'Apps',keys:'⇧ B',shift:true,code:/^KeyB$/,label:'Browser',run:d=>d.logic.openApp('browser')},
     {group:'Apps',keys:'⇧ F',shift:true,code:/^KeyF$/,label:'Files',run:d=>d.logic.openApp('files')},
     {group:'Apps',keys:'⇧ A',shift:true,code:/^KeyA$/,label:'Herd agents',run:d=>d.logic.openApp('herdr')},
@@ -166,11 +168,11 @@
         e.preventDefault();e.stopImmediatePropagation();return;
       }
       // ⌘ works everywhere it reaches the page; Ctrl+Alt is the Windows/Linux spelling.
-      const apple=e.metaKey&&!e.ctrlKey&&!e.altKey,combo=!apple&&e.ctrlKey&&e.altKey&&!e.metaKey;
+      const apple=e.metaKey&&!e.ctrlKey&&(!e.altKey||NATIVE),combo=!apple&&e.ctrlKey&&e.altKey&&!e.metaKey;
       if(!(apple||combo)||e.repeat)return;
       const inField=editable(e.target);
       if(inField&&(apple?(!e.shiftKey&&EDITING.has(e.code))||(e.shiftKey&&/^Arrow|^KeyZ$/.test(e.code)):!/^(Arrow|Enter|Backspace|Escape)/.test(e.code)))return;
-      const binding=BINDINGS.find(b=>b.code.test(e.code)&&!!b.shift===e.shiftKey&&(!b.desk||s.desk));
+      const binding=BINDINGS.find(b=>b.code.test(e.code)&&!!b.shift===e.shiftKey&&!!b.alt===!!(apple&&e.altKey)&&(!b.desk||s.desk)&&(!b.browserOnly||!NATIVE));
       if(!binding)return;
       e.preventDefault();e.stopImmediatePropagation();
       if(this.sheet&&!/Slash/.test(e.code))this.closeSheet();
@@ -192,11 +194,11 @@
       if(!this.shell)return;this.closeSheet();
       const sheet=node('div','desk-sheet');sheet.setAttribute('role','dialog');sheet.setAttribute('aria-label','Keyboard shortcuts');
       const close=node('button','desk-sheet-close','Done');close.type='button';close.onclick=()=>this.closeSheet();
-      const head=node('div','desk-sheet-head');head.append(node('h2','','Keyboard shortcuts'),node('span','widget-muted',`${MOD} is SUPER · ⇧ is Shift`),close);sheet.append(head);
+      const head=node('div','desk-sheet-head');head.append(node('h2','','Keyboard shortcuts'),node('span','widget-muted',`${MOD} is SUPER · ⇧ Shift · ⌥ Option`),close);sheet.append(head);
       const grid=node('div','desk-sheet-grid');
       for(const group of [...new Set(BINDINGS.map(b=>b.group))]){
         const section=node('section','desk-sheet-group');section.append(node('h3','',group));
-        for(const b of BINDINGS.filter(b=>b.group===group&&(!b.desk||this.logic.state.desk))){const row=node('div','desk-sheet-row');row.append(node('kbd','',`${MOD} ${b.keys}`),node('span','',b.label));section.append(row)}
+        for(const b of BINDINGS.filter(b=>b.group===group&&(!b.desk||this.logic.state.desk)&&(!b.browserOnly||!NATIVE))){const row=node('div','desk-sheet-row');row.append(node('kbd','',`${MOD} ${b.keys}`),node('span','',b.label));section.append(row)}
         grid.append(section);
       }
       sheet.append(grid,node('p','widget-muted desk-sheet-foot','0 selects workspace 10. J cycles windows within one workspace; [ / ] switches workspaces. Text editing keys stay with the focused field. ⌘Space and ⌘` are left to iPadOS. Esc or Done closes this list.'));
@@ -206,5 +208,13 @@
     closeSheet(){if(!this.sheet)return;this.sheet.remove();this.sheet=null;if(this.returnFocus?.matches('button'))this.returnFocus.focus({preventScroll:true});this.returnFocus=null}
     dispose(){this.closeSheet();this.abort.abort()}
   }
-  window.HyprlandDesk={attach:logic=>new Desk(logic),isDesk,desks,deskOf,cur,go,open,close,move,swap,layout,render,BINDINGS,MOD,CHROME};
+  let activeDesk;
+  const nativeKey=({code,shift=false,alt=false})=>{
+    if(!activeDesk)return false;
+    const event={code,key:code==='Slash'?'/':code,shiftKey:shift,metaKey:true,ctrlKey:false,altKey:alt,repeat:false,target:document.activeElement,
+      defaultPrevented:false,preventDefault(){this.defaultPrevented=true},stopImmediatePropagation(){}};
+    activeDesk.keydown(event);
+    return event.defaultPrevented;
+  };
+  window.HyprlandDesk={attach:logic=>(activeDesk=new Desk(logic)),nativeKey,isDesk,desks,deskOf,cur,go,open,close,move,swap,layout,render,BINDINGS,MOD,CHROME};
 })();

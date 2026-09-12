@@ -77,24 +77,24 @@ Everything runs on the host you already own. There is no cloud relay: a Rust bac
 | --- | --- |
 | ⌘1…9 / ⌘0, ⌘[ / ⌘] | Switch workspace, previous / next workspace |
 | ⌘E | Expo overview |
-| ⌘⇧1…9 / ⌘⇧0, ⌘⇧[ / ⌘⇧] | Move the focused window to a workspace |
+| ⌘⌥1…9 / ⌘⌥0, ⌘⇧[ / ⌘⇧] | Move the focused window to a workspace |
 | ⌘← ↑ ↓ →, ⌘⇧arrows | Focus / swap window in a direction |
 | ⌘J / ⌘⇧J | Next / previous window in the workspace |
 | ⌘F | Toggle fullscreen for the focused window |
-| ⌘W (⌘⌫ where the browser keeps ⌘W) | Close the focused window |
-| ⌘⏎, ⌘⇧⏎ or ⌘⇧B, ⌘⇧F, ⌘⇧A, ⌘⇧D, ⌘, | Terminal, browser, files, Herdr, lazydocker, settings |
+| ⌘W | Close the focused window |
+| ⌘T, ⌘⇧B, ⌘⇧F, ⌘⇧A, ⌘⇧D, ⌘, | Terminal, browser, files, Herdr, lazydocker, settings |
 | ⌘K | Launcher |
 | ⌘/ | Shortcut sheet; Esc closes sheets, Expo, and shades |
 
-0 selects workspace 10. Window cycling requires multiple windows in the current workspace and follows the focused window in fullscreen. Text fields keep the standard editing shortcuts, including ⌘arrows and ⌘⌫; use ⌘J to cycle while editing. ⌘Space and ⌘backtick are left to the operating system. Browser and embedded website focus can intercept other shortcuts before the shell receives them.
+0 selects workspace 10. Window cycling requires multiple windows in the current workspace and follows the focused window in fullscreen. Text fields keep the standard editing shortcuts, including ⌘arrows and ⌘⌫; use ⌘J to cycle while editing. ⌘Space and ⌘backtick are left to the operating system. The native app registers shell commands with UIKit; web browsers can intercept shortcuts before the shell receives them. Numbered moves use Option on iPad because Shift-Command-3/4 are screenshot shortcuts; the browser version retains Shift. Return and Delete aliases are browser-only and omitted from the native list after inconsistent native simulator results.
 
-`tests/browser/shortcuts.spec.mjs` exercises every binding in an isolated browser fixture, including both modifier forms, move/swap, fullscreen cycling, and editing conflicts. This verifies shell behavior, not physical iPad keyboard delivery; the remote device tools cannot synthesize modifier-key chords.
+`tests/browser/shortcuts.spec.mjs` exercises every binding in an isolated browser fixture, including both modifier forms, move/swap, fullscreen cycling, and editing conflicts. This verifies shell behavior, not physical iPad keyboard delivery. The native `HardwareShortcuts` Xcode scheme runs XCTest UI tests with `typeKey(_:modifierFlags:)` on an iPad simulator to verify actual modifier-key routing and that closing internal windows keeps the app running. It launches the bundled shell so tests cannot affect host sessions.
 
 **Apps.** Terminal (a login shell in a PTY, resumed across reloads), Herdr (workspaces, agents, and pane output with a message composer), Files (browse, preview, edit, search, upload, move, trash, ZIP), Browser (desktop tabs through the extension), btop, Services, lazydocker, dua, lnav (each a persistent host PTY with touch controls), Home widgets (system metrics, Tailscale, weather, CodexBar), and Settings (all Omarchy themes, applied to the shell and to terminal colors). The [feature reference](docs/features.md) describes each in detail.
 
 ## Native iPhone and iPad app
 
-`ios/HyprlandTouch.xcodeproj` is a UIKit/WKWebView wrapper for iOS 18 or later with the shared **HyprlandTouch** scheme and automatic development signing. It hides the status bar, defers the system edge gestures so the shell's swipes work, handles keyboard shortcuts delivered to the shell on iPad, adds a Core Location bridge for the weather widget, and opens browser pages in an isolated WKWebView inside the themed Browser window.
+`ios/HyprlandTouch.xcodeproj` is a UIKit/WKWebView wrapper for iOS 18 or later with the shared **HyprlandTouch** scheme and automatic development signing. It hides the status bar, defers the system edge gestures so the shell's swipes work, registers native iPad key commands and routes them to the shell, adds a Core Location bridge for the weather widget, and opens browser pages in an isolated WKWebView inside the themed Browser window.
 
 Before building, set two values in `ios/HyprlandTouch/Info.plist` and the project: `OmarchyRemoteURL` (your HTTPS address followed by `/native/`) and the bundle identifier. Debug builds load that live URL and fall back to the bundled offline copy with an "Offline copy · Retry live" button; Release builds use the bundled copy only. Every build runs `scripts/prepare-native.py` to package `public/` into the app. Hold two fingers on the screen for about a second to switch between the live and bundled sources or reload.
 

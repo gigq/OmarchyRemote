@@ -32,7 +32,7 @@ for(const mod of ['Meta','Control+Alt']){
   await p.keyboard.press('Escape');expect((await state(p)).ov).toBe(false);
  });
  test(`${mod}: every app binding, launcher and help`,async({page:p})=>{
-  for(const [key,app] of [['Enter','terminal'],['NumpadEnter','terminal'],['Shift+Enter','browser'],['Shift+NumpadEnter','browser'],['Shift+KeyB','browser'],['Shift+KeyF','files'],['Shift+KeyA','herdr'],['Shift+KeyD','lazydocker'],['Comma','settings']]){
+  for(const [key,app] of [['KeyT','terminal'],['Enter','terminal'],['NumpadEnter','terminal'],['Shift+Enter','browser'],['Shift+NumpadEnter','browser'],['Shift+KeyB','browser'],['Shift+KeyF','files'],['Shift+KeyA','herdr'],['Shift+KeyD','lazydocker'],['Comma','settings']]){
    await p.keyboard.press(`${mod}+${key}`);expect(await p.evaluate(()=>logic.calls.at(-1))).toEqual(['open',app]);
   }
   await p.keyboard.press(`${mod}+KeyK`);expect((await state(p)).launch).toBe(true);
@@ -82,4 +82,29 @@ test('reserved chords stay unhandled; field editing wins over window shortcuts',
  await p.evaluate(()=>reset(true));await p.getByRole('textbox').focus();
  await p.keyboard.press('Meta+KeyJ');expect((await state(p)).focus).toBe('browser');
  await p.keyboard.press('Meta+KeyK');expect((await state(p)).launch).toBe(true);
+});
+
+test('native command bridge uses the same actions and preserves editing keys',async({page:p})=>{
+ await p.evaluate(()=>reset(true));
+ expect(await p.evaluate(()=>HyprlandDesk.nativeKey({code:'KeyJ'}))).toBe(true);
+ expect((await state(p)).focus).toBe('browser');
+ await p.evaluate(()=>HyprlandDesk.nativeKey({code:'KeyJ',shift:true}));expect((await state(p)).focus).toBe('terminal');
+ await p.evaluate(()=>HyprlandDesk.nativeKey({code:'KeyW'}));expect((await state(p)).open).not.toContain('terminal');
+ await p.getByRole('textbox').focus();
+ expect(await p.evaluate(()=>HyprlandDesk.nativeKey({code:'Backspace'}))).toBe(false);
+ expect(await p.evaluate(()=>HyprlandDesk.nativeKey({code:'Space'}))).toBe(false);
+});
+
+test('native list and routing omit browser-only Return and Delete aliases',async({page:p})=>{
+ await p.evaluate(()=>{desk.dispose();window.webkit={messageHandlers:{shellKeyboard:{}}}});
+ await p.addScriptTag({url:'/desk.js'});
+ await p.evaluate(()=>{window.desk=HyprlandDesk.attach(logic)});
+ expect(await p.evaluate(()=>HyprlandDesk.nativeKey({code:'Digit3',shift:true}))).toBe(false);
+ expect(await p.evaluate(()=>HyprlandDesk.nativeKey({code:'Digit3',alt:true}))).toBe(true);
+ expect(await p.evaluate(()=>HyprlandDesk.desks(logic.state).some(row=>row.includes('terminal')&&row.includes('browser')))).toBe(true);
+ for(const code of ['Enter','Backspace'])expect(await p.evaluate(code=>HyprlandDesk.nativeKey({code}),code)).toBe(false);
+ await p.keyboard.press('Meta+KeyT');expect(await p.evaluate(()=>logic.calls.at(-1))).toEqual(['open','terminal']);
+ await p.keyboard.press('Meta+Slash');
+ await expect(p.locator('.desk-sheet')).not.toContainText('↩');
+ await expect(p.locator('.desk-sheet')).not.toContainText('⌫');
 });

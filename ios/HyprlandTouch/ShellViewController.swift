@@ -35,6 +35,17 @@ private final class ShellWebView: WKWebView {
 }
 
 @MainActor
+private final class ShellKeyboardStateBridge: NSObject, WKScriptMessageHandler {
+    weak var owner: ShellViewController?
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame,
+              ShellSource.trusts(message.frameInfo.securityOrigin) || message.frameInfo.request.url?.isFileURL == true,
+              let editing = message.body as? Bool else { return }
+        owner?.updateKeyboardEditing(editing)
+    }
+}
+
+@MainActor
 private final class WeatherDeviceBridge: NSObject, WKScriptMessageHandlerWithReply, CLLocationManagerDelegate {
     private lazy var manager: CLLocationManager = {
         let manager = CLLocationManager()
@@ -114,6 +125,12 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
     weak var shell: WKWebView?
     private var page: WKWebView?
     private var observations: [NSKeyValueObservation] = []
+    var ownsKeyboardFocus: Bool {
+        func containsResponder(_ view: UIView) -> Bool {
+            view.isFirstResponder || view.subviews.contains(where: containsResponder)
+        }
+        return page.map(containsResponder) ?? false
+    }
     private var requestedVisible = false
     private var controlsHidden = false
     private var forceDark = UserDefaults.standard.bool(forKey: "browserForceDark")
@@ -299,6 +316,8 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     private var webView: WKWebView!
     private let weatherDevice = WeatherDeviceBridge()
     private let browserDevice = BrowserDeviceBridge()
+    private let keyboardState = ShellKeyboardStateBridge()
+    private var shellEditing = false
     private var lastKeyboardGeometry: [Double]?
     private let keyboardProbe = UIView()
     private var webRoot: URL?
@@ -319,6 +338,70 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         UserDefaults.standard.bool(forKey: "useBundledPrototype") || ProcessInfo.processInfo.arguments.contains("--bundled")
     }
 
+    // Register shell actions with UIKit: DOM keydown alone loses commands to iPadOS.
+    // Only claim arrows outside text fields; clipboard and OS launcher keys stay native.
+    override var keyCommands: [UIKeyCommand]? {
+        guard traitCollection.userInterfaceIdiom == .pad else { return super.keyCommands }
+        var bindings: [(String, String, Bool, String)] = [
+            ("j", "KeyJ", false, "Next window in workspace"),
+            ("j", "KeyJ", true, "Previous window in workspace"),
+            ("w", "KeyW", false, "Close shell window"),
+            ("k", "KeyK", false, "Open launcher"),
+            ("t", "KeyT", false, "Open Terminal"),
+            ("f", "KeyF", false, "Toggle window fullscreen"),
+            ("e", "KeyE", false, "Show Expo"),
+            ("/", "Slash", false, "Keyboard shortcuts"),
+            (",", "Comma", false, "Open Settings"),
+            ("b", "KeyB", true, "Open Browser"),
+            ("f", "KeyF", true, "Open Files"),
+            ("a", "KeyA", true, "Open Herd"),
+            ("d", "KeyD", true, "Open lazydocker"),
+            ("[", "BracketLeft", false, "Previous workspace"),
+            ("]", "BracketRight", false, "Next workspace"),
+            ("[", "BracketLeft", true, "Move window to previous workspace"),
+            ("]", "BracketRight", true, "Move window to next workspace")
+        ] + (0...9).flatMap { number in
+            [(String(number), "Digit\(number)", false, "Workspace \(number == 0 ? 10 : number)"),
+             (String(number), "Digit\(number)", true, "Move window to workspace \(number == 0 ? 10 : number)")]
+        }
+        bindings += [("{", "BracketLeft", true, "Move window to previous workspace"),
+                     ("}", "BracketRight", true, "Move window to next workspace")]
+        if !shellEditing && !browserDevice.ownsKeyboardFocus {
+            bindings += [
+                (UIKeyCommand.inputLeftArrow, "ArrowLeft", false, "Focus window left"),
+                (UIKeyCommand.inputRightArrow, "ArrowRight", false, "Focus window right"),
+                (UIKeyCommand.inputUpArrow, "ArrowUp", false, "Focus window above"),
+                (UIKeyCommand.inputDownArrow, "ArrowDown", false, "Focus window below"),
+                (UIKeyCommand.inputLeftArrow, "ArrowLeft", true, "Swap window left"),
+                (UIKeyCommand.inputRightArrow, "ArrowRight", true, "Swap window right"),
+                (UIKeyCommand.inputUpArrow, "ArrowUp", true, "Swap window above"),
+                (UIKeyCommand.inputDownArrow, "ArrowDown", true, "Swap window below")
+            ]
+        }
+        return bindings.map { input, code, shift, title in
+            // Shift-Command-3/4 belong to iPadOS screenshots; use Option for numbered moves.
+            let option = shift && code.hasPrefix("Digit")
+            let modifiers: UIKeyModifierFlags = option ? [.command, .alternate] : shift ? [.command, .shift] : [.command]
+            let command = UIKeyCommand(title: title, action: #selector(handleShellKey(_:)),
+                input: input, modifierFlags: modifiers,
+                propertyList: ["code": code, "shift": shift && !option, "alt": option])
+            command.wantsPriorityOverSystemBehavior = true
+            return command
+        }
+    }
+
+    fileprivate func updateKeyboardEditing(_ editing: Bool) {
+        guard editing != shellEditing else { return }
+        shellEditing = editing
+        UIMenuSystem.main.setNeedsRebuild()
+    }
+
+    @objc private func handleShellKey(_ command: UIKeyCommand) {
+        guard let payload = command.propertyList as? [String: Any], let webView else { return }
+        webView.callAsyncJavaScript("return window.HyprlandDesk?.nativeKey(key);",
+            arguments: ["key": payload], in: nil, in: .page, completionHandler: nil)
+    }
+
     override var prefersStatusBarHidden: Bool { true }
     override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge { [.top, .bottom] }
     // Keep the system's dimmed escape indicator when bottom-edge deferral is active.
@@ -334,6 +417,22 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
+        if traitCollection.userInterfaceIdiom == .pad {
+            keyboardState.owner = self
+            configuration.userContentController.add(keyboardState, name: "shellKeyboard")
+            configuration.userContentController.addUserScript(WKUserScript(source: """
+                (() => {
+                    const report = () => {
+                        const el = document.activeElement;
+                        const editing = !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+                        window.webkit.messageHandlers.shellKeyboard.postMessage(editing);
+                    };
+                    document.addEventListener('focusin', report, true);
+                    document.addEventListener('focusout', () => queueMicrotask(report), true);
+                    document.addEventListener('DOMContentLoaded', report);
+                })();
+                """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
         browserDevice.presenter = self
         configuration.userContentController.addScriptMessageHandler(browserDevice, contentWorld: .page, name: "browserDevice")
         configuration.userContentController.addScriptMessageHandler(weatherDevice, contentWorld: .page, name: "weatherDevice")
