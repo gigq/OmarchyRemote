@@ -45,6 +45,24 @@ test.describe('landscape iPad',()=>{
   await expect(pills(p)).toHaveCount(2);
   await p.screenshot({path:'artifacts/browser/desk-landscape.png'});
  });
+ test('native keyboard coverage restores the full desk despite a stale visual viewport',async({page:p})=>{
+  await boot(p);
+  const full=await box(p,'home');
+  await p.evaluate(()=>{
+   Object.defineProperty(window.visualViewport,'height',{configurable:true,get:()=>500});
+   window.visualViewport.dispatchEvent(new Event('resize'));
+  });
+  const fallback=await box(p,'home');expect(fallback.height).toBeCloseTo(full.height-334,0);
+  const native=async inset=>p.evaluate(inset=>{
+   window.__HYPRLAND_KEYBOARD__={inset,height:window.innerHeight};
+   window.dispatchEvent(new Event('hyprland-keyboard'));
+  },inset);
+  await native(330);
+  expect((await box(p,'home')).height).toBeCloseTo(full.height-330,0);
+  await native(0);
+  expect((await box(p,'home')).height).toBeCloseTo(full.height,0);
+  await expect(p.locator('html')).not.toHaveClass(/system-keyboard-open/);
+ });
  test('Home fills the desk with a framed clock panel beside the widget column',async({page:p})=>{
   await boot(p);
   const home=await box(p,'home'),grid=await p.locator('.home-app-grid:visible').boundingBox(),widgets=await p.locator('#home-widgets:visible').boundingBox();

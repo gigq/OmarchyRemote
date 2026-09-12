@@ -1,6 +1,13 @@
 // Fit the design's logical canvas to the usable viewport without stretching type.
 // Screens with both edges past 600px (iPad, Mac, desktop windows) get the desk layout at 1:1 instead.
 function deskMode() { return Math.min(window.innerWidth, window.innerHeight) >= 600; }
+function keyboardInset() {
+  const native=window.__HYPRLAND_KEYBOARD__;
+  if(deskMode()&&native&&Number.isFinite(native.inset)&&Number.isFinite(native.height)&&native.height>0){
+    return Math.max(0,native.inset*window.innerHeight/native.height);
+  }
+  return window.visualViewport?Math.max(0,window.innerHeight-window.visualViewport.height):0;
+}
 function fitCanvas() {
   const viewport = document.getElementById('phone-viewport');
   if (!viewport) return;
@@ -12,7 +19,7 @@ function fitCanvas() {
   if (!scale) return;
   root.style.setProperty('--canvas-scale', scale);
   root.style.setProperty('--canvas-height', `${viewport.clientHeight / scale}px`);
-  const inset = window.visualViewport ? Math.max(0, window.innerHeight - window.visualViewport.height) : 0;
+  const inset = keyboardInset();
   window.dispatchEvent(new CustomEvent('hyprland-layout', { detail: { desk, width: viewport.clientWidth, height: viewport.clientHeight, inset: inset > 80 ? inset : 0 } }));
 }
 const observer = new MutationObserver(() => {
@@ -51,9 +58,8 @@ if (!window.__HYPRLAND_DEV__ && 'serviceWorker' in navigator && window.isSecureC
 
 // iOS shrinks the visual viewport for its keyboard, not the layout viewport.
 function fitNativeKeyboard(){
-  const viewport=window.visualViewport;
   const scale=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--canvas-scale'))||1;
-  const inset=viewport?Math.max(0,window.innerHeight-viewport.height):0;
+  const inset=keyboardInset();
   document.documentElement.classList.toggle('system-keyboard-open',inset>80);
   document.documentElement.style.setProperty('--keyboard-inset',`${inset/scale}px`);
 }
@@ -61,3 +67,5 @@ window.visualViewport?.addEventListener('resize',fitNativeKeyboard);
 window.visualViewport?.addEventListener('scroll',fitNativeKeyboard);
 window.addEventListener('resize',fitNativeKeyboard);
 fitNativeKeyboard();
+
+window.addEventListener('hyprland-keyboard',()=>{fitCanvas();fitNativeKeyboard()});

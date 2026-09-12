@@ -24,6 +24,14 @@ enum ShellSource {
 private final class ShellWebView: WKWebView {
     // The shell supplies its own mode and dismissal controls above the keyboard.
     override var inputAccessoryView: UIView? { nil }
+    override var inputAssistantItem: UITextInputAssistantItem {
+        let item = super.inputAssistantItem
+        if traitCollection.userInterfaceIdiom == .pad {
+            item.leadingBarButtonGroups = []
+            item.trailingBarButtonGroups = []
+        }
+        return item
+    }
 }
 
 @MainActor
@@ -291,6 +299,8 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     private var webView: WKWebView!
     private let weatherDevice = WeatherDeviceBridge()
     private let browserDevice = BrowserDeviceBridge()
+    private var lastKeyboardGeometry: [Double]?
+    private let keyboardProbe = UIView()
     private var webRoot: URL?
     private let retryButton = UIButton(type: .system)
     private let sourceButton = UIButton(type: .system)
@@ -346,6 +356,20 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         #endif
         view.addSubview(webView)
         browserDevice.shell = webView
+        if traitCollection.userInterfaceIdiom == .pad {
+            // Track docked keyboard coverage, not WebKit's sometimes-stale visual viewport.
+            view.keyboardLayoutGuide.followsUndockedKeyboard = false
+            keyboardProbe.translatesAutoresizingMaskIntoConstraints = false
+            keyboardProbe.isUserInteractionEnabled = false
+            keyboardProbe.accessibilityElementsHidden = true
+            view.addSubview(keyboardProbe)
+            NSLayoutConstraint.activate([
+                keyboardProbe.topAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
+                keyboardProbe.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                keyboardProbe.widthAnchor.constraint(equalToConstant: 0),
+                keyboardProbe.heightAnchor.constraint(equalToConstant: 0)
+            ])
+        }
         // Deliberately use the view edges, not the safe-area guide.
         NSLayoutConstraint.activate([
             webView.topAnchor.constraint(equalTo: view.topAnchor),
@@ -394,6 +418,25 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
             NotificationCenter.default.addObserver(self, selector: #selector(resumeLive), name: UIApplication.willEnterForegroundNotification, object: nil)
         }
         loadShell()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        publishKeyboardGeometry()
+    }
+
+    private func publishKeyboardGeometry(force: Bool = false) {
+        guard traitCollection.userInterfaceIdiom == .pad, let webView, view.bounds.height > 0 else { return }
+        let covered = max(0, view.bounds.maxY - view.keyboardLayoutGuide.layoutFrame.minY)
+        // A floating keyboard/shortcut strip doesn't reserve the whole bottom of the desk.
+        let inset = covered > 80 ? covered : 0
+        let geometry = [Double(inset), Double(view.bounds.height)]
+        guard force || geometry != lastKeyboardGeometry else { return }
+        lastKeyboardGeometry = geometry
+        webView.callAsyncJavaScript(
+            "window.__HYPRLAND_KEYBOARD__ = geometry; window.dispatchEvent(new Event('hyprland-keyboard'));",
+            arguments: ["geometry": ["inset": geometry[0], "height": geometry[1]]],
+            in: nil, in: .page, completionHandler: nil)
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -474,6 +517,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         retryButton.isHidden = true
+        publishKeyboardGeometry(force: true)
         if webView.url?.isFileURL == true {
             loadTimeout?.cancel()
             remoteNavigation = nil
