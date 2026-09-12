@@ -29,12 +29,18 @@
         this.schedule();onScroll();
       },{passive:true});
       listen('scrollend',()=>this.idle(),{passive:true});
-      listen('touchstart',e=>{this.finger=true;this.startY=e.touches[0]?.clientY;this.startX=e.touches[0]?.clientX;this.moved=this.busy;e.stopPropagation()},{passive:true});
+      listen('touchstart',e=>{this.finger=true;this.touchStarted=performance.now();this.startY=e.touches[0]?.clientY;this.startX=e.touches[0]?.clientX;this.moved=this.busy;e.stopPropagation()},{passive:true});
       listen('touchmove',e=>{if(Math.hypot(e.touches[0].clientY-this.startY,e.touches[0].clientX-this.startX)>6)this.moved=true;e.stopPropagation()},{passive:true});
-      const end=e=>{this.finger=false;e.stopPropagation();clearTimeout(this.idleTimer);this.idleTimer=setTimeout(()=>this.idle(),160)};
+      const end=e=>{this.moved ||= e.type==='touchcancel'||performance.now()-this.touchStarted>=350;this.finger=false;e.stopPropagation();clearTimeout(this.idleTimer);this.idleTimer=setTimeout(()=>this.idle(),160)};
       listen('touchend',end,{passive:true});listen('touchcancel',end,{passive:true});
       listen('pointerdown',e=>e.stopPropagation());
-      listen('click',e=>{if(this.moved){e.preventDefault();e.stopImmediatePropagation();this.moved=false}}, {capture:true});
+      listen('click',e=>{if(this.moved||this.selecting()||e.detail>1){e.preventDefault();e.stopImmediatePropagation();this.moved=false}}, {capture:true});
+      listen('contextmenu',()=>{this.moved=true});
+      document.addEventListener('selectionchange',()=>{
+        const selected=this.selecting();
+        if(this.hadSelection&&!selected){this.schedule(true);this.idle()}
+        this.hadSelection=selected;
+      },{signal:this.abort.signal});
       this.listeners=[term.onWriteParsed(()=>this.schedule(true)),term.onResize(()=>{if(this.follow)this.target=term.buffer.active.baseY;this.schedule(true)}),term.onScroll(()=>{
         if(!this.syncing){this.target=term.buffer.active.viewportY;this.follow=this.target>=term.buffer.active.baseY;this.schedule()}
       })];
@@ -63,12 +69,15 @@
         }
       }
     }
-    idle(){if(this.finger)return;this.busy=false;clearTimeout(this.idleTimer);this.onIdle()}
-    active(){return this.busy||this.finger}
+    selecting(){const s=window.getSelection();return !!(s&&!s.isCollapsed&&(this.content.contains(s.anchorNode)||this.content.contains(s.focusNode)))}
+    idle(){if(this.finger||this.selecting())return;this.schedule();this.busy=false;clearTimeout(this.idleTimer);this.onIdle()}
+    active(){return this.busy||this.finger||this.selecting()}
     cancel(){this.scroller.scrollTo({top:this.scroller.scrollTop,left:this.scroller.scrollLeft,behavior:'instant'});this.finger=false;this.idle()}
     schedule(dirty=false){this.dirty ||= dirty;if(this.frame===null)this.frame=requestAnimationFrame(()=>{this.frame=null;this.render()})}
     render(){
       const {term,scroller,content}=this;if(!this.host.clientHeight)return;
+      // Keep selected DOM nodes and scroll position intact until selection finishes.
+      if((this.finger&&!this.moved)||this.selecting()){this.dirty=true;return}
       const screen=term.element.querySelector('.xterm-screen');
       let dirty=this.dirty;this.dirty=false;const oldHeight=this.height,oldWidth=this.width;
       this.height=parseFloat(screen.style.height)/term.rows||18;this.width=parseFloat(screen.style.width)/term.cols||7.2;

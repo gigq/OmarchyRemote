@@ -327,7 +327,7 @@
         app.nativeInput?.show(native&&focused&&kb);
         app.placeLatest?.();
       }
-      const input=this.currentInput();if(native&&kb&&!ov&&input&&document.activeElement!==input.field)input.focus();
+      const input=this.currentInput();if(native&&kb&&!ov&&input&&document.activeElement!==input.field&&!this.apps[current]?.term?.nativeView?.selecting())input.focus();
       for(const app of Object.values(this.apps))app.resize?.();
     }
     async openTerminalAt(path){await this.closeApp('terminal');storage.set('omarchy-terminal-cwd',path);this.logic.openApp('terminal')}
