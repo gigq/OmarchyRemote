@@ -159,12 +159,13 @@
       this.filePicker.onchange=()=>{const files=[...this.filePicker.files];this.filePicker.value='';this.uploadImages(files,this.pickerPane)};
       this.uploadAbort=new AbortController();
       this.backButton=button('‹',()=>this.select(null));this.backButton.setAttribute('aria-label','All panes');this.backButton.classList.add('herdr-back');
-      this.detailBar.append(this.backButton,this.title,this.fitButton,this.attachButton,this.filePicker);
+      this.paneTabs=node('div','herdr-pane-tabs');const center=node('div','herdr-detail-center');center.append(this.title,this.paneTabs);
+      this.detailBar.append(this.backButton,center,this.fitButton,this.attachButton,this.filePicker);
       this.output=node('div','herdr-output');this.canvas=node('div','herdr-canvas');this.output.append(this.canvas);
       this.followOutput=true;this.latest=button('↓ Latest',()=>{this.showLatest();if(!this.nativeInput.element.hidden)this.nativeInput.focus()});this.latest.hidden=true;this.latest.classList.add('herdr-latest');this.latest.onpointerdown=e=>e.preventDefault();this.output.append(this.latest);
       this.inputStatus=node('span','remote-status','');this.inputStatus.setAttribute('role','status');
       const inputBar=node('div','herdr-input-bar');inputBar.append(this.inputStatus);
-      this.paneTabs=node('div','herdr-pane-tabs');this.metadata=node('div','herdr-metadata');this.detail.append(this.detailBar,this.paneTabs,this.metadata,this.output,inputBar);this.term=terminal(this.canvas,true);this.fit=new FitAddon.FitAddon();this.term.loadAddon(this.fit);
+      this.metadata=node('div','herdr-metadata');this.detail.append(this.detailBar,this.metadata,this.output,inputBar);this.term=terminal(this.canvas,true);this.fit=new FitAddon.FitAddon();this.term.loadAddon(this.fit);
       this.stopTouchScroll=touchScroll(this.output,this.term,true,()=>this.trackScroll(),()=>this.flushRead());this.applyFit();
       this.term.onScroll(()=>{if(!this.rendering)this.trackScroll()});
       this.output.onclick=()=>{this.showLatest();bridge.keyboard()};
@@ -204,7 +205,7 @@
       }
       if(!this.list.children.length)this.list.append(node('p','remote-empty','No matching panes.'));this.list.scrollTop=scroll;
     }
-    showDetail(pane){this.filters.hidden=true;this.search.hidden=true;this.list.hidden=true;this.detail.hidden=false;this.title.textContent=pane.terminal_title_stripped||pane.pane_id;const signature=JSON.stringify([pane.pane_id,pane.agent_status,pane.cwd,this.snapshot?.panes.map(p=>[p.pane_id,p.workspace_id,p.agent_status,p.terminal_title_stripped])]);if(signature!==this.detailSignature){this.detailSignature=signature;this.metadata.textContent=`${pane.agent||'shell'} · ${pane.agent_status||'unknown'} · ${HyprlandApps.tilde(pane.foreground_cwd||pane.cwd)}`;this.paneTabs.replaceChildren();const siblings=this.snapshot.panes.filter(p=>p.workspace_id===pane.workspace_id);this.paneTabs.hidden=siblings.length<=1;for(const p of siblings){const b=button(p.terminal_title_stripped||p.pane_id,()=>this.select(p.pane_id));b.setAttribute('aria-pressed',String(p.pane_id===pane.pane_id));this.paneTabs.append(b)}}}
+    showDetail(pane){this.filters.hidden=true;this.search.hidden=true;this.list.hidden=true;this.detail.hidden=false;this.title.textContent=pane.terminal_title_stripped||pane.pane_id;const signature=JSON.stringify([pane.pane_id,pane.agent_status,pane.cwd,this.snapshot?.panes.map(p=>[p.pane_id,p.workspace_id,p.agent_status,p.terminal_title_stripped])]);if(signature!==this.detailSignature){this.detailSignature=signature;this.metadata.textContent=`${pane.agent||'shell'} · ${pane.agent_status||'unknown'} · ${HyprlandApps.tilde(pane.foreground_cwd||pane.cwd)}`;this.paneTabs.replaceChildren();const siblings=this.snapshot.panes.filter(p=>p.workspace_id===pane.workspace_id);this.paneTabs.hidden=siblings.length<=1;this.title.hidden=siblings.length>1;for(const p of siblings){const b=button(p.terminal_title_stripped||p.pane_id,()=>this.select(p.pane_id));b.setAttribute('aria-pressed',String(p.pane_id===pane.pane_id));this.paneTabs.append(b)}}}
     select(id){
       this.stopTouchScroll.cancel();
       this.nativeInput.select(id);this.nativeInput.submit.disabled=!!this.uploading&&this.uploadPane===id;this.selected=id;storage.set('omarchy-herdr-pane',id);this.lastRead=null;this.queuedRead=null;this.followOutput=true;this.output.scrollLeft=0;this.term.reset();this.inputStatus.textContent='';

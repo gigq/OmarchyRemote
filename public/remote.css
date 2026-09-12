@@ -89,3 +89,8 @@
 .host-tui-tools { display:flex; flex-wrap:wrap; gap:5px; padding-bottom:8px; }
 .host-tui-tools button { padding:7px; min-height:34px; font-size:11px; }
 .remote-app:has(.host-tui-tools) .native-terminal-row { font-size:var(--host-tui-font,12px); }
+
+/* Pane tabs share the header's center; a single pane keeps its title. */
+.herdr-detail-center { flex:1; min-width:0; overflow:hidden; }
+.herdr-detail-bar .herdr-pane-tabs { padding:0; min-width:0; }
+.herdr-detail-bar > button { flex:none; }
