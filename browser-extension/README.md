@@ -18,7 +18,7 @@ Each connection gets a fresh ID. Commands reference that connection and an exact
 live tab/window ID, expire after eight seconds, and are never replayed. Closing
 Browser's Expo card only stops the phone view; closing a tab sends `tabs.remove`
 to the matching desktop profile. Close, create, move between windows, pin, mute,
-reload and focus use the extension API. Desktop changes flow back to the phone.
+reload, navigation and focus use the extension API. Desktop changes flow back to the phone.
 
 Vivaldi 8 hides `vivExtData` from ordinary extensions. For workspace grouping,
 the native adapter reads only metadata command 21 in the two newest Session_
@@ -29,8 +29,9 @@ Versions exposing live workspace metadata can support workspace reassignment;
 otherwise the UI offers window moves while retaining workspace grouping.
 The adapter never edits Vivaldi's saved session or preference files.
 
-Open-on-phone uses an isolated native Safari view, with normal phone login state;
-it does not control the desktop page or transfer desktop cookies. Older builds
+The embedded phone browser keeps its own login session. Navigating within an
+opened desktop tab updates that same desktop tab URL, including links and
+back/forward navigation. Cookies and page state are not transferred. Older builds
 and PWA views open the URL in the phone/browser's normal external tab. Internal
 Vivaldi URLs can be managed on the desktop but are not navigated on the phone.
 

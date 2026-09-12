@@ -39,6 +39,10 @@ test('real isolated Vivaldi mirrors windows/workspaces and acknowledges tab chan
   const tab=await wait(async()=>{const d=(await api('snapshot')).body.instances[0];return d.windows.flatMap(w=>w.tabs).find(t=>t.url==='https://example.com/')});
   let snap=(await api('snapshot')).body.instances[0];assert.ok(snap.windows.length>=2);
   const target=snap.windows.find(w=>!w.tabs.some(t=>t.id===tab.id));
+  assert.equal((await api('action',{instance_id:first.id,action:'navigate',tab_id:tab.id,url:'https://example.org/'})).status,200);
+  await wait(async()=>(await api('snapshot')).body.instances[0].windows.flatMap(w=>w.tabs).find(t=>t.id===tab.id)?.url==='https://example.org/');
+  assert.equal((await api('action',{instance_id:first.id,action:'navigate',tab_id:tab.id,url:'javascript:alert(1)'})).status,400);
+  console.log('Desktop URL navigation and unsafe URL rejection passed');
   // The internal Vivaldi context creates fixture metadata; the ordinary extension
   // must obtain grouping through the native read-only session adapter instead.
   const core=(await cdp('Target.getTargets')).targetInfos.find(t=>t.type==='app'&&t.url.endsWith('/main.html'));

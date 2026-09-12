@@ -149,7 +149,11 @@ pub async fn snapshot() -> Json<Value> {
 }
 fn validate(peer: &Value, q: &Value) -> Result<()> {
     let action = q["action"].as_str().unwrap_or("");
-    if !["create", "close", "focus", "reload", "pin", "mute", "move"].contains(&action) {
+    if ![
+        "create", "close", "focus", "reload", "pin", "mute", "move", "navigate",
+    ]
+    .contains(&action)
+    {
         bail!("Unknown browser action")
     }
     let windows = peer["windows"]
@@ -167,7 +171,7 @@ fn validate(peer: &Value, q: &Value) -> Result<()> {
             bail!("Tab is no longer open; refresh the list")
         }
     }
-    if action == "create" {
+    if action == "create" || action == "navigate" {
         let url = q["url"].as_str().unwrap_or("");
         if url.len() > 8192 || !(url.starts_with("https://") || url.starts_with("http://")) {
             bail!("Enter an http or https URL")

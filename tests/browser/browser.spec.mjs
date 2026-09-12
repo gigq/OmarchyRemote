@@ -16,6 +16,7 @@ test('Disconnected Browser explains setup and failed close keeps the tab',async(
 });
 
 test('Embedded page stays in its frame, hides for Expo and retains navigation state',async({page:p})=>{
+ await p.route('**/api/browser/action',r=>r.fulfill({json:{ok:true}}));
  await p.route('**/api/browser/snapshot',r=>r.fulfill({json:data()}));
  await p.addInitScript(()=>{window.browserCommands=[];window.webkit={messageHandlers:{browserDevice:{postMessage:async q=>{window.browserCommands.push(q);return q.action==='capabilities'?{embedded:true}:{}}}}}});
  await p.goto('/native/');await p.getByText('browser',{exact:true}).first().click();
@@ -114,4 +115,30 @@ test('Bundled Dark Reader recolors a light document and restores its original st
  expect(Math.max(...color.match(/\d+/g).slice(0,3).map(Number))).toBeLessThan(80);
  await p.evaluate(()=>DarkReader.disable());
  await expect(p.locator('body')).toHaveCSS('background-color',before);
+});
+
+test('Embedded navigation updates the originating desktop tab without replaying loading or duplicate states',async({page:p})=>{
+ const actions=[];
+ await p.route('**/api/browser/snapshot',r=>r.fulfill({json:data()}));
+ await p.route('**/api/browser/action',r=>{actions.push(r.request().postDataJSON());return r.fulfill({json:{ok:true}})});
+ await p.addInitScript(()=>{window.webkit={messageHandlers:{browserDevice:{postMessage:async q=>q.action==='capabilities'?{embedded:true}:{}}}}});
+ const state=detail=>p.evaluate(detail=>window.dispatchEvent(new CustomEvent('host-browser-state',{detail})),detail);
+ await p.goto('/native/');await p.getByText('browser',{exact:true}).first().click();
+ await p.getByRole('link',{name:'Open Example Domain on phone'}).click();
+ await state({url:'https://example.com/',loading:false});await p.waitForTimeout(400);expect(actions).toEqual([]);
+ await state({url:'https://example.com/redirect',loading:true});
+ await state({url:'https://example.com/next',loading:false});
+ await expect.poll(()=>actions.length).toBe(1);expect(actions[0]).toEqual({instance_id:'one',tab_id:10,action:'navigate',url:'https://example.com/next'});
+ await state({url:'https://example.com/next',loading:false});await p.waitForTimeout(400);expect(actions.length).toBe(1);
+ await p.getByRole('textbox',{name:'Page address'}).fill('example.net');await p.getByRole('textbox',{name:'Page address'}).press('Enter');
+ await state({url:'https://example.net/',loading:true});await state({url:'https://example.net/',loading:false});
+ await expect.poll(()=>actions.length).toBe(2);expect(actions[1].url).toBe('https://example.net/');
+ await state({url:'https://example.net/',loading:false});
+ await p.getByRole('button',{name:'Desktop tabs',exact:true}).click();await p.getByRole('link',{name:'Open Other tab on phone'}).click();
+ await state({url:'https://example.net/',loading:false});await p.waitForTimeout(400);expect(actions.length).toBe(2);
+ await state({url:'https://example.org/article',loading:false});
+ await expect.poll(()=>actions.length).toBe(3);expect(actions[2]).toEqual({instance_id:'two',tab_id:12,action:'navigate',url:'https://example.org/article'});
+ await state({url:'https://example.org/failed',loading:false,error:'Network offline'});await p.waitForTimeout(400);expect(actions.length).toBe(3);
+ await p.route('**/api/browser/action',r=>r.fulfill({status:400,json:{error:'Tab is no longer open'}}));
+ await state({url:'https://example.org/missing',loading:false});await expect(p.locator('.browser-page')).toContainText('Desktop tab was not updated: Tab is no longer open');
 });

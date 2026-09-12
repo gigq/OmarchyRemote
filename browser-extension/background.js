@@ -26,6 +26,7 @@ async function command(q){
  switch(q.action){
   case 'close':await chrome.tabs.remove(tab.id);break;
   case 'focus':await chrome.tabs.update(tab.id,{active:true});await chrome.windows.update(tab.windowId,{focused:true});break;
+  case 'navigate':{const url=new URL(q.url);if(!['https:','http:'].includes(url.protocol))throw Error('Use an http or https URL');if((tab.pendingUrl||tab.url)!==url.href)await chrome.tabs.update(tab.id,{url:url.href});break;}
   case 'reload':await chrome.tabs.reload(tab.id);break;
   case 'pin':await chrome.tabs.update(tab.id,{pinned:!!q.value});break;
   case 'mute':await chrome.tabs.update(tab.id,{muted:!!q.value});break;
