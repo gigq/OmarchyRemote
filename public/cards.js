@@ -24,7 +24,7 @@
         card.append(root,label);this.container.append(card);this.cards[app.key]=card;
       }
     }
-    update(){this.sync();const layout=this.logic.layout();for(const key of Object.keys(this.cards))this.paint(key,layout)}
+    update(){this.sync();const state=this.logic.state;document.documentElement.style.setProperty('--wallpaper-x',(state.desk?50:50+Math.max(0,Math.min(9,state.ws))*2)+'%');const layout=this.logic.layout();for(const key of Object.keys(this.cards))this.paint(key,layout)}
     apply(key){this.paint(key,this.logic.layout())}
     paint(key,layout){
       const card=this.cards[key],c=layout.cards[key];if(!card||!c)return;const s=card.style;

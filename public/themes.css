@@ -37,7 +37,9 @@
 
 /* Installed Omarchy wallpapers and its default active/inactive window opacity. */
 :root{--window-active-opacity:.985;--window-inactive-opacity:.96;--theme-wallpaper:none}
-#touch-shell{background-image:var(--theme-wallpaper)!important;background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important}
+#touch-shell{background-image:var(--theme-wallpaper)!important;background-size:cover!important;background-position:var(--wallpaper-x,50%) center!important;background-repeat:no-repeat!important;transition:background-position .5s cubic-bezier(.22,.9,.24,1)}
+.desk-mode #touch-shell{transition:none}
+@media(prefers-reduced-motion:reduce){#touch-shell{transition:none}}
 #touch-shell .shell-topbar{background:color-mix(in srgb,var(--theme-background) 88%,transparent)!important}
 .background-picker{margin:22px 0;padding:20px 0;border-top:1px solid var(--theme-border)}
 .background-picker h2{font:500 22px 'Space Grotesk',sans-serif;margin:0 0 8px}
