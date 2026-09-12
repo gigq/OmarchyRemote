@@ -137,11 +137,6 @@
       window.addEventListener('keydown',e=>this.keydown(e),{capture:true,signal});
       this.shell?.addEventListener('pointerdown',e=>this.pointerdown(e),{capture:true,signal});
       window.addEventListener('hyprland-layout',e=>this.measure(e.detail),{signal});
-      this.shell?.addEventListener('click',e=>{
-        if(e.target.closest('[data-desk-shortcuts]')){e.stopPropagation();this.toggleSheet()}
-      },{signal});
-      const help=this.shell?.querySelector('[data-desk-shortcuts]');
-      if(help){help.textContent=`${MOD} /`;help.title=`Keyboard shortcuts (${MOD} /)`}
       this.measure();
     }
     measure(detail){

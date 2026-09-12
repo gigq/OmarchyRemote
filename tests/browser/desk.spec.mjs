@@ -63,17 +63,17 @@ test.describe('landscape iPad',()=>{
   expect((await box(p,'home')).height).toBeCloseTo(full.height,0);
   await expect(p.locator('html')).not.toHaveClass(/system-keyboard-open/);
  });
- test('shortcut list is discoverable by touch and closes with Done or Escape',async({page:p})=>{
+ test('shortcut list opens by keyboard without a top bar button and closes with Done or Escape',async({page:p})=>{
   await boot(p);
   const help=p.getByRole('button',{name:'Keyboard shortcuts',exact:true});
-  await expect(help).toBeVisible();await help.click();
+  await expect(help).toHaveCount(0);await p.keyboard.press('Meta+Slash');
   const sheet=p.getByRole('dialog',{name:'Keyboard shortcuts'});
   await expect(sheet).toBeVisible();await expect(sheet).toContainText('Herd agents');
   await expect(sheet.getByRole('heading',{name:'Workspaces'})).toBeVisible();
   await sheet.getByRole('button',{name:'Done',exact:true}).click();await expect(sheet).toHaveCount(0);
   await p.keyboard.press('Meta+Slash');await expect(sheet).toBeVisible();
   await p.keyboard.press('Escape');await expect(sheet).toHaveCount(0);
-  await p.setViewportSize({width:834,height:1194});await help.click();
+  await p.setViewportSize({width:834,height:1194});await p.keyboard.press('Meta+Slash');
   await p.screenshot({path:'artifacts/browser/shortcuts-portrait.png'});
   const grid=await p.locator('.desk-sheet-grid').boundingBox();expect(grid.x).toBeGreaterThanOrEqual(0);expect(grid.x+grid.width).toBeLessThanOrEqual(834);
  });

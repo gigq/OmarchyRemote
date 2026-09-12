@@ -79,11 +79,10 @@ html.desk-mode { --workspace-frame-radius:16px; --workspace-expo-radius:28px; }
 .desk-sheet-row kbd { font:inherit; flex:none; min-width:96px; padding:3px 8px; border:1px solid var(--theme-border); border-radius:6px; background:var(--theme-surface-raised); color:var(--theme-foreground); white-space:nowrap; text-align:center; }
 .desk-sheet-foot { margin:0; }
 
-/* Visible entry point for the same list opened with the hardware keyboard. */
-.desk-shortcuts-button { display:none; }
-.desk-mode .desk-shortcuts-button, .desk-sheet-close { display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; padding:0 12px; border:0; border-radius:8px; background:transparent; color:var(--theme-secondary); font:inherit; cursor:pointer; }
-.desk-shortcuts-button:hover, .desk-shortcuts-button:active, .desk-sheet-close:hover, .desk-sheet-close:active { background:var(--theme-surface-raised); color:var(--theme-foreground); }
-.desk-shortcuts-button:focus-visible, .desk-sheet-close:focus-visible { outline:2px solid var(--theme-accent); outline-offset:2px; }
+/* Shortcut sheet controls. */
+.desk-sheet-close { display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; padding:0 12px; border:0; border-radius:8px; background:transparent; color:var(--theme-secondary); font:inherit; cursor:pointer; }
+.desk-sheet-close:hover, .desk-sheet-close:active { background:var(--theme-surface-raised); color:var(--theme-foreground); }
+.desk-sheet-close:focus-visible { outline:2px solid var(--theme-accent); outline-offset:2px; }
 .desk-sheet-head { width:min(100%,960px); flex-wrap:wrap; align-items:center; }
 .desk-sheet-close { margin-left:auto; color:var(--theme-accent); }
 .desk-sheet-foot { width:min(100%,960px); font-size:12px; line-height:1.6; }
