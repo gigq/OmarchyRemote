@@ -185,7 +185,13 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         presenter.view.addSubview(browser)
         page = browser
         observations = [browser.observe(\.url, options: [.new]) { [weak self] _, _ in Task { @MainActor in self?.publish() } },
-                        browser.observe(\.isLoading, options: [.new]) { [weak self] _, _ in Task { @MainActor in self?.publish() } }]
+                        browser.observe(\.isLoading, options: [.new]) { [weak self] _, _ in Task { @MainActor in self?.publish() } },
+                        browser.scrollView.observe(\.contentOffset, options: [.new]) { [weak self] _, _ in
+                            Task { @MainActor in
+                                guard let self, let page = self.page, !page.isHidden else { return }
+                                if page.scrollView.contentOffset.y <= 0 { self.showControls(false) }
+                            }
+                        }]
         return browser
     }
     private func showControls(_ hidden: Bool) {
@@ -202,11 +208,10 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         panY = y
         if delta * scrollTravel < 0 { scrollTravel = 0 }
         scrollTravel += delta
-        if page.scrollView.contentOffset.y <= 0 || scrollTravel >= 100 { showControls(false) }
+        if page.scrollView.contentOffset.y <= 0 { showControls(false) }
         else if scrollTravel < -20 && page.scrollView.contentSize.height > page.bounds.height { showControls(true) }
     }
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        if let page, touch.location(in: page).y < 24 { showControls(false) }
         publish(focused: true)
         return false // Observe focus without recognizing or cancelling website touches.
     }
