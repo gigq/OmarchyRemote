@@ -120,7 +120,7 @@
     {group:'Apps',keys:'⇧ ↩',shift:true,code:/^(Enter|NumpadEnter)$/,label:'Browser',run:d=>d.logic.openApp('browser')},
     {group:'Apps',keys:'⇧ B',shift:true,code:/^KeyB$/,label:'Browser',run:d=>d.logic.openApp('browser')},
     {group:'Apps',keys:'⇧ F',shift:true,code:/^KeyF$/,label:'Files',run:d=>d.logic.openApp('files')},
-    {group:'Apps',keys:'⇧ A',shift:true,code:/^KeyA$/,label:'Herdr agents',run:d=>d.logic.openApp('herdr')},
+    {group:'Apps',keys:'⇧ A',shift:true,code:/^KeyA$/,label:'Herd agents',run:d=>d.logic.openApp('herdr')},
     {group:'Apps',keys:'⇧ D',shift:true,code:/^KeyD$/,label:'lazydocker',run:d=>d.logic.openApp('lazydocker')},
     {group:'Apps',keys:',',code:/^Comma$/,label:'Settings',run:d=>d.logic.openApp('settings')},
     {group:'Shell',keys:'K  or  Space',code:/^(KeyK|Space)$/,label:'Launcher',run:d=>d.logic.state.launch?d.logic.set({launch:false,kb:false,query:''}):d.logic.openLauncher()},
@@ -136,6 +136,11 @@
       window.addEventListener('keydown',e=>this.keydown(e),{capture:true,signal});
       this.shell?.addEventListener('pointerdown',e=>this.pointerdown(e),{capture:true,signal});
       window.addEventListener('hyprland-layout',e=>this.measure(e.detail),{signal});
+      this.shell?.addEventListener('click',e=>{
+        if(e.target.closest('[data-desk-shortcuts]')){e.stopPropagation();this.toggleSheet()}
+      },{signal});
+      const help=this.shell?.querySelector('[data-desk-shortcuts]');
+      if(help){help.textContent=`${MOD} /`;help.title=`Keyboard shortcuts (${MOD} /)`}
       this.measure();
     }
     measure(detail){
@@ -186,18 +191,19 @@
     openSheet(){
       if(!this.shell)return;this.closeSheet();
       const sheet=node('div','desk-sheet');sheet.setAttribute('role','dialog');sheet.setAttribute('aria-label','Keyboard shortcuts');
-      const head=node('div','desk-sheet-head');head.append(node('h2','','Keyboard shortcuts'),node('span','widget-muted',`${MOD} is SUPER · Esc closes`));sheet.append(head);
+      const close=node('button','desk-sheet-close','Done');close.type='button';close.onclick=()=>this.closeSheet();
+      const head=node('div','desk-sheet-head');head.append(node('h2','','Keyboard shortcuts'),node('span','widget-muted',`${MOD} is SUPER · ⇧ is Shift`),close);sheet.append(head);
       const grid=node('div','desk-sheet-grid');
       for(const group of [...new Set(BINDINGS.map(b=>b.group))]){
         const section=node('section','desk-sheet-group');section.append(node('h3','',group));
         for(const b of BINDINGS.filter(b=>b.group===group&&(!b.desk||this.logic.state.desk))){const row=node('div','desk-sheet-row');row.append(node('kbd','',`${MOD} ${b.keys}`),node('span','',b.label));section.append(row)}
         grid.append(section);
       }
-      sheet.append(grid,node('p','widget-muted desk-sheet-foot','Browsers keep a few of their own keys (⌘W, ⌘T, ⌘N, ⌘Space). The iPad app and ⌘⌫ cover them.'));
+      sheet.append(grid,node('p','widget-muted desk-sheet-foot','Use ⌘K if Spotlight takes ⌘Space. While typing, text editing keys keep their usual behavior. Esc or Done closes this list.'));
       sheet.addEventListener('pointerdown',e=>{if(e.target===sheet)this.closeSheet();e.stopPropagation()});
-      this.shell.append(sheet);this.sheet=sheet;
+      this.returnFocus=document.activeElement;this.shell.append(sheet);this.sheet=sheet;close.focus({preventScroll:true});
     }
-    closeSheet(){this.sheet?.remove();this.sheet=null}
+    closeSheet(){if(!this.sheet)return;this.sheet.remove();this.sheet=null;if(this.returnFocus?.matches('button'))this.returnFocus.focus({preventScroll:true});this.returnFocus=null}
     dispose(){this.closeSheet();this.abort.abort()}
   }
   window.HyprlandDesk={attach:logic=>new Desk(logic),isDesk,desks,deskOf,cur,go,open,close,move,swap,layout,render,BINDINGS,MOD,CHROME};
