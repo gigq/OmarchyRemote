@@ -278,13 +278,16 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
                   let viewport = body["viewport"] as? Double, viewport.isFinite, viewport > 0,
                   rect[2] > 0, rect[3] > 0 else { page.isHidden = true; replyHandler(nil, "Invalid bounds"); return }
             let scale = presenter.view.bounds.width / viewport
-            let frame = CGRect(x: rect[0] * scale, y: rect[1] * scale, width: rect[2] * scale, height: rect[3] * scale).intersection(presenter.view.bounds)
+            // Keep WebKit's viewport intact while a workspace slides partly offscreen.
+            // Intersect only for visibility: resizing to the visible slice reflows the page.
+            let frame = CGRect(x: rect[0] * scale, y: rect[1] * scale, width: rect[2] * scale, height: rect[3] * scale)
+            let visibleFrame = frame.intersection(presenter.view.bounds)
             if let hidden = body["controlsHidden"] as? Bool { controlsHidden = hidden }
             if let opacity = body["opacity"] as? Double, opacity.isFinite { page.alpha = max(0.5, min(1, opacity)) }
             page.frame = frame
             if let radius = body["radius"] as? Double, radius.isFinite { page.layer.cornerRadius = max(0, min(24, radius * scale)) }
             page.layer.maskedCorners = body["roundedTop"] as? Bool == true ? [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-            requestedVisible = !frame.isEmpty && !frame.isNull
+            requestedVisible = !visibleFrame.isEmpty && !visibleFrame.isNull
             page.isHidden = !requestedVisible
             if let rgb = body["background"] as? [Double], rgb.count == 3, rgb.allSatisfy({ $0.isFinite && (0...255).contains($0) }) {
                 let color = UIColor(red: rgb[0]/255, green: rgb[1]/255, blue: rgb[2]/255, alpha: 1)
