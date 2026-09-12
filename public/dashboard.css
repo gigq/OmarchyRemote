@@ -1,6 +1,6 @@
 /* Shared geometry follows the handoff; colors remain Omarchy theme tokens. */
 [data-workspace]::after { border-radius:24px; }
-[data-workspace="home"] { padding:92px 28px 42px !important; display:flex; flex-direction:column; gap:0; }
+[data-workspace="home"] { padding:98px 24px 40px !important; display:flex; flex-direction:column; gap:0; }
 [data-workspace="home"] > [data-live-time] { font-family:'JetBrains Mono',monospace !important; font-size:64px !important; letter-spacing:-3px !important; }
 [data-workspace="home"] > [data-live-date] { font-family:inherit !important; font-size:12px !important; margin:10px 0 18px !important; }
 .home-host { position:absolute; top:133px; right:28px; font-size:9px; color:var(--theme-green); max-width:145px; text-align:right; }
@@ -51,8 +51,8 @@
 .terminal-tab-body,.terminal-tab { display:flex; flex-direction:column; flex:1; min-height:0; }
 .terminal-tab[hidden] { display:none !important; }
 @media (max-height:740px) { [data-workspace="home"] { padding-top:72px !important; } [data-workspace="home"] > [data-live-time] { font-size:46px !important; } .home-host { top:95px; } .home-app-grid sc-for > div { height:52px !important; } #home-attention { padding:6px 10px; } }
-#touch-shell :is([data-workspace="home"],[data-workspace="herdr"],[data-workspace="terminal"])::after { inset:54px 12px 34px; border-radius:var(--workspace-frame-radius); }
-#remote-herdr-app { inset:76px 28px 46px; }
+#touch-shell :is([data-workspace="home"],[data-workspace="herdr"],[data-workspace="terminal"])::after { inset:var(--phone-frame-inset); border-radius:var(--workspace-frame-radius); }
+#remote-herdr-app { inset:82px 24px 44px; }
 #remote-herdr-app .remote-bar { padding:0 0 16px; min-height:32px; }
 #remote-herdr-app .remote-bar > strong { font-size:20px; font-weight:500; }
 #remote-herdr-app .remote-bar .remote-status { font-size:11px; }
@@ -65,7 +65,7 @@
 .home-app-grid > div { height:62px !important; border-radius:16px !important; padding:10px !important; }
 .home-app-grid > div > div:last-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px !important; }
 @media (max-height:740px) { .home-app-grid > div { height:52px !important; } }
-.home-host { display:flex; flex-direction:column; gap:7px; font-size:11px; top:119px; }
+.home-host { display:flex; flex-direction:column; gap:7px; font-size:11px; top:125px; }
 .home-host span:last-child { color:var(--theme-secondary); font-size:10px; }
 #remote-herdr-app .herdr-agent-icon { width:8px; font-size:12px; color:var(--theme-green); align-self:flex-start; padding-top:2px; }
 #remote-herdr-app .herdr-agent-icon[data-group=attention] { color:var(--theme-yellow); }
@@ -89,7 +89,7 @@
 .dashboard-pin-panel > button[aria-pressed=true] { border-color:var(--theme-accent); color:var(--theme-accent); }
 .dashboard-pin-panel > button[aria-pressed=true]::after { content:'✓'; float:right; }
 #touch-shell.expo-mode [data-workspace]::after { inset:0; border-width:6px; border-radius:var(--workspace-expo-radius); }
-#remote-terminal-app { inset:74px 28px 46px; }
+#remote-terminal-app { inset:80px 24px 44px; }
 #remote-terminal-app.with-keyboard { bottom:max(40px,calc(var(--keyboard-inset,0px) + 8px)); }
 .terminal-close-confirm { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:12px; margin-bottom:10px; border:1px solid var(--theme-yellow); border-radius:14px; font-size:12px; background:var(--theme-surface); }
 .terminal-close-confirm > span { flex-basis:100%; }

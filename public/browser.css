@@ -3,7 +3,7 @@
 .browser-manager,.browser-page{display:flex;flex-direction:column;flex:1;min-height:0;gap:10px}.browser-navigation{display:flex;gap:8px}.browser-navigation button{min-width:44px;min-height:44px}.browser-navigation button:first-child{margin-right:auto}.browser-address-form{margin:0}.browser-address{box-sizing:border-box;width:100%;min-width:0;border:1px solid var(--theme-border);border-radius:8px;background:var(--theme-surface);color:var(--theme-foreground);padding:10px;font:16px 'JetBrains Mono',monospace}.browser-page>.remote-status:empty{display:none}.browser-native-slot{flex:1;min-height:0;position:relative;overflow:hidden;border-radius:12px;background:var(--theme-background)}.browser-preview{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top}
 
 /* The reading surface meets the inside edge of the workspace's 2px border. */
-.browser-app.browser-reading,.browser-app.browser-reading:focus-within{inset:56px 6px 36px;gap:0}
+.browser-app.browser-reading,.browser-app.browser-reading:focus-within{inset:var(--phone-content-inset);gap:0}
 .desk-mode #touch-shell .browser-app.browser-reading{inset:2px!important}
 .expo-mode .browser-app.browser-reading{inset:6px}
 .browser-reading .browser-page{gap:0;overflow:hidden;border-radius:var(--workspace-inner-radius)}

@@ -16,7 +16,7 @@
   --theme-blue: #31748f;
   --theme-cyan: #56949f;
 }
-.theme-settings { position:absolute; inset:58px 20px 44px; overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; padding:8px 0 20px; }
+.theme-settings { position:absolute; inset:64px 20px 42px; overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; padding:8px 0 20px; }
 .theme-settings header { padding:0 4px 22px; }
 .theme-eyebrow { color:var(--theme-accent); font-size:11px; }
 .theme-settings h1 { font:500 32px 'Space Grotesk',sans-serif; letter-spacing:-1px; margin:14px 0 6px; }
@@ -53,8 +53,7 @@
 #touch-shell .native-surface-visible .browser-app.browser-reading,#touch-shell .native-surface-visible .browser-native-slot,#touch-shell .native-surface-visible .webapp-app{background:transparent!important}
 /* Phone cards span the gesture canvas; paint only inside their actual frame. */
 html:not(.desk-mode) #touch-shell:not(.expo-mode) [data-workspace]{background:transparent!important}
-html:not(.desk-mode) #touch-shell:not(.expo-mode) [data-workspace]::before{content:'';position:absolute;inset:54px 4px 34px;border-radius:var(--workspace-frame-radius);background:var(--pane-background,var(--theme-background));pointer-events:none;z-index:-1}
-html:not(.desk-mode) #touch-shell:not(.expo-mode) :is([data-workspace="home"],[data-workspace="herdr"],[data-workspace="terminal"])::before{inset:54px 12px 34px}
+html:not(.desk-mode) #touch-shell:not(.expo-mode) [data-workspace]::before{content:'';position:absolute;inset:var(--phone-frame-inset);border-radius:var(--workspace-frame-radius);background:var(--pane-background,var(--theme-background));pointer-events:none;z-index:-1}
 #touch-shell [data-workspace].native-surface-visible::before{background:transparent!important}
 .desk-mode #touch-shell:not(.expo-mode) [data-workspace="home"]{background:transparent!important}
 .desk-mode #touch-shell:not(.expo-mode) [data-workspace="home"]::after{background:var(--theme-background);z-index:-1}

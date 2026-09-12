@@ -1,4 +1,4 @@
-.remote-app { position:absolute; inset:58px 10px 40px; display:flex; flex-direction:column; min-height:0; }
+.remote-app { position:absolute; inset:64px 14px 38px; display:flex; flex-direction:column; min-height:0; }
 .remote-app.with-keyboard { bottom:281px; }
 .remote-bar { min-height:30px; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:0 4px 8px; font-size:13px; }
 .remote-status { font-size:10px; color:var(--theme-secondary); overflow-wrap:anywhere; }

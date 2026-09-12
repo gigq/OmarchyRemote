@@ -13,7 +13,10 @@ for(const viewport of [{width:402,height:874},{width:1194,height:834}])test(`web
  const first=await p.evaluate(()=>window.webCommands.find(q=>q.action==='open'&&q.appID)?.appID);expect(first).toMatch(/^webapp-/);
  await expect.poll(()=>p.evaluate(id=>window.webCommands.filter(q=>q.appID===id&&q.action==='layout').at(-1)?.visible,first)).toBe(true);
  await expect(p.locator('.browser-chrome')).toHaveCount(0);
- const rect=await p.locator(`[data-workspace="${first}"] .webapp-app`).boundingBox();const card=await p.locator(`[data-workspace="${first}"]`).boundingBox();expect(Math.abs(rect.width-card.width)).toBeLessThan(18);
+ const rect=await p.locator(`[data-workspace="${first}"] .webapp-app`).boundingBox();const card=await p.locator(`[data-workspace="${first}"]`).boundingBox();const frame=await p.locator(`[data-workspace="${first}"]`).evaluate(e=>{
+  const css=getComputedStyle(e,'::after'),card=getComputedStyle(e);
+  return ['left','right'].reduce((sum,edge)=>sum+parseFloat(css[edge])+parseFloat(css.getPropertyValue(`border-${edge}-width`))+parseFloat(card.getPropertyValue(`border-${edge}-width`)),0);
+ });expect(Math.abs(rect.width-(card.width-frame))).toBeLessThan(1);
  if(viewport.width>600){
   await p.keyboard.press('Meta+Comma');await p.getByRole('button',{name:'Open Other',exact:true}).click();
   const ids=await p.evaluate(()=>window.webCommands.filter(q=>q.action==='open'&&q.appID).map(q=>q.appID));expect(new Set(ids).size).toBe(2);

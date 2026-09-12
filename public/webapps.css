@@ -5,7 +5,7 @@
 .webapps-settings .remote-button{min-height:44px}
 .webapps-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--theme-border)}
 .webapps-row>div{min-width:0;flex:1}.webapps-row strong,.webapps-row small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.webapps-row strong{font-size:13px}.webapps-row small{font-size:11px;color:var(--theme-secondary);margin-top:4px}
-#touch-shell .webapp-app{inset:56px 6px 36px;border-radius:var(--workspace-inner-radius);background:var(--theme-background);overflow:hidden}
+#touch-shell .webapp-app{inset:var(--phone-content-inset);border-radius:var(--workspace-inner-radius);background:var(--theme-background);overflow:hidden}
 .desk-mode #touch-shell .webapp-app{inset:2px!important}
 .expo-mode #touch-shell .webapp-app{inset:6px}
 .webapp-preview{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top;pointer-events:none}
