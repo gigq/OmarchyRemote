@@ -97,8 +97,7 @@
       cards[k]={tf,w:r.w+'px',h:r.h+'px',bd:k===focused&&r.desk===s.ws?'var(--theme-accent)':'var(--theme-window-inactive)',lab:s.ov?1:0,op:r.hidden?0:1,pe:r.hidden?'none':'auto',tap:()=>{if(logic.state.ov)logic.jump(k)}};
     }
     const pills=d.map((apps,i)=>({i:i+1,col:logic.T.mu,bg:i===s.ws?logic.T.sf2:'transparent',c:i===s.ws?logic.T.fg:logic.T.mu,on:()=>{if(i===logic.state.ws)logic.set({ov:!logic.state.ov,kb:false});else logic.go(i)}}));
-    const apps=d[s.ws]||['home'];
-    const label=s.ws===0?`home · ${(s.homePins||[]).length||10} apps`:`${A[focused]?.name||focused} · ${apps.length} ${apps.length===1?'window':'windows'} · ${apps.some(k=>(s.full||[]).includes(k))?'fullscreen':'dwindle'}`;
+    const label=A[focused]?.name||focused;
     return{cards,pills,label};
   };
 

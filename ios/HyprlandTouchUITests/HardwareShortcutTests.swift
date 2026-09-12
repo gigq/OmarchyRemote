@@ -15,7 +15,7 @@ final class HardwareShortcutTests: XCTestCase {
     }
 
     private func expectWorkspace(_ text: String, file: StaticString = #filePath, line: UInt = #line) {
-        let label = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", text)).firstMatch
+        let label = app.staticTexts.matching(NSPredicate(format: "label == %@", text)).firstMatch
         XCTAssertTrue(label.waitForExistence(timeout: 5), "Missing workspace label: \(text)", file: file, line: line)
         XCTAssertEqual(app.state, .runningForeground, file: file, line: line)
     }
@@ -23,23 +23,23 @@ final class HardwareShortcutTests: XCTestCase {
     func testPhysicalModifierKeysCycleCloseAndLauncher() {
         // XCUIAutomation sends physical keyboard events; no JavaScript dispatch.
         app.typeKey("f", modifierFlags: [.command, .shift])
-        expectWorkspace("files · 1 window")
+        expectWorkspace("files")
         app.typeKey(",", modifierFlags: .command)
-        expectWorkspace("settings · 2 windows")
+        expectWorkspace("settings")
         app.typeKey("j", modifierFlags: .command)
-        expectWorkspace("files · 2 windows")
+        expectWorkspace("files")
         app.typeKey("j", modifierFlags: [.command, .shift])
-        expectWorkspace("settings · 2 windows")
+        expectWorkspace("settings")
         app.typeKey("k", modifierFlags: .command)
         let launcher = app.searchFields["Search apps, panes and files"]
         expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: launcher)
         waitForExpectations(timeout: 5)
         app.typeKey("k", modifierFlags: .command)
-        expectWorkspace("settings · 2 windows")
+        expectWorkspace("settings")
         app.typeKey("w", modifierFlags: .command)
-        expectWorkspace("files · 1 window")
+        expectWorkspace("files")
         app.typeKey("w", modifierFlags: .command)
-        expectWorkspace("home ·")
+        expectWorkspace("home")
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Native keyboard shortcuts survived Command W"
         screenshot.lifetime = .keepAlways
@@ -47,65 +47,65 @@ final class HardwareShortcutTests: XCTestCase {
     }
     func testPhysicalFullscreenWorkspaceAndHelpKeys() {
         app.typeKey("f", modifierFlags: [.command, .shift])
-        expectWorkspace("files · 1 window")
+        expectWorkspace("files")
         app.typeKey(",", modifierFlags: .command)
-        expectWorkspace("settings · 2 windows")
+        expectWorkspace("settings")
         app.typeKey("f", modifierFlags: .command)
-        expectWorkspace("settings · 2 windows · fullscreen")
+        expectWorkspace("settings")
         app.typeKey("j", modifierFlags: .command)
-        expectWorkspace("files · 2 windows · fullscreen")
+        expectWorkspace("files")
         app.typeKey("f", modifierFlags: .command)
-        expectWorkspace("files · 2 windows · dwindle")
+        expectWorkspace("files")
         app.typeKey("1", modifierFlags: .command)
-        expectWorkspace("home ·")
+        expectWorkspace("home")
         app.typeKey("2", modifierFlags: .command)
-        expectWorkspace("files · 2 windows")
+        expectWorkspace("files")
         app.typeKey("[", modifierFlags: .command)
-        expectWorkspace("home ·")
+        expectWorkspace("home")
         app.typeKey("]", modifierFlags: .command)
-        expectWorkspace("files · 2 windows")
+        expectWorkspace("files")
         app.typeKey("/", modifierFlags: .command)
         XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
         app.buttons["Done"].tap()
         app.typeKey("e", modifierFlags: .command)
         XCTAssertEqual(app.state, .runningForeground)
         app.typeKey("e", modifierFlags: .command)
-        expectWorkspace("files · 2 windows")
+        expectWorkspace("files")
     }
 
     func testPhysicalThreeWindowCycleAndAppAliases() {
         app.typeKey("f", modifierFlags: [.command, .shift])
         app.typeKey(",", modifierFlags: .command)
         app.typeKey("b", modifierFlags: [.command, .shift])
-        expectWorkspace("browser · 3 windows")
+        expectWorkspace("browser")
         app.typeKey("j", modifierFlags: .command)
-        expectWorkspace("files · 3 windows")
+        expectWorkspace("files")
         app.typeKey("j", modifierFlags: [.command, .shift])
-        expectWorkspace("browser · 3 windows")
+        expectWorkspace("browser")
         app.typeKey("b", modifierFlags: [.command, .shift])
-        expectWorkspace("browser · 3 windows")
+        expectWorkspace("browser")
         app.typeKey("a", modifierFlags: [.command, .shift])
-        expectWorkspace("herdr · 4 windows")
+        expectWorkspace("herdr")
         app.typeKey("d", modifierFlags: [.command, .shift])
-        expectWorkspace("lazydocker · 1 window")
+        expectWorkspace("lazydocker")
         app.typeKey("t", modifierFlags: .command)
-        expectWorkspace("terminal · 2 windows")
+        expectWorkspace("terminal")
     }
 
     func testPhysicalDirectionalKeysAndClose() {
         app.typeKey("f", modifierFlags: [.command, .shift])
         app.typeKey(",", modifierFlags: .command)
-        expectWorkspace("settings · 2 windows")
+        expectWorkspace("settings")
         app.typeKey(XCUIKeyboardKey.leftArrow, modifierFlags: .command)
-        expectWorkspace("files · 2 windows")
+        expectWorkspace("files")
         app.typeKey(XCUIKeyboardKey.rightArrow, modifierFlags: .command)
-        expectWorkspace("settings · 2 windows")
+        expectWorkspace("settings")
         app.typeKey(XCUIKeyboardKey.leftArrow, modifierFlags: [.command, .shift])
-        expectWorkspace("settings · 2 windows")
+        expectWorkspace("settings")
         app.typeKey(XCUIKeyboardKey.rightArrow, modifierFlags: .command)
-        expectWorkspace("files · 2 windows")
+        expectWorkspace("files")
         app.typeKey("w", modifierFlags: .command)
-        expectWorkspace("settings · 1 window")
+        expectWorkspace("settings")
     }
 
     func testEditingDoesNotRouteWindowShortcuts() {
@@ -130,35 +130,35 @@ final class HardwareShortcutTests: XCTestCase {
         app.typeKey(XCUIKeyboardKey.delete, modifierFlags: .command)
         XCTAssertTrue(search.isHittable)
         app.typeKey("k", modifierFlags: .command)
-        expectWorkspace("settings · 2 windows")
+        expectWorkspace("settings")
     }
 
     func testPhysicalWorkspaceMoveChords() {
         app.typeKey("f", modifierFlags: [.command, .shift])
         app.typeKey(",", modifierFlags: .command)
-        expectWorkspace("settings · 2 windows")
+        expectWorkspace("settings")
         app.typeKey("3", modifierFlags: [.command, .option])
-        expectWorkspace("settings · 1 window")
+        expectWorkspace("settings")
         app.typeKey("2", modifierFlags: .command)
-        expectWorkspace("files · 1 window")
+        expectWorkspace("files")
         app.typeKey("0", modifierFlags: .command)
-        expectWorkspace("settings · 1 window")
+        expectWorkspace("settings")
         app.typeKey("[", modifierFlags: [.command, .shift])
-        expectWorkspace("settings · 2 windows")
+        expectWorkspace("settings")
         app.typeKey("]", modifierFlags: [.command, .shift])
-        expectWorkspace("settings · 1 window")
+        expectWorkspace("settings")
         app.typeKey("2", modifierFlags: [.command, .option])
-        expectWorkspace("settings · 2 windows")
+        expectWorkspace("settings")
     }
 
 
     func testPhysicalTerminalAndBrowserFromHome() {
         app.typeKey("t", modifierFlags: .command)
-        expectWorkspace("terminal · 1 window")
+        expectWorkspace("terminal")
         app.typeKey("1", modifierFlags: .command)
-        expectWorkspace("home ·")
+        expectWorkspace("home")
         app.typeKey("b", modifierFlags: [.command, .shift])
-        expectWorkspace("browser · 1 window")
+        expectWorkspace("browser")
     }
 
 }

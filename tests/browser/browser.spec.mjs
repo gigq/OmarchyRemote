@@ -70,7 +70,7 @@ test('Embedded iPad page follows tiling, fullscreen, rotation and app disposal',
  await p.keyboard.press('Meta+Comma');await p.waitForTimeout(600);
  const tiled=await layout();expect(tiled.radius).toBe(14);expect(tiled.rect[2]).toBeLessThan(600);
  await p.evaluate(()=>window.dispatchEvent(new CustomEvent('host-browser-state',{detail:{focused:true}})));
- await expect(p.locator('.desk-ws-label:visible')).toContainText('browser ·');
+ await expect(p.locator('.desk-ws-label:visible')).toHaveText('browser');
  await p.keyboard.press('Meta+ArrowRight');
  await p.keyboard.press('Meta+f');
  await expect.poll(async()=>(await layout())?.visible).toBe(false);
