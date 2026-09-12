@@ -22,6 +22,8 @@
 <script src="/native-input.js"></script>
 <script src="/files.js"></script>
 <script src="/browser.js"></script>
+<script src="/webapps.js"></script>
+<link rel="stylesheet" href="/webapps.css">
 <script src="/remote.js"></script>
 <script src="/dashboard.js"></script>
 <link rel="stylesheet" href="/dashboard.css">
@@ -449,7 +451,7 @@ class Component extends DCLogic {
   APPS = window.HyprlandApps.catalog; // see public/apps.js
   T = {bg:'var(--theme-background)',sf:'var(--theme-surface)',sf2:'var(--theme-surface-raised)',bd:'var(--theme-border)',fg:'var(--theme-foreground)',mu:'var(--theme-secondary)',dim:'var(--theme-dim)',love:'var(--theme-red)',gold:'var(--theme-yellow)',rose:'var(--theme-rose)',foam:'var(--theme-green)',iris:'var(--theme-magenta)'};
   state = { ws:0, open:['home'], desk:!!window.HyprlandDesk?.isDesk(), deskW:window.innerWidth, deskH:window.innerHeight, tiles:{}, focus:null, full:[], ov:false, kb:false, sup:false, term:false, ctl:false, shade:null, launch:false, query:'', shift:false };
-  componentDidMount(){ this.hostChanged=()=>this.set({});document.addEventListener('hyprland-host',this.hostChanged);window.addEventListener('online',this.hostChanged);window.addEventListener('offline',this.hostChanged); this.cards=window.HyprlandCards?.attach(this); this.remote=window.HyprlandRemote?.attach(this); window.HyprlandThemes.attach(); this.expo=window.HyprlandExpo.attach(this); this.widgets=window.HyprlandWidgets.attach(this); this.dashboard=window.HyprlandDashboard.attach(this); this.desk=window.HyprlandDesk?.attach(this); window.updateDeviceBattery?.() }
+  componentDidMount(){ window.HyprlandWebApps?.bind(this); this.hostChanged=()=>this.set({});document.addEventListener('hyprland-host',this.hostChanged);window.addEventListener('online',this.hostChanged);window.addEventListener('offline',this.hostChanged); this.cards=window.HyprlandCards?.attach(this); this.remote=window.HyprlandRemote?.attach(this); window.HyprlandThemes.attach(); this.expo=window.HyprlandExpo.attach(this); this.widgets=window.HyprlandWidgets.attach(this); this.dashboard=window.HyprlandDashboard.attach(this); this.desk=window.HyprlandDesk?.attach(this); window.updateDeviceBattery?.() }
   componentDidUpdate(){ this.cards?.update(); this.remote?.update(); this.expo?.update(); this.widgets?.update(); this.dashboard?.update(); this.desk?.update(); window.updateDeviceBattery?.() }
   componentWillUnmount(){ document.removeEventListener('hyprland-host',this.hostChanged);window.removeEventListener('online',this.hostChanged);window.removeEventListener('offline',this.hostChanged);this.keyEnd();this.desk?.dispose();this.cards?.dispose();this.dashboard?.dispose();this.widgets?.dispose();this.expo?.dispose();this.remote?.dispose() }
   ptr = null; wx = null;

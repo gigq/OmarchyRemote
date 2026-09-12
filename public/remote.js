@@ -312,11 +312,10 @@
       }
       if(location.protocol==='file:'){
         for(const spec of Object.values(HyprlandApps.catalog)){if(spec.offline)continue;const root=mount(spec.mount);if(root&&!root.textContent)root.append(node('p','remote-empty','Connect to the host to use this app.'))}
-        return;
       }
       const visible=s.desk&&window.HyprlandDesk?(window.HyprlandDesk.desks(s)[s.ws]||[current]):[current];
       for(const key of visible){
-        const spec=HyprlandApps.get(key);if(!spec?.provider||this.apps[key])continue;
+        const spec=HyprlandApps.get(key);if(!spec?.provider||this.apps[key]||(location.protocol==='file:'&&!spec.offline))continue;
         const root=mount(spec.mount);if(!root)continue;
         const app=spec.provider.create(root,this);this.apps[key]=app;app.connect?.();
       }

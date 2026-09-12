@@ -92,6 +92,8 @@ Everything runs on the host you already own. There is no cloud relay: a Rust bac
 
 **Apps.** Terminal (a login shell in a PTY, resumed across reloads), Herdr (workspaces, agents, and pane output with a message composer), Files (browse, preview, edit, search, upload, move, trash, ZIP), Browser (desktop tabs through the extension), btop, Services, lazydocker, dua, lnav (each a persistent host PTY with touch controls), Home widgets (system metrics, Tailscale, weather, CodexBar), and Settings (all Omarchy themes, applied to the shell and to terminal colors). The [feature reference](docs/features.md) describes each in detail.
 
+**Web apps.** In Settings, enter a name and an http/https URL under Web apps, then choose Install web app. Saved apps appear on Home and in the launcher. Each opens an independent native website view without browser controls and supports workspaces, iPad tiling, and Expo. Remove an installation from Settings; closing its Expo card only closes the running view. Installations are saved on that device, use its web login sessions, and do not sync navigation to desktop tabs.
+
 ## Native iPhone and iPad app
 
 `ios/HyprlandTouch.xcodeproj` is a UIKit/WKWebView wrapper for iOS 18 or later with the shared **HyprlandTouch** scheme and automatic development signing. It hides the status bar, defers the system edge gestures so the shell's swipes work, registers native iPad key commands and routes them to the shell, adds a Core Location bridge for the weather widget, and opens browser pages in an isolated WKWebView inside the themed Browser window.

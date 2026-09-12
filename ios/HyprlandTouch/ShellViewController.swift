@@ -124,12 +124,14 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
     weak var presenter: UIViewController?
     weak var shell: WKWebView?
     private var page: WKWebView?
+    private var appID: String?
+    private var webApps: [String: BrowserDeviceBridge] = [:]
     private var observations: [NSKeyValueObservation] = []
     var ownsKeyboardFocus: Bool {
         func containsResponder(_ view: UIView) -> Bool {
             view.isFirstResponder || view.subviews.contains(where: containsResponder)
         }
-        return page.map(containsResponder) ?? false
+        return (page.map(containsResponder) ?? false) || webApps.values.contains { $0.ownsKeyboardFocus }
     }
     private var requestedVisible = false
     private var controlsHidden = false
@@ -155,6 +157,11 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
     private var panY: CGFloat = 0
     private var scrollTravel: CGFloat = 0
 
+    func resetAll() {
+        for app in webApps.values { app.reset() }
+        webApps.removeAll()
+        reset()
+    }
     func reset() {
         observations.removeAll()
         page?.stopLoading()
@@ -178,7 +185,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         browser.scrollView.contentInsetAdjustmentBehavior = .never
         browser.scrollView.panGestureRecognizer.addTarget(self, action: #selector(pageScrolled(_:)))
         browser.allowsBackForwardNavigationGestures = true
-        browser.accessibilityIdentifier = "hyprland.browser.page"
+        browser.accessibilityIdentifier = appID.map { "hyprland.webapp." + $0 } ?? "hyprland.browser.page"
         let focus = UITapGestureRecognizer()
         focus.delegate = self
         browser.addGestureRecognizer(focus)
@@ -195,7 +202,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         return browser
     }
     private func showControls(_ hidden: Bool) {
-        guard controlsHidden != hidden else { return }
+        guard appID == nil, controlsHidden != hidden else { return }
         controlsHidden = hidden
         publish(controlsHidden: hidden)
     }
@@ -218,6 +225,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
     private func publish(error: String? = nil, preview: String? = nil, focused: Bool = false, controlsHidden: Bool? = nil) {
         guard let page else { return }
         var state: [String: Any] = ["url": page.url?.absoluteString ?? "", "back": page.canGoBack, "forward": page.canGoForward, "loading": page.isLoading]
+        if let appID { state["appID"] = appID }
         if let controlsHidden { state["controlsHidden"] = controlsHidden }
         if focused { state["focused"] = true }
         if let error { state["error"] = error }
@@ -239,7 +247,22 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
               ShellSource.trusts(message.frameInfo.securityOrigin) || message.frameInfo.request.url?.isFileURL == true,
               let body = message.body as? [String: Any] else { replyHandler(nil, "Unsupported page"); return }
         let action = body["action"] as? String ?? "open"
-        if action == "capabilities" { replyHandler(["embedded": true, "darkMode": darkSource != nil, "dark": forceDark], nil); return }
+        if appID == nil, let id = body["appID"] as? String {
+            guard id.hasPrefix("webapp-"), id.count <= 80, id.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }) else { replyHandler(nil, "Invalid web app"); return }
+            if webApps[id] == nil {
+                if action == "close" || action == "layout" { replyHandler(["visible": false], nil); return }
+                guard webApps.count < 10 else { replyHandler(nil, "Close a web app first"); return }
+                let app = BrowserDeviceBridge()
+                app.appID = id
+                app.presenter = presenter
+                app.shell = shell
+                webApps[id] = app
+            }
+            webApps[id]?.userContentController(userContentController, didReceive: message, replyHandler: replyHandler)
+            if action == "close" { webApps.removeValue(forKey: id) }
+            return
+        }
+        if action == "capabilities" { replyHandler(["embedded": true, "webApps": true, "darkMode": darkSource != nil, "dark": forceDark], nil); return }
         if action == "close" { reset(); replyHandler(["closed": true], nil); return }
         if action == "layout" {
             guard let page, let presenter else { replyHandler(["visible": false], nil); return }
@@ -640,7 +663,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         present(menu, animated: true)
     }
 
-    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { browserDevice.reset() }
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { browserDevice.resetAll() }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         retryButton.isHidden = true
