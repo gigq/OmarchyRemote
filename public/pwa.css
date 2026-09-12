@@ -70,3 +70,10 @@ html, body { margin: 0; min-height: 100%; overscroll-behavior: none; }
 /* Keep composited Expo title gradients entirely inside the six-pixel frame.
    WebKit may promote fading labels independently of the pseudo-element border. */
 .expo-mode .workspace-label { top:8px !important; left:8px !important; right:8px !important; padding:18px 20px !important; border-radius:18px 18px 0 0; z-index:1; }
+
+.device-battery { display:inline-flex; align-items:center; gap:5px; color:var(--theme-foreground); font-size:11px; font-variant-numeric:tabular-nums; }
+.device-battery[hidden] { display:none; }
+.device-battery[data-low="true"] { color:var(--theme-red); }
+.device-battery[data-charging="true"] { color:var(--theme-green); }
+.battery-bolt { display:none; }
+.device-battery[data-charging="true"] .battery-bolt { display:block; }

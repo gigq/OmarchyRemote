@@ -69,3 +69,20 @@ window.addEventListener('resize',fitNativeKeyboard);
 fitNativeKeyboard();
 
 window.addEventListener('hyprland-keyboard',()=>{fitCanvas();fitNativeKeyboard()});
+
+// The native wrapper publishes device battery changes; unknown/PWA states stay hidden.
+function updateDeviceBattery(){
+  const battery=window.__HYPRLAND_BATTERY__;
+  const valid=Number.isFinite(battery?.percent)&&battery.percent>=0&&battery.percent<=100;
+  document.querySelectorAll('[data-device-battery]').forEach(el=>{
+    el.hidden=!valid;if(!valid)return;
+    const percent=Math.round(battery.percent),charging=['charging','full'].includes(battery.state);
+    el.dataset.charging=String(charging);el.dataset.low=String(percent<=20);
+    el.querySelector('[data-battery-percent]').textContent=`${percent}%`;
+    el.querySelector('[data-battery-fill]').setAttribute('width',String(15*percent/100));
+    const label=`Battery: ${percent}%${battery.state==='full'?', fully charged':charging?', charging':''}`;
+    el.setAttribute('aria-label',label);el.title=label;
+  });
+}
+window.addEventListener('hyprland-battery',updateDeviceBattery);
+updateDeviceBattery();

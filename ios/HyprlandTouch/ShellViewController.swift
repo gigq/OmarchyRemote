@@ -516,7 +516,30 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
             view.addGestureRecognizer(sourceGesture)
             NotificationCenter.default.addObserver(self, selector: #selector(resumeLive), name: UIApplication.willEnterForegroundNotification, object: nil)
         }
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        for name in [UIDevice.batteryLevelDidChangeNotification, UIDevice.batteryStateDidChangeNotification, UIApplication.didBecomeActiveNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(publishBattery), name: name, object: nil)
+        }
         loadShell()
+    }
+
+    @objc private func publishBattery() {
+        guard let webView else { return }
+        let device = UIDevice.current
+        let state: String
+        switch device.batteryState {
+        case .charging: state = "charging"
+        case .full: state = "full"
+        case .unplugged: state = "unplugged"
+        default: state = "unknown"
+        }
+        var battery: [String: Any] = ["percent": NSNull(), "state": state]
+        if device.batteryLevel >= 0 {
+            battery["percent"] = Int((device.batteryLevel * 100).rounded())
+        }
+        webView.callAsyncJavaScript(
+            "window.__HYPRLAND_BATTERY__ = battery; window.dispatchEvent(new Event('hyprland-battery'));",
+            arguments: ["battery": battery], in: nil, in: .page, completionHandler: nil)
     }
 
     override func viewDidLayoutSubviews() {
@@ -617,6 +640,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         retryButton.isHidden = true
         publishKeyboardGeometry(force: true)
+        publishBattery()
         if webView.url?.isFileURL == true {
             loadTimeout?.cancel()
             remoteNavigation = nil
