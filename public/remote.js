@@ -198,8 +198,8 @@
       for(const workspace of orderHerdr(this.snapshot)){
         const panes=workspace.panes.filter(p=>(this.filter==='all'||paneGroup(p)===this.filter)&&[p.terminal_title_stripped,p.agent,p.cwd,p.foreground_cwd,workspace.label,this.snapshot.tabs.find(t=>t.tab_id===p.tab_id)?.label].join(' ').toLowerCase().includes(this.search.value.toLowerCase()));if(!panes.length)continue;
         const group=node('section','herdr-group');const heading=node('div','herdr-group-title');heading.append(node('strong','',workspace.label||workspace.workspace_id),node('span','remote-status',`${panes.length} panes`));group.append(heading);
-        for(const pane of panes){const tab=this.snapshot.tabs.find(t=>t.tab_id===pane.tab_id);const row=button('',()=>this.select(pane.pane_id));row.className='herdr-pane';
-          const icon=node('span','herdr-agent-icon','●');icon.dataset.group=paneGroup(pane);const info=node('span','herdr-pane-info');const label=node('span','herdr-name-line');label.append(node('strong','',this.paneLabel(pane)),node('span','herdr-provider',pane.agent||'shell'));info.append(label,node('span','remote-status',`${tab?.label||'terminal'} · ${HyprlandApps.tilde(pane.foreground_cwd||pane.cwd)}`));
+        for(const pane of panes){const row=button('',()=>this.select(pane.pane_id));row.className='herdr-pane';
+          const icon=node('span','herdr-agent-icon','●');icon.dataset.group=paneGroup(pane);const info=node('span','herdr-pane-info');const label=node('span','herdr-name-line');label.append(node('strong','',this.paneLabel(pane)),node('span','herdr-provider',pane.agent||'shell'));info.append(label,node('span','remote-status',HyprlandApps.tilde(pane.foreground_cwd||pane.cwd)));
           const status=node('span','herdr-state',pane.agent_status||'unknown');status.dataset.state=pane.agent_status||'unknown';row.append(icon,info,status);group.append(row)}
         this.list.append(group);
       }
