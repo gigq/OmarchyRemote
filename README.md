@@ -92,6 +92,8 @@ Everything runs on the host you already own. There is no cloud relay: a Rust bac
 
 **Apps.** Terminal (a login shell in a PTY, resumed across reloads), Herdr (workspaces, agents, and pane output with a message composer), Files (browse, preview, edit, search, upload, move, trash, ZIP), Browser (desktop tabs through the extension), btop, Services, lazydocker, dua, lnav (each a persistent host PTY with touch controls), Home widgets (system metrics, Tailscale, weather, CodexBar), and Settings (all Omarchy themes, applied to the shell and to terminal colors). The [feature reference](docs/features.md) describes each in detail.
 
+**Backgrounds and transparency.** Settings offers the installed Omarchy theme backgrounds, with a separate remembered choice for each theme and a Solid color option. Windows use Omarchy’s default opacity: 98.5% focused and 96% unfocused, including native Browser and web-app views. `python scripts/import-themes.py` imports palettes and optimized WebP backgrounds from the installed themes (requires Pillow).
+
 **Web apps.** In Settings, enter a name and an http/https URL under Web apps, then choose Install web app. Saved apps appear on Home and in the launcher. Each opens an independent native website view without browser controls and supports workspaces, iPad tiling, and Expo. Remove an installation from Settings; closing its Expo card only closes the running view. Installations are saved on that device, use its web login sessions, and do not sync navigation to desktop tabs.
 
 ## Native iPhone and iPad app

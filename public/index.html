@@ -429,15 +429,15 @@
     <sc-for list="{{ kbRows }}" as="r" hint-placeholder-count="4"><div style="display:flex;gap:5px;margin-bottom:6px"><sc-for list="{{ r.keys }}" as="k" hint-placeholder-count="10"><button type="button" class="touch-key" aria-label="{{ k.l }}" sc-camel-on-pointer-down="{{ k.down }}" sc-camel-on-pointer-up="{{ keyEnd }}" sc-camel-on-pointer-cancel="{{ keyEnd }}" sc-camel-on-lost-pointer-capture="{{ keyEnd }}" sc-camel-on-click="{{ k.click }}" style="border:0;padding:0;min-width:0;font-family:inherit;touch-action:none;flex: {{ k.w }};height:42px;border-radius:8px;display:grid;place-items:center;font-size: {{ k.fs }};background: {{ k.bg }};color: {{ k.c }};cursor:pointer;transition:background .2s,color .2s">{{ k.l }}</button></sc-for></div></sc-for>
   </div>
 
-  <div class="shell-overlay" style="position:absolute;left:0;right:0;top:52px;z-index:14;background:color-mix(in srgb, var(--theme-surface) 96%, transparent);border:1px solid var(--theme-border);border-top:0;border-radius:0 0 28px 28px;transform: {{ launchTf }};transition: {{ tr }};padding:12px 14px 14px;display:flex;flex-direction:column;gap:6px">
+  <div class="shell-overlay" style="position:absolute;left:0;right:0;top:52px;z-index:14;background:color-mix(in srgb, var(--theme-surface) 96%, transparent);border:1px solid var(--theme-border);border-top:0;border-radius:0 0 28px 28px;visibility: {{ launchVisibility }};transform: {{ launchTf }};transition: {{ tr }};padding:12px 14px 14px;display:flex;flex-direction:column;gap:6px">
     <div id="dashboard-launcher"></div>
   </div>
 
-  <div class="shell-shade" style="position:absolute;left:0;right:0;top:52px;z-index:14;background:color-mix(in srgb, var(--theme-surface) 96%, transparent);border:1px solid var(--theme-border);border-top:0;border-radius:0 0 28px 28px;transform: {{ shadeNTf }};transition: {{ tr }};padding:14px 18px 18px;display:flex;flex-direction:column;gap:8px;box-sizing:border-box">
+  <div class="shell-shade" style="position:absolute;left:0;right:0;top:52px;z-index:14;background:color-mix(in srgb, var(--theme-surface) 96%, transparent);border:1px solid var(--theme-border);border-top:0;border-radius:0 0 28px 28px;visibility: {{ shadeNVisibility }};transform: {{ shadeNTf }};transition: {{ tr }};padding:14px 18px 18px;display:flex;flex-direction:column;gap:8px;box-sizing:border-box">
     <div id="dashboard-notifications"></div>
   </div>
 
-  <div class="shell-shade" style="position:absolute;left:0;right:0;top:52px;z-index:14;background:color-mix(in srgb, var(--theme-surface) 96%, transparent);border:1px solid var(--theme-border);border-top:0;border-radius:0 0 28px 28px;transform: {{ shadeQTf }};transition: {{ tr }};padding:14px 18px 18px;display:flex;flex-direction:column;gap:10px;box-sizing:border-box">
+  <div class="shell-shade" style="position:absolute;left:0;right:0;top:52px;z-index:14;background:color-mix(in srgb, var(--theme-surface) 96%, transparent);border:1px solid var(--theme-border);border-top:0;border-radius:0 0 28px 28px;visibility: {{ shadeQVisibility }};transform: {{ shadeQTf }};transition: {{ tr }};padding:14px 18px 18px;display:flex;flex-direction:column;gap:10px;box-sizing:border-box">
     <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--theme-secondary);padding:0 4px"><span>quick settings</span></div>
     <div style="display:flex;gap:8px;margin-top:4px"><div sc-camel-on-click="{{ openSettings }}" style="flex:1;padding:12px;border-radius:12px;background:var(--theme-background);border:1px solid var(--theme-surface-raised);font-size:11px;cursor:pointer"><div style="color:var(--theme-secondary);margin-bottom:2px">theme</div><div data-theme-name>Prototype</div></div><div sc-camel-on-click="{{ openSettings }}" style="flex:1;padding:12px;border-radius:12px;background:var(--theme-background);border:1px solid var(--theme-surface-raised);font-size:11px;cursor:pointer"><div style="color:var(--theme-secondary);margin-bottom:2px">all settings</div><div>{{ openCount }} workspaces · touch</div></div></div>
   </div>
@@ -546,6 +546,7 @@ class Component extends DCLogic {
       managePins:()=>this.dashboard?.managePins(),homeApps:homeKeys.filter(k=>A[k]).map(k=>({g:A[k].glyph,n:A[k].name,c:A[k].color,op:1,badge:k==='herdr'?(s.herdAttention||0):'',badgeDisplay:k==='herdr'&&s.herdAttention?'block':'none',on:()=>this.openApp(k)})),
       kbOn:()=>{if(!this.state.ov)this.set({kb:true,sup:false})}, kbOff:()=>this.set({kb:false,launch:false,sup:false,ctl:false,query:''}),
       kbTf:s.kb?'translateY(0)':'translateY(105%)', kbRows, supC:s.sup?T.rose:(s.ctl?T.iris:T.mu), supMsg:s.sup?'SUPER · tap a key to run its binding':(s.ctl?'CTRL held · tap a letter':(s.launch?'typing into the launcher':(A[cur]?.native?window.HyprlandApps.host.name+' · '+(A[cur].typing||A[cur].name):'touch keyboard'))),
+      launchVisibility:s.launch?'visible':'hidden',shadeNVisibility:s.shade==='notif'?'visible':'hidden',shadeQVisibility:s.shade==='qs'?'visible':'hidden',
       launchTf:s.launch?'translateY(0)':'translateY(-104%)', matchCount:m.length,
       shadeNTf:s.shade==='notif'?'translateY(0)':'translateY(-104%)', shadeQTf:s.shade==='qs'?'translateY(0)':'translateY(-104%)',
       openSettings:()=>this.openApp('settings')

@@ -2,7 +2,28 @@
 (() => {
   const prototype={id:'prototype',name:'Prototype',colors:{mode:'dark',background:'#191724',dark_background:'#15131f',lighter_background:'#1f1d2e',darker_background:'#26233a',selection:'#403d52',foreground:'#e0def4',light_foreground:'#908caa',dark_foreground:'#6e6a86',accent:'#3e8fb0',red:'#eb6f92',yellow:'#f6c177',cyan:'#ebbcba',green:'#9ccfd8',magenta:'#c4a7e7',blue:'#31748f',bright_foreground:'#ffffff'}};
   const catalog=[prototype,...window.OmarchyThemeCatalog];
+  const assetURL=path=>location.protocol==='file:'?'.'+path:path;
   let current=prototype;
+  let wallpapers;try{wallpapers=JSON.parse(localStorage.getItem('omarchy-wallpapers')||'{}')}catch{}
+  if(!wallpapers||typeof wallpapers!=='object'||Array.isArray(wallpapers))wallpapers={};
+  function background(id,persist=true){
+    const choices=current.backgrounds||[];
+    const selected=id==='none'?null:choices.find(b=>b.id===id)||choices[0];
+    const value=selected?.id||'none';
+    document.documentElement.style.setProperty('--theme-wallpaper',selected?`url("${assetURL(selected.url)}")`:'none');
+    document.documentElement.dataset.background=value;
+    if(persist){wallpapers[current.id]=value;try{localStorage.setItem('omarchy-wallpapers',JSON.stringify(wallpapers))}catch{}}
+    document.querySelectorAll('[data-background-choice]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.backgroundChoice===value)));
+  }
+  function drawBackgrounds(){
+    const grid=document.querySelector('.background-grid');if(!grid)return;grid.replaceChildren();
+    for(const item of [{id:'none',name:'Solid color'},...(current.backgrounds||[])]){
+      const b=document.createElement('button');b.type='button';b.className='background-choice';b.dataset.backgroundChoice=item.id;b.setAttribute('aria-label',item.name);
+      const preview=document.createElement(item.thumbnail?'img':'span');if(item.thumbnail){preview.src=assetURL(item.thumbnail);preview.alt='';preview.loading='lazy'}else preview.className='background-swatch';
+      const name=document.createElement('span');name.textContent=item.name;b.append(preview,name);b.onclick=()=>background(item.id);grid.append(b);
+    }
+    background(wallpapers[current.id],false);
+  }
   const ansiKeys=['black','red','green','yellow','blue','magenta','cyan','white','brightBlack','brightRed','brightGreen','brightYellow','brightBlue','brightMagenta','brightCyan','brightWhite'];
   function terminalTheme(){
     const c=current.colors, result={background:c.dark_background||c.background,foreground:c.foreground,cursor:c.accent,selectionBackground:c.selection,black:c.darker_background||c.background,white:c.foreground,brightBlack:c.dark_foreground,brightWhite:c.bright_foreground||c.foreground};
@@ -18,7 +39,7 @@
     document.documentElement.dataset.theme=current.id;
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content',c.background);
     if(persist)try{localStorage.setItem('omarchy-theme',current.id)}catch{}
-    refresh();window.dispatchEvent(new Event('hyprland-theme-change'));
+    background(wallpapers[current.id],false);drawBackgrounds();refresh();window.dispatchEvent(new Event('hyprland-theme-change'));
   }
   function refresh(){
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content',current.colors.background);
@@ -40,11 +61,12 @@
       const label=document.createElement('div');label.className='theme-label';const name=document.createElement('span');name.textContent=t.name;const check=document.createElement('span');check.className='theme-check';check.setAttribute('aria-hidden','true');label.append(name,check);
       b.append(preview,label);b.onclick=e=>{e.stopPropagation();apply(t.id)};grid.append(b);
     }
+    const picker=document.createElement('section');picker.className='background-picker';picker.innerHTML='<h2>Background</h2><p class="theme-note">Choose a background for this theme.</p><div class="background-grid" role="group" aria-label="Choose a background"></div>';host.querySelector('.theme-grid').before(picker);drawBackgrounds();
     // Let native scrolling own this surface without triggering workspace swipes.
     for(const type of ['pointerdown','touchstart','touchmove','touchend'])host.addEventListener(type,e=>e.stopPropagation(),{passive:true});
     refresh();
   }
   window.HyprlandApps?.provide('settings',{create:root=>{attach(root);return {}}});
-  window.HyprlandThemes={apply,attach,catalog,terminalTheme,palette:()=>{const t=terminalTheme();return ansiKeys.map(k=>t[k])}};
+  window.HyprlandThemes={apply,background,attach,catalog,windowOpacity:active=>active?.985:.96,backgroundRGB:()=>current.colors.background.slice(1).match(/../g).map(x=>parseInt(x,16)),terminalTheme,palette:()=>{const t=terminalTheme();return ansiKeys.map(k=>t[k])}};
   let saved;try{saved=localStorage.getItem('omarchy-theme')}catch{}apply(saved,false);
 })();

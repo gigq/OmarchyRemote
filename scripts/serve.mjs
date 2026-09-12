@@ -27,7 +27,7 @@ function proxyApi(req, res) {
   res.on('close', () => upstream.destroy());
   req.pipe(upstream);
 }
-const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff2': 'font/woff2', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
+const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff2': 'font/woff2', '.png': 'image/png', '.webp': 'image/webp', '.webmanifest': 'application/manifest+json' };
 let version = `${Date.now()}`;
 let refreshTimer;
 function prepareNative() {

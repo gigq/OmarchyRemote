@@ -280,6 +280,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
             let scale = presenter.view.bounds.width / viewport
             let frame = CGRect(x: rect[0] * scale, y: rect[1] * scale, width: rect[2] * scale, height: rect[3] * scale).intersection(presenter.view.bounds)
             if let hidden = body["controlsHidden"] as? Bool { controlsHidden = hidden }
+            if let opacity = body["opacity"] as? Double, opacity.isFinite { page.alpha = max(0.5, min(1, opacity)) }
             page.frame = frame
             if let radius = body["radius"] as? Double, radius.isFinite { page.layer.cornerRadius = max(0, min(24, radius * scale)) }
             page.layer.maskedCorners = body["roundedTop"] as? Bool == true ? [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]

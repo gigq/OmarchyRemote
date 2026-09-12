@@ -34,3 +34,25 @@
 .theme-label { display:flex; justify-content:space-between; gap:4px; align-items:center; min-height:36px; padding:2px 5px; }
 .theme-check { color:var(--theme-accent); }
 .theme-settings .theme-note { font-size:10px; padding:20px 4px 0; }
+
+/* Installed Omarchy wallpapers and its default active/inactive window opacity. */
+:root{--window-active-opacity:.985;--window-inactive-opacity:.96;--theme-wallpaper:none}
+#touch-shell{background-image:var(--theme-wallpaper)!important;background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important}
+#touch-shell .shell-topbar{background:color-mix(in srgb,var(--theme-background) 88%,transparent)!important}
+.background-picker{margin:22px 0;padding:20px 0;border-top:1px solid var(--theme-border)}
+.background-picker h2{font:500 22px 'Space Grotesk',sans-serif;margin:0 0 8px}
+.background-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+.background-choice{padding:4px;border:2px solid transparent;border-radius:12px;background:var(--theme-surface);color:var(--theme-foreground);font:11px 'JetBrains Mono',monospace;text-align:left;cursor:pointer;overflow:hidden;min-width:0}
+.background-choice[aria-pressed=true]{border-color:var(--theme-accent)}
+.background-choice img,.background-swatch{display:block;width:100%;height:84px;object-fit:cover;border-radius:7px;background:var(--theme-background)}
+.background-choice span:last-child{display:block;padding:8px 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#touch-shell [data-workspace].native-surface-visible{background:transparent!important}
+.native-surface-visible .browser-preview,.native-surface-visible .webapp-preview{visibility:hidden}
+#touch-shell .native-surface-visible .browser-app.browser-reading,#touch-shell .native-surface-visible .browser-native-slot,#touch-shell .native-surface-visible .webapp-app{background:transparent!important}
+/* Phone cards span the gesture canvas; paint only inside their actual frame. */
+html:not(.desk-mode) #touch-shell:not(.expo-mode) [data-workspace]{background:transparent!important}
+html:not(.desk-mode) #touch-shell:not(.expo-mode) [data-workspace]::before{content:'';position:absolute;inset:54px 4px 34px;border-radius:var(--workspace-frame-radius);background:var(--pane-background,var(--theme-background));pointer-events:none;z-index:-1}
+html:not(.desk-mode) #touch-shell:not(.expo-mode) :is([data-workspace="home"],[data-workspace="herdr"],[data-workspace="terminal"])::before{inset:54px 12px 34px}
+#touch-shell [data-workspace].native-surface-visible::before{background:transparent!important}
+.desk-mode #touch-shell:not(.expo-mode) [data-workspace="home"]{background:transparent!important}
+.desk-mode #touch-shell:not(.expo-mode) [data-workspace="home"]::after{background:var(--theme-background);z-index:-1}
