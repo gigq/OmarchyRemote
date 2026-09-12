@@ -95,16 +95,17 @@ test('native command bridge uses the same actions and preserves editing keys',as
  expect(await p.evaluate(()=>HyprlandDesk.nativeKey({code:'Space'}))).toBe(false);
 });
 
-test('native list and routing omit browser-only Return and Delete aliases',async({page:p})=>{
+test('native list restores Return and omits the browser-only Delete alias',async({page:p})=>{
  await p.evaluate(()=>{desk.dispose();window.webkit={messageHandlers:{shellKeyboard:{}}}});
  await p.addScriptTag({url:'/desk.js'});
  await p.evaluate(()=>{window.desk=HyprlandDesk.attach(logic)});
  expect(await p.evaluate(()=>HyprlandDesk.nativeKey({code:'Digit3',shift:true}))).toBe(false);
  expect(await p.evaluate(()=>HyprlandDesk.nativeKey({code:'Digit3',alt:true}))).toBe(true);
  expect(await p.evaluate(()=>HyprlandDesk.desks(logic.state).some(row=>row.includes('terminal')&&row.includes('browser')))).toBe(true);
- for(const code of ['Enter','Backspace'])expect(await p.evaluate(code=>HyprlandDesk.nativeKey({code}),code)).toBe(false);
+ for(const code of ['Backspace'])expect(await p.evaluate(code=>HyprlandDesk.nativeKey({code}),code)).toBe(false);
+ await p.keyboard.press('Meta+Enter');expect(await p.evaluate(()=>logic.calls.at(-1))).toEqual(['open','terminal']);
  await p.keyboard.press('Meta+KeyT');expect(await p.evaluate(()=>logic.calls.at(-1))).toEqual(['open','terminal']);
  await p.keyboard.press('Meta+Slash');
- await expect(p.locator('.desk-sheet')).not.toContainText('↩');
+ await expect(p.locator('.desk-sheet')).toContainText('↩');
  await expect(p.locator('.desk-sheet')).not.toContainText('⌫');
 });

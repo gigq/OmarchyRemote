@@ -117,8 +117,8 @@
     {group:'Windows',keys:'F',code:/^KeyF$/,desk:true,label:'Toggle fullscreen window',run:d=>d.toggleFull()},
     {group:'Windows',keys:'W',code:/^KeyW$/,label:'Close window',run:d=>d.logic.closeWs()},
     {group:'Windows',browserOnly:true,keys:'⌫',code:/^Backspace$/,label:'Close window (when the browser owns ⌘W)',run:d=>d.logic.closeWs()},
-    {group:'Apps',keys:'T',code:/^KeyT$/,label:'Terminal',run:d=>d.logic.openApp('terminal')},
-    {group:'Apps',browserOnly:true,keys:'↩',code:/^(Enter|NumpadEnter)$/,label:'Terminal',run:d=>d.logic.openApp('terminal')},
+    {group:'Apps',keys:'T',code:/^KeyT$/,label:'Terminal (alternate)',run:d=>d.logic.openApp('terminal')},
+    {group:'Apps',keys:'↩',code:/^(Enter|NumpadEnter)$/,label:'Terminal',run:d=>d.logic.openApp('terminal')},
     {group:'Apps',browserOnly:true,keys:'⇧ ↩',shift:true,code:/^(Enter|NumpadEnter)$/,label:'Browser',run:d=>d.logic.openApp('browser')},
     {group:'Apps',keys:'⇧ B',shift:true,code:/^KeyB$/,label:'Browser',run:d=>d.logic.openApp('browser')},
     {group:'Apps',keys:'⇧ F',shift:true,code:/^KeyF$/,label:'Files',run:d=>d.logic.openApp('files')},
@@ -201,7 +201,7 @@
         for(const b of BINDINGS.filter(b=>b.group===group&&(!b.desk||this.logic.state.desk)&&(!b.browserOnly||!NATIVE))){const row=node('div','desk-sheet-row');row.append(node('kbd','',`${MOD} ${b.keys}`),node('span','',b.label));section.append(row)}
         grid.append(section);
       }
-      sheet.append(grid,node('p','widget-muted desk-sheet-foot','0 selects workspace 10. J cycles windows within one workspace; [ / ] switches workspaces. Text editing keys stay with the focused field. ⌘Space and ⌘` are left to iPadOS. Esc or Done closes this list.'));
+      sheet.append(grid,node('p','widget-muted desk-sheet-foot','0 selects workspace 10. J needs two or more tiled windows in the same workspace. Use [ / ] to switch workspaces. Text editing keys stay with the focused field. ⌘Space and ⌘` are left to iPadOS. Esc or Done closes this list.'));
       sheet.addEventListener('pointerdown',e=>{if(e.target===sheet)this.closeSheet();e.stopPropagation()});
       this.returnFocus=document.activeElement;this.shell.append(sheet);this.sheet=sheet;close.focus({preventScroll:true});
     }
