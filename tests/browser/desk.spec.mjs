@@ -77,3 +77,19 @@ test('the phone shell stays scaled and single-window',async({page:p})=>{
  await expect(pills(p)).toHaveCount(3);
  const b=await box(p,'browser');expect(b.width).toBeLessThanOrEqual(402);
 });
+
+test('Home Expo title gradient stays out of the iPad widget area',async({page:p})=>{
+ await p.route('**/api/**',r=>r.abort());
+ for(const viewport of [{width:1194,height:834},{width:834,height:1194}]){
+  await p.setViewportSize(viewport);await p.goto('/native/');
+  await p.keyboard.press('Meta+Comma');await p.keyboard.press('Meta+e');
+  await expect(p.locator('#touch-shell')).toHaveClass(/expo-mode/);
+  await p.waitForTimeout(600);
+  const home=p.locator('[data-workspace="home"]').last();
+  const title=await home.locator(':scope > .workspace-label').boundingBox();
+  const widgets=await p.locator('#home-widgets').boundingBox();
+  if(viewport.width>viewport.height)expect(title.x+title.width).toBeLessThan(widgets.x);
+  else expect(title.y+title.height).toBeLessThan(widgets.y);
+  await p.screenshot({path:'artifacts/browser/home-expo-gradient-'+viewport.width+'.png'});
+ }
+});
