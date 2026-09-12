@@ -71,28 +71,30 @@ Everything runs on the host you already own. There is no cloud relay: a Rust bac
 
 **Phone.** Start edge gestures inside the app's content, above the home indicator and below the status area. Left and right edges switch workspaces. Swipe down from the top left, middle, or right for notifications, the launcher, or quick settings. Swipe up from the bottom corners for the keyboard or the SUPER keyboard; the middle of the bottom edge opens Expo, as does tapping the active workspace pill. Workspace state resets on reload; host sessions reconnect.
 
-**iPad, Mac, and desktop windows.** When both edges of the viewport are at least 600 px, the shell switches to desk mode: a 1:1 layout that fills the window, Home with the clock, app grid, and all widgets at once, and workspaces that tile windows with Hyprland's dwindle split (up to four per workspace). Hardware keyboards use ⌘ on Apple devices (Omarchy's SUPER) and Ctrl+Alt elsewhere. Press ⌘/ in the app for the same table.
+**iPad, Mac, and desktop windows.** When both edges of the viewport are at least 600 px, the shell switches to desk mode: a 1:1 layout that fills the window, Home with the clock, app grid, and all widgets at once, and workspaces that tile windows with Hyprland's dwindle split (up to four per workspace). Hardware keyboards use ⌘ on Apple devices (Omarchy's SUPER) and Ctrl+Alt elsewhere. Press ⌘/ or tap the shortcut button in the top bar for the same table.
 
 | Keys | Action |
 | --- | --- |
-| ⌘1…9, ⌘[ / ⌘] | Switch workspace, previous / next workspace |
+| ⌘1…9 / ⌘0, ⌘[ / ⌘] | Switch workspace, previous / next workspace |
 | ⌘E | Expo overview |
-| ⌘⇧1…9, ⌘⇧[ / ⌘⇧] | Move the focused window to a workspace |
+| ⌘⇧1…9 / ⌘⇧0, ⌘⇧[ / ⌘⇧] | Move the focused window to a workspace |
 | ⌘← ↑ ↓ →, ⌘⇧arrows | Focus / swap window in a direction |
-| ⌘` / ⌘⇧` | Next / previous window in the workspace |
+| ⌘J / ⌘⇧J | Next / previous window in the workspace |
 | ⌘F | Toggle fullscreen for the focused window |
 | ⌘W (⌘⌫ where the browser keeps ⌘W) | Close the focused window |
 | ⌘⏎, ⌘⇧⏎ or ⌘⇧B, ⌘⇧F, ⌘⇧A, ⌘⇧D, ⌘, | Terminal, browser, files, Herdr, lazydocker, settings |
-| ⌘K or ⌘Space | Launcher |
+| ⌘K | Launcher |
 | ⌘/ | Shortcut sheet; Esc closes sheets, Expo, and shades |
 
-Text fields keep the standard editing shortcuts. Safari and Chrome reserve ⌘W, ⌘T, ⌘N, and ⌘Space; the native iPad app receives them.
+0 selects workspace 10. Window cycling requires multiple windows in the current workspace and follows the focused window in fullscreen. Text fields keep the standard editing shortcuts, including ⌘arrows and ⌘⌫; use ⌘J to cycle while editing. ⌘Space and ⌘backtick are left to the operating system. Browser and embedded website focus can intercept other shortcuts before the shell receives them.
+
+`tests/browser/shortcuts.spec.mjs` exercises every binding in an isolated browser fixture, including both modifier forms, move/swap, fullscreen cycling, and editing conflicts. This verifies shell behavior, not physical iPad keyboard delivery; the remote device tools cannot synthesize modifier-key chords.
 
 **Apps.** Terminal (a login shell in a PTY, resumed across reloads), Herdr (workspaces, agents, and pane output with a message composer), Files (browse, preview, edit, search, upload, move, trash, ZIP), Browser (desktop tabs through the extension), btop, Services, lazydocker, dua, lnav (each a persistent host PTY with touch controls), Home widgets (system metrics, Tailscale, weather, CodexBar), and Settings (all Omarchy themes, applied to the shell and to terminal colors). The [feature reference](docs/features.md) describes each in detail.
 
 ## Native iPhone and iPad app
 
-`ios/HyprlandTouch.xcodeproj` is a UIKit/WKWebView wrapper for iOS 18 or later with the shared **HyprlandTouch** scheme and automatic development signing. It hides the status bar, defers the system edge gestures so the shell's swipes work, forwards ⌘ shortcuts on iPad, adds a Core Location bridge for the weather widget, and opens browser pages in an isolated WKWebView inside the themed Browser window.
+`ios/HyprlandTouch.xcodeproj` is a UIKit/WKWebView wrapper for iOS 18 or later with the shared **HyprlandTouch** scheme and automatic development signing. It hides the status bar, defers the system edge gestures so the shell's swipes work, handles keyboard shortcuts delivered to the shell on iPad, adds a Core Location bridge for the weather widget, and opens browser pages in an isolated WKWebView inside the themed Browser window.
 
 Before building, set two values in `ios/HyprlandTouch/Info.plist` and the project: `OmarchyRemoteURL` (your HTTPS address followed by `/native/`) and the bundle identifier. Debug builds load that live URL and fall back to the bundled offline copy with an "Offline copy · Retry live" button; Release builds use the bundled copy only. Every build runs `scripts/prepare-native.py` to package `public/` into the app. Hold two fingers on the screen for about a second to switch between the live and bundled sources or reload.
 

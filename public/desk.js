@@ -104,15 +104,15 @@
   // ---- keyboard bindings ------------------------------------------------------------------------
   // Apple keyboards use ⌘ (SUPER on Omarchy); elsewhere Ctrl+Alt stays clear of terminal and browser keys.
   const BINDINGS=[
-    {group:'Workspaces',keys:'1…9',code:/^Digit[1-9]$/,label:'Switch to workspace',run:(d,e)=>d.logic.go(Number(e.code.slice(5))-1)},
+    {group:'Workspaces',keys:'1…9 / 0',code:/^Digit[0-9]$/,label:'Switch to workspace',run:(d,e)=>d.logic.go((Number(e.code.slice(5))||10)-1)},
     {group:'Workspaces',keys:'[ / ]',code:/^Bracket(Left|Right)$/,label:'Previous / next workspace',run:(d,e)=>d.logic.go(d.logic.state.ws+(e.code==='BracketLeft'?-1:1))},
     {group:'Workspaces',keys:'E',code:/^KeyE$/,label:'Expo overview',run:d=>d.logic.set({ov:!d.logic.state.ov,kb:false,sup:false,launch:false,shade:null})},
-    {group:'Windows',keys:'⇧ 1…9',shift:true,code:/^Digit[1-9]$/,desk:true,label:'Move window to workspace',run:(d,e)=>d.moveWindow(Number(e.code.slice(5))-1)},
+    {group:'Windows',keys:'⇧ 1…9 / 0',shift:true,code:/^Digit[0-9]$/,desk:true,label:'Move window to workspace',run:(d,e)=>d.moveWindow((Number(e.code.slice(5))||10)-1)},
     {group:'Windows',keys:'⇧ [ / ]',shift:true,code:/^Bracket(Left|Right)$/,desk:true,label:'Move window to previous / next workspace',run:(d,e)=>d.moveWindow(d.logic.state.ws+(e.code==='BracketLeft'?-1:1))},
     {group:'Windows',keys:'← ↑ ↓ →',code:/^Arrow/,label:'Focus window in direction',run:(d,e)=>d.focusDir(e.code.slice(5).toLowerCase())},
     {group:'Windows',keys:'⇧ ← ↑ ↓ →',shift:true,code:/^Arrow/,desk:true,label:'Swap window in direction',run:(d,e)=>d.swapDir(e.code.slice(5).toLowerCase())},
-    {group:'Windows',keys:'`',code:/^Backquote$/,desk:true,label:'Next window in workspace',run:d=>d.cycle(1)},
-    {group:'Windows',keys:'⇧ `',shift:true,code:/^Backquote$/,desk:true,label:'Previous window in workspace',run:d=>d.cycle(-1)},
+    {group:'Windows',keys:'J',code:/^KeyJ$/,desk:true,label:'Next window in workspace',run:d=>d.cycle(1)},
+    {group:'Windows',keys:'⇧ J',shift:true,code:/^KeyJ$/,desk:true,label:'Previous window in workspace',run:d=>d.cycle(-1)},
     {group:'Windows',keys:'F',code:/^KeyF$/,desk:true,label:'Toggle fullscreen window',run:d=>d.toggleFull()},
     {group:'Windows',keys:'W',code:/^KeyW$/,label:'Close window',run:d=>d.logic.closeWs()},
     {group:'Windows',keys:'⌫',code:/^Backspace$/,label:'Close window (when the browser owns ⌘W)',run:d=>d.logic.closeWs()},
@@ -123,7 +123,7 @@
     {group:'Apps',keys:'⇧ A',shift:true,code:/^KeyA$/,label:'Herd agents',run:d=>d.logic.openApp('herdr')},
     {group:'Apps',keys:'⇧ D',shift:true,code:/^KeyD$/,label:'lazydocker',run:d=>d.logic.openApp('lazydocker')},
     {group:'Apps',keys:',',code:/^Comma$/,label:'Settings',run:d=>d.logic.openApp('settings')},
-    {group:'Shell',keys:'K  or  Space',code:/^(KeyK|Space)$/,label:'Launcher',run:d=>d.logic.state.launch?d.logic.set({launch:false,kb:false,query:''}):d.logic.openLauncher()},
+    {group:'Shell',keys:'K',code:/^KeyK$/,label:'Launcher',run:d=>d.logic.state.launch?d.logic.set({launch:false,kb:false,query:''}):d.logic.openLauncher()},
     {group:'Shell',keys:'/',code:/^Slash$/,label:'Show these shortcuts',run:d=>d.toggleSheet()},
   ];
   const EDITING=new Set(['KeyA','KeyC','KeyV','KeyX','KeyZ','Backspace','ArrowLeft','ArrowRight','ArrowUp','ArrowDown']);
@@ -185,7 +185,7 @@
       const next=neighbor(s,s.deskW,s.deskH,cur(s),dir);if(next)this.logic.focusApp(next);
     }
     swapDir(dir){const s=this.logic.state;if(!s.desk)return;this.patch(swap(s,cur(s),neighbor(s,s.deskW,s.deskH,cur(s),dir)))}
-    cycle(step){const s=this.logic.state;if(!s.desk)return;const apps=desks(s)[s.ws]||[];if(apps.length<2)return;const i=apps.indexOf(cur(s));this.logic.focusApp(apps[(i+step+apps.length)%apps.length])}
+    cycle(step){const s=this.logic.state;if(!s.desk)return;const apps=desks(s)[s.ws]||[];if(apps.length<2)return;const i=apps.indexOf(cur(s));const next=apps[(i+step+apps.length)%apps.length];if(apps.some(k=>(s.full||[]).includes(k)))this.logic.set({full:[...(s.full||[]).filter(k=>!apps.includes(k)),next]});this.logic.focusApp(next)}
     toggleFull(){const s=this.logic.state;if(!s.desk||s.ws===0)return;const key=cur(s),full=(s.full||[]).includes(key)?(s.full||[]).filter(k=>k!==key):[...(s.full||[]).filter(k=>deskOf(s,k)!==s.ws),key];this.logic.set({full,focus:key})}
     toggleSheet(){if(this.sheet)this.closeSheet();else this.openSheet()}
     openSheet(){
@@ -199,7 +199,7 @@
         for(const b of BINDINGS.filter(b=>b.group===group&&(!b.desk||this.logic.state.desk))){const row=node('div','desk-sheet-row');row.append(node('kbd','',`${MOD} ${b.keys}`),node('span','',b.label));section.append(row)}
         grid.append(section);
       }
-      sheet.append(grid,node('p','widget-muted desk-sheet-foot','Use ⌘K if Spotlight takes ⌘Space. While typing, text editing keys keep their usual behavior. Esc or Done closes this list.'));
+      sheet.append(grid,node('p','widget-muted desk-sheet-foot','0 selects workspace 10. J cycles windows within one workspace; [ / ] switches workspaces. Text editing keys stay with the focused field. ⌘Space and ⌘` are left to iPadOS. Esc or Done closes this list.'));
       sheet.addEventListener('pointerdown',e=>{if(e.target===sheet)this.closeSheet();e.stopPropagation()});
       this.returnFocus=document.activeElement;this.shell.append(sheet);this.sheet=sheet;close.focus({preventScroll:true});
     }
