@@ -202,7 +202,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         panY = y
         if delta * scrollTravel < 0 { scrollTravel = 0 }
         scrollTravel += delta
-        if page.scrollView.contentOffset.y <= 0 || scrollTravel > 50 { showControls(false) }
+        if page.scrollView.contentOffset.y <= 0 || scrollTravel >= 100 { showControls(false) }
         else if scrollTravel < -20 && page.scrollView.contentSize.height > page.bounds.height { showControls(true) }
     }
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
