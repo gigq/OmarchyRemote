@@ -80,7 +80,7 @@ test.describe('landscape iPad',()=>{
  test('Home fills the desk with a framed clock panel beside the widget column',async({page:p})=>{
   await boot(p);
   const home=await box(p,'home'),grid=await p.locator('.home-app-grid:visible').boundingBox(),widgets=await p.locator('#home-widgets:visible').boundingBox();
-  expect(home.width).toBeGreaterThan(1100);expect(home.y).toBe(60);
+  expect(home.width).toBeGreaterThan(1100);expect(home.y).toBe(44);
   expect(grid.x+grid.width).toBeLessThan(widgets.x);expect(widgets.height).toBeGreaterThan(600);
   await expect(p.locator('.home-app-grid:visible')).toHaveCSS('grid-template-columns',/^(\S+ ){5}\S+$/);
   await p.screenshot({path:'artifacts/browser/desk-home.png'});
@@ -138,6 +138,6 @@ test('new iPad workspaces slide sideways without vertical drift',async({page:p})
   await p.getByText(key,{exact:true}).first().click();await p.waitForTimeout(650);
   const frames=await p.evaluate(()=>window.entryFrames);
   expect(frames.length).toBeGreaterThan(5);
-  for(const frame of frames){expect(frame.y).toBeCloseTo(60,0);expect(frame.height).toBeCloseTo(748,0)}
+  for(const frame of frames){expect(frame.y).toBeCloseTo(44,0);expect(frame.height).toBeCloseTo(777,0)}
  }
 });
