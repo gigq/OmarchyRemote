@@ -1,3 +1,4 @@
+html.desk-mode { --workspace-frame-radius:16px; --workspace-expo-radius:28px; }
 /* Desk layout (iPad, Mac, desktop windows). `html.desk-mode` is set by pwa.js when both viewport
    edges pass 600px; the shell then fills the window at 1:1 and workspaces tile several windows. */
 .desk-mode, .desk-mode body { width:100%; height:100%; overflow:hidden; background:var(--theme-background) !important; }
@@ -16,10 +17,10 @@
 
 /* Window frames follow the tile instead of the phone's fixed inset. */
 /* `#touch-shell` keeps these ahead of the phone frame insets in dashboard.css. */
-.desk-mode [data-workspace] { border-radius:14px !important; }
-.desk-mode #touch-shell [data-workspace]::after { inset:0; border-radius:14px; }
-.desk-mode .expo-mode [data-workspace] { border-radius:28px !important; }
-.desk-mode #touch-shell.expo-mode [data-workspace]::after { border-width:6px; border-radius:28px; }
+.desk-mode [data-workspace] { border-radius:var(--workspace-frame-radius) !important; }
+.desk-mode #touch-shell [data-workspace]::after { inset:0; border-radius:var(--workspace-frame-radius); }
+.desk-mode .expo-mode [data-workspace] { border-radius:var(--workspace-expo-radius) !important; }
+.desk-mode #touch-shell.expo-mode [data-workspace]::after { border-width:6px; border-radius:var(--workspace-expo-radius); }
 .desk-mode .expo-mode .workspace-label { padding:22px 26px !important; font-size:36px; }
 .desk-mode .expo-swipe-hint { bottom:6px; }
 .desk-mode .expo-notice { left:calc(50% - 260px); right:auto; width:520px; box-sizing:border-box; }
@@ -43,8 +44,8 @@
 .desk-mode #home-metrics { grid-column:content; grid-row:6; margin:12px 0 0; }
 .desk-mode.desk-landscape #home-widgets { grid-column:side; grid-row:1 / -1; }
 .desk-mode.desk-portrait #home-widgets { grid-column:1 / -1; grid-row:side; }
-.desk-mode #touch-shell [data-workspace="home"]::after { position:static; inset:auto; grid-column:panel; grid-row:panel; border-radius:16px; }
-.desk-mode #touch-shell.expo-mode [data-workspace="home"]::after { position:absolute; inset:0; border-radius:28px; }
+.desk-mode #touch-shell [data-workspace="home"]::after { position:static; inset:auto; grid-column:panel; grid-row:panel; border-radius:var(--workspace-frame-radius); }
+.desk-mode #touch-shell.expo-mode [data-workspace="home"]::after { position:absolute; inset:0; border-radius:var(--workspace-expo-radius); }
 .desk-mode .home-app-grid { grid-template-columns:repeat(6,minmax(0,1fr)) !important; gap:12px !important; }
 .desk-mode .home-app-grid > div, .desk-mode .home-app-grid sc-for > div, .desk-mode .home-pin { height:80px !important; border-radius:18px !important; padding:12px !important; }
 .desk-mode .home-app-grid > div > div:first-child { font-size:20px !important; }

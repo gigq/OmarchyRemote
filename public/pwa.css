@@ -1,4 +1,4 @@
-:root { color-scheme: var(--theme-mode, dark); background: var(--theme-background); --canvas-scale: 1; --canvas-height: 874px; }
+:root { --workspace-frame-radius:24px; --workspace-inner-radius:calc(var(--workspace-frame-radius) - 2px); --workspace-expo-radius:26px; color-scheme: var(--theme-mode, dark); background: var(--theme-background); --canvas-scale: 1; --canvas-height: 874px; }
 html, body { margin: 0; min-height: 100%; overscroll-behavior: none; }
 .prototype-layout { display: flex; gap: 44px; align-items: flex-start; justify-content: center; padding: 36px 40px; flex-wrap: wrap; }
 .prototype-column { display: flex; flex-direction: column; gap: 14px; align-items: center; }
@@ -58,8 +58,8 @@ html, body { margin: 0; min-height: 100%; overscroll-behavior: none; }
 
 /* Uncommitted appearance experiment: Omarchy-style window frames. */
 :root { --theme-window-inactive:#595959aa; }
-[data-workspace]::after { content:''; position:absolute; inset:54px 4px 34px; border:2px solid var(--pane-border); border-radius:10px; pointer-events:none; z-index:9; }
-.expo-mode [data-workspace]::after { inset:0; border-width:6px; border-radius:26px; }
+[data-workspace]::after { content:''; position:absolute; inset:54px 4px 34px; border:2px solid var(--pane-border); border-radius:var(--workspace-frame-radius); pointer-events:none; z-index:9; }
+.expo-mode [data-workspace]::after { inset:0; border-width:6px; border-radius:var(--workspace-expo-radius); }
 .expo-mode [data-workspace].expo-lifted { outline:none; }
 
 /* Match the iPhone 17 Pro indicator measured from the native screenshot (@3x). */

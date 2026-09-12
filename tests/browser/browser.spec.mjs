@@ -23,7 +23,7 @@ test('Embedded page stays in its frame, hides for Expo and retains navigation st
  await expect(p.getByRole('textbox',{name:'Page address'})).toHaveValue('https://example.com/');
  await expect.poll(()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1)?.visible)).toBe(true);
  const frame=await p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1));
- expect(frame.rect[0]).toBeGreaterThan(0);expect(frame.rect[1]).toBeGreaterThan(0);expect(frame.rect[0]+frame.rect[2]).toBeLessThanOrEqual(402);expect(frame.rect[1]+frame.rect[3]).toBeLessThan(874);
+ expect(frame.radius).toBe(22);expect(frame.rect[0]).toBeGreaterThan(0);expect(frame.rect[1]).toBeGreaterThan(0);expect(frame.rect[0]+frame.rect[2]).toBeLessThanOrEqual(402);expect(frame.rect[1]+frame.rect[3]).toBeLessThan(874);
  await p.evaluate(()=>window.dispatchEvent(new CustomEvent('host-browser-state',{detail:{url:'https://example.org/',back:true,forward:false,loading:false}})));
  await expect(p.getByRole('textbox',{name:'Page address'})).toHaveValue('https://example.org/');
  const expanded=await p.locator('.browser-native-slot').boundingBox();
@@ -68,7 +68,7 @@ test('Embedded iPad page follows tiling, fullscreen, rotation and app disposal',
  const layout=()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1));
  await expect.poll(async()=>(await layout())?.visible).toBe(true);
  await p.keyboard.press('Meta+Comma');await p.waitForTimeout(600);
- const tiled=await layout();expect(tiled.rect[2]).toBeLessThan(600);
+ const tiled=await layout();expect(tiled.radius).toBe(14);expect(tiled.rect[2]).toBeLessThan(600);
  await p.evaluate(()=>window.dispatchEvent(new CustomEvent('host-browser-state',{detail:{focused:true}})));
  await expect(p.locator('.desk-ws-label:visible')).toContainText('browser ·');
  await p.keyboard.press('Meta+ArrowRight');

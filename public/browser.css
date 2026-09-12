@@ -6,13 +6,12 @@
 .browser-app.browser-reading,.browser-app.browser-reading:focus-within{inset:56px 6px 36px;gap:0}
 .desk-mode #touch-shell .browser-app.browser-reading{inset:2px!important}
 .expo-mode .browser-app.browser-reading{inset:6px}
-.browser-reading .browser-page{gap:0;overflow:hidden;border-radius:8px}
-.desk-mode .browser-reading .browser-page{border-radius:12px}
+.browser-reading .browser-page{gap:0;overflow:hidden;border-radius:var(--workspace-inner-radius)}
 .browser-chrome{flex-shrink:0;display:flex;flex-direction:column;gap:6px;padding:8px;box-sizing:border-box;max-height:180px;overflow:hidden;opacity:1;transition:max-height .22s ease,padding .22s ease,opacity .15s ease;background:var(--theme-background)}
 .browser-chrome .remote-status:empty{display:none}
 .browser-chrome-hidden .browser-chrome{max-height:0;padding-top:0;padding-bottom:0;opacity:0;pointer-events:none}
-.browser-reading .browser-native-slot{border-radius:0 0 8px 8px}
-.browser-chrome-hidden .browser-native-slot{border-top-left-radius:8px;border-top-right-radius:8px}
+.browser-reading .browser-native-slot{border-radius:0 0 var(--workspace-inner-radius) var(--workspace-inner-radius)}
+.browser-chrome-hidden .browser-native-slot{border-top-left-radius:var(--workspace-inner-radius);border-top-right-radius:var(--workspace-inner-radius)}
 @media(prefers-reduced-motion:reduce){.browser-chrome{transition:none}}
 
 .browser-options button[aria-pressed=true]{background:var(--theme-accent);color:var(--theme-background);border-color:var(--theme-accent)}

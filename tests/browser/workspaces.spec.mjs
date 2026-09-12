@@ -17,3 +17,18 @@ test('ten workspaces keep five fixed-size numbers per row and fit in Expo',async
  const last=await p.locator('[data-workspace="lnav"]').last().boundingBox();expect(last.y+last.height).toBeLessThan(874);
  await p.screenshot({path:'artifacts/browser/workspaces-expo-ten.png'});
 });
+
+for(const [name,width,height,radius,expoRadius] of [['phone',402,874,'24px','26px'],['iPad',1194,834,'16px','28px']]){
+ test(name+' app frames share Home corner radius in normal and Expo views',async({page:p})=>{
+  await p.setViewportSize({width,height});await p.route('**/api/**',r=>r.abort());await p.goto('/native/');
+  const frames=p.locator('#touch-shell [data-workspace]');
+  await expect(frames.first()).toBeAttached();
+  const radii=()=>frames.evaluateAll(nodes=>nodes.map(n=>({app:n.dataset.workspace,radius:getComputedStyle(n,'::after').borderTopLeftRadius})));
+  const normal=await radii();expect(normal.length).toBeGreaterThan(5);
+  for(const frame of normal)expect(frame.radius,frame.app).toBe(radius);
+  if(name==='iPad')await p.keyboard.press('Meta+e');
+  else await p.locator('#touch-shell > div').first().locator('[data-dc-tpl="10"]').last().click();
+  await expect(p.locator('#touch-shell')).toHaveClass(/expo-mode/);
+  for(const frame of await radii())expect(frame.radius,frame.app).toBe(expoRadius);
+ });
+}
