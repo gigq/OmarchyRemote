@@ -82,7 +82,7 @@
   };
   // Card bindings for renderVals: transforms, sizes, frames, pills, and the workspace label.
   const render=(logic,s,W,H)=>{
-    const A=logic.APPS,d=desks(s),focused=cur(s),{rects}=layout(s,W,H);
+    const A=logic.APPS,d=desks(s),focused=cur(s),{area,rects}=layout(s,W,H);
     const n=d.length,cols=Math.min(n,Math.max(1,Math.round(Math.sqrt(n*W/Math.max(1,H))))),rows=Math.ceil(n/cols);
     const eg=Math.max(28,CHROME.gap*2),ex=CHROME.side,ey=CHROME.top+8,ew=Math.max(1,W-ex*2),eh=Math.max(1,H-ey-CHROME.bottom-8);
     const sc=Math.max(.05,Math.min((ew-(cols-1)*eg)/cols/Math.max(1,W),(eh-(rows-1)*eg)/rows/Math.max(1,H)));
@@ -90,7 +90,8 @@
     const cards={};
     for(const k of Object.keys(A)){
       const r=rects.get(k);
-      if(!r){cards[k]={tf:`translate(${W+40}px,0px) scale(1)`,w:'100%',h:'100%',bd:'var(--theme-window-inactive)',lab:0,op:0,pe:'none',tap:()=>{}};continue}
+      // Park unopened windows at the workspace's final height and size for horizontal entry.
+      if(!r){cards[k]={tf:`translate(${W+40}px,${area.y}px) scale(1)`,w:area.w+'px',h:area.h+'px',bd:'var(--theme-window-inactive)',lab:0,op:0,pe:'none',tap:()=>{}};continue}
       const tf=s.ov?`translate(${Math.round(gx+(r.desk%cols)*(W*sc+eg)+r.x*sc)}px,${Math.round(gy+Math.floor(r.desk/cols)*(H*sc+eg)+r.y*sc)}px) scale(${sc.toFixed(4)})`:`translate(${r.x+(r.desk-s.ws)*W}px,${r.y}px) scale(1)`;
       cards[k]={tf,w:r.w+'px',h:r.h+'px',bd:k===focused&&r.desk===s.ws?'var(--theme-accent)':'var(--theme-window-inactive)',lab:s.ov?1:0,op:r.hidden?0:1,pe:r.hidden?'none':'auto',tap:()=>{if(logic.state.ov)logic.jump(k)}};
     }

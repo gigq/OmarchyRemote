@@ -93,3 +93,18 @@ test('Home Expo title gradient stays out of the iPad widget area',async({page:p}
   await p.screenshot({path:'artifacts/browser/home-expo-gradient-'+viewport.width+'.png'});
  }
 });
+
+test('new iPad workspaces slide sideways without vertical drift',async({page:p})=>{
+ await p.setViewportSize({width:1194,height:834});await p.route('**/api/**',r=>r.abort());await p.goto('/native/');
+ for(const key of ['settings','files']){
+  if(key==='files'){await p.keyboard.press('Meta+Digit1');await p.waitForTimeout(600)}
+  await p.evaluate(key=>{
+   window.entryFrames=[];const card=[...document.querySelectorAll('[data-workspace]')].find(e=>e.dataset.workspace===key),start=performance.now();
+   const sample=()=>{const r=card.getBoundingClientRect();if(Number(getComputedStyle(card).opacity)>.05)window.entryFrames.push({y:r.y,height:r.height});if(performance.now()-start<1200)requestAnimationFrame(sample)};requestAnimationFrame(sample);
+  },key);
+  await p.getByText(key,{exact:true}).first().click();await p.waitForTimeout(650);
+  const frames=await p.evaluate(()=>window.entryFrames);
+  expect(frames.length).toBeGreaterThan(5);
+  for(const frame of frames){expect(frame.y).toBeCloseTo(60,0);expect(frame.height).toBeCloseTo(748,0)}
+ }
+});
