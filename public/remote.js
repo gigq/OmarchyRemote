@@ -169,7 +169,7 @@
       this.stopTouchScroll=touchScroll(this.output,this.term,true,()=>this.trackScroll(),()=>this.flushRead());this.applyFit();
       this.term.onScroll(()=>{if(!this.rendering)this.trackScroll()});
       this.output.onclick=()=>{this.showLatest();bridge.keyboard()};
-      this.nativeInput=bridge.createInput(root,true,(text,enter)=>this.input({text,keys:enter?['Enter']:[]}));this.nativeInput.select(this.selected);
+      this.nativeInput=bridge.createInput(root,true,(text,enter)=>this.input({text,keys:enter?['Enter']:[]}),{dismissOnSend:true});this.nativeInput.select(this.selected);
       this.nativeInput.field.addEventListener('paste',e=>{const files=[...(e.clipboardData?.items||[])].filter(i=>i.kind==='file'&&i.type.startsWith('image/')).map(i=>i.getAsFile()).filter(Boolean);if(files.length){e.preventDefault();this.uploadImages(files,this.selected)}});
       this.resizeObserver=new ResizeObserver(()=>{if(this.lastRead)this.renderOutput(this.lastRead,true)});this.resizeObserver.observe(this.output);
     }
@@ -300,7 +300,7 @@
       if(spec.provider?.close)await spec.provider.close(app,this);
       if(app){app.dispose?.();mount(spec.mount)?.replaceChildren();delete this.apps[key]}
     }
-    createInput(root,message,send){return new NativeInput(root,{message,send,key:(key,mods)=>this.key(key,mods),focus:()=>{if(!this.logic.state.kb)this.logic.set({kb:true,sup:false})},hide:()=>this.logic.set({kb:false,sup:false})})}
+    createInput(root,message,send,options={}){return new NativeInput(root,{...options,message,send,key:(key,mods)=>this.key(key,mods),focus:()=>{if(!this.logic.state.kb)this.logic.set({kb:true,sup:false})},hide:()=>this.logic.set({kb:false,sup:false})})}
     keyboard(){if(!this.logic.state.ov){this.logic.set({kb:true,sup:false});this.currentInput()?.focus()}}
     currentInput(){return this.apps[this.logic.cur()]?.nativeInput||null}
     update(){

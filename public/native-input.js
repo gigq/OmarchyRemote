@@ -2,8 +2,8 @@
 (() => {
   const sentinel='\u200b';
   class NativeInput {
-    constructor(root,{message=false,send,key,focus,hide}){
-      this.send=send;this.key=key;this.onFocus=focus;this.onHide=hide;this.message=message;this.drafts=new Map();this.draft='';this.ctrl=false;this.composing=false;
+    constructor(root,{message=false,dismissOnSend=false,send,key,focus,hide}){
+      this.dismissOnSend=dismissOnSend;this.send=send;this.key=key;this.onFocus=focus;this.onHide=hide;this.message=message;this.drafts=new Map();this.draft='';this.ctrl=false;this.composing=false;
       this.element=document.createElement('div');this.element.className='native-input-panel';this.element.hidden=true;
       this.tools=document.createElement('div');this.tools.className='native-input-tools';this.element.append(this.tools);
       const button=(text,fn)=>{const b=document.createElement('button');b.type='button';b.textContent=text;b.setAttribute('aria-label',text);b.onpointerdown=e=>{e.stopPropagation();e.preventDefault()};b.onclick=e=>{e.stopPropagation();fn()};this.tools.append(b);return b};
@@ -40,7 +40,7 @@
     clearCtrl(){this.ctrl=false;this.ctrlButton.setAttribute('aria-pressed','false')}
     sendText(text){if(this.ctrl&&text){this.key(Array.from(text)[0],{ctrl:true});text=Array.from(text).slice(1).join('');this.clearCtrl()}if(text)this.send(text,false)}
     rawInput(e){const text=this.field.value.split(sentinel).join('');if(text)this.sendText(text);else if(e?.inputType==='deleteContentBackward')this.key('⌫',{});this.reset()}
-    enter(){if(this.composing||this.submit.disabled)return;if(this.message){this.saveDraft();if(this.send(this.draft,true)!==false){this.draft='';this.field.value=''}}else this.key('⏎',{});this.focus()}
+    enter(){if(this.composing||this.submit.disabled)return;if(this.message){this.saveDraft();if(this.send(this.draft,true)!==false){this.draft='';this.field.value='';if(this.dismissOnSend){this.field.blur();this.onHide();return}}}else this.key('⏎',{});this.focus()}
     attachImage(id,path){
       this.saveDraft();const before=id===this.id?this.draft:(this.drafts.get(id)||'');const text=before+(before&&!before.endsWith('\n')?'\n':'')+'Image: '+path+'\n';
       if(id===this.id){this.field.blur();this.message=true;this.draft=text;this.configure()}else this.drafts.set(id,text);

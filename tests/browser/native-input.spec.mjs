@@ -35,3 +35,11 @@ test('image paths append to the original draft without sending or replacing text
  await page.evaluate(()=>input.submit.disabled=false);await field.press('Enter');
  expect(await page.evaluate(()=>sent)).toEqual([{text:'Look at this\nImage: /tmp/image-one.png\nImage: /tmp/image-two.png\n',enter:true}]);
 });
+for(const trigger of ['button','keyboard','beforeinput'])test(`Herd dismisses after ${trigger} send but retains failed drafts`,async({page})=>{
+ await page.evaluate(()=>{input.dismissOnSend=true;window.hiddenCount=0;input.onHide=()=>{hiddenCount++;input.show(false)}});
+ const field=page.locator('.native-input');await field.fill('Keep this draft');await page.evaluate(()=>window.offline=true);
+ const submit=()=>trigger==='button'?page.getByRole('button',{name:'Send',exact:true}).click():trigger==='keyboard'?field.press('Enter'):field.evaluate(el=>el.dispatchEvent(new InputEvent('beforeinput',{inputType:'insertLineBreak',bubbles:true,cancelable:true})));
+ await submit();await expect(field).toBeFocused();await expect(field).toHaveValue('Keep this draft');expect(await page.evaluate(()=>hiddenCount)).toBe(0);
+ await page.evaluate(()=>window.offline=false);await submit();await expect(field).toBeHidden();await expect(field).not.toBeFocused();expect(await page.evaluate(()=>hiddenCount)).toBe(1);
+ expect(await page.evaluate(()=>sent)).toEqual([{text:'Keep this draft',enter:true}]);await expect(field).toHaveValue('');
+});
