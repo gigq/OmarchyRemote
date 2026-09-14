@@ -360,7 +360,19 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         replyHandler(["opened": true], nil)
     }
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        let allowed = ["http", "https", "about"].contains(navigationAction.request.url?.scheme?.lowercased() ?? "")
+        let scheme = navigationAction.request.url?.scheme?.lowercased() ?? ""
+        let isWebLink = ["http", "https"].contains(scheme)
+        // Saved apps have one browsing context. Own tapped top-level links and popup
+        // requests here, loading them programmatically instead of handing them off.
+        // The resulting .other navigation is allowed, preserving back/forward history.
+        if appID != nil, isWebLink,
+           navigationAction.targetFrame == nil ||
+           (navigationAction.targetFrame?.isMainFrame == true && navigationAction.navigationType == .linkActivated) {
+            decisionHandler(.cancel)
+            webView.load(navigationAction.request)
+            return
+        }
+        let allowed = isWebLink || scheme == "about"
         if !allowed { publish(error: "This link requires an external app.") }
         decisionHandler(allowed ? .allow : .cancel)
     }
