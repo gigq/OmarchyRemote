@@ -294,9 +294,12 @@
   // and their providers (below and in files.js, browser.js, themes.js). Nothing here knows app names.
   class HostBridge {
     constructor(logic){
-      this.logic=logic;this.apps={};this.rememberedFocus=new WeakMap();
+      this.logic=logic;this.apps={};this.focusRetries=0;this.rememberedFocus=new WeakMap();
       this.rememberFocus=e=>{const root=e.target.closest?.('[data-workspace]');if(root)this.rememberedFocus.set(root,e.target)};
       document.addEventListener('focusin',this.rememberFocus);
+      this.reconcileFocus=()=>{if(this.focusFrame)return;this.focusFrame=requestAnimationFrame(()=>{this.focusFrame=null;this.syncFocus()})};
+      for(const event of ['focusout','pointerup','transitionend'])document.addEventListener(event,this.reconcileFocus);
+      window.addEventListener('focus',this.reconcileFocus);
       this.foreground=()=>{if(!document.hidden)for(const app of Object.values(this.apps))app.resume?.()};
       document.addEventListener('visibilitychange',this.foreground);window.addEventListener('online',this.foreground);
       this.hostChanged=()=>{for(const app of Object.values(this.apps))app.hostChanged?.()};document.addEventListener('hyprland-host',this.hostChanged);
@@ -337,23 +340,37 @@
         app.nativeInput?.show(native&&focused&&kb);
         app.placeLatest?.();
       }
-      const input=this.currentInput();
-      const focusTarget=window.__HYPRLAND_HARDWARE_KEYBOARD__===true&&!ov&&!s.launch&&!s.shade&&!s.map&&!document.querySelector('.desk-sheet')?input:null;
-      if(focusTarget&&this.focusTarget!==focusTarget){this.focusTarget=focusTarget;focusTarget.focus()}
-      this.focusTarget=focusTarget;
-      const activeRoot=window.__HYPRLAND_HARDWARE_KEYBOARD__===true&&!ov&&!s.launch&&!s.shade&&!s.map&&!document.querySelector('.desk-sheet')?mount(HyprlandApps.get(current)?.mount):null;
-      if(activeRoot&&this.activeRoot!==activeRoot&&!input){
-        const card=activeRoot.closest('[data-workspace]'),remembered=this.rememberedFocus.get(card);
-        const target=remembered?.isConnected&&remembered.checkVisibility()?remembered:activeRoot;
-        if(!activeRoot.contains(document.activeElement)){if(target===activeRoot)target.tabIndex=-1;target.focus({preventScroll:true})}
-      }
-      this.activeRoot=activeRoot;
-      if(native&&kb&&!ov&&input&&document.activeElement!==input.field&&!this.apps[current]?.term?.nativeView?.selecting())input.focus();
+      this.reconcileFocus();
       for(const app of Object.values(this.apps))app.resize?.();
+    }
+    syncFocus(){
+      const s=this.logic.state,current=this.logic.cur();
+      if(document.hidden||s.ov||s.launch||s.shade||s.map||s.sup||document.querySelector('.desk-sheet,[role="dialog"]'))return;
+      const hardware=window.__HYPRLAND_HARDWARE_KEYBOARD__===true;
+      if(!hardware&&!s.kb)return;
+      const root=mount(HyprlandApps.get(current)?.mount);if(!root)return;
+      const selection=window.getSelection();if(selection&&!selection.isCollapsed)return;
+      const active=document.activeElement;
+      if(root.contains(active)&&(active.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)))return;
+      const input=this.currentInput();
+      // Herd's list has no input destination until a pane is selected.
+      if(input&&this.apps[current]?.detail?.hidden)return;
+      const rect=root.getBoundingClientRect();
+      if(rect.right<=0||rect.left>=innerWidth||rect.bottom<=0||rect.top>=innerHeight||!root.checkVisibility()){
+        // A workspace can still be outside the viewport on the first layout frame.
+        if(this.focusRetries++<60)this.reconcileFocus();return;
+      }
+      if(input){input.focus();if(document.activeElement!==input.field){if(this.focusRetries++<60)this.reconcileFocus()}else this.focusRetries=0;return}
+      this.focusRetries=0;
+      // Embedded pages own a separate native responder; do not pull it into the shell.
+      if(!hardware||root.contains(active)||root.closest('.native-surface-visible'))return;
+      const card=root.closest('[data-workspace]'),remembered=this.rememberedFocus.get(card);
+      const target=remembered?.isConnected&&remembered.checkVisibility()?remembered:root;
+      if(target===root)target.tabIndex=-1;target.focus({preventScroll:true});
     }
     async openTerminalAt(path){await this.closeApp('terminal');storage.set('omarchy-terminal-cwd',path);this.logic.openApp('terminal')}
     key(key,mods){const input=keyInput(key,mods);if(!input)return;this.apps[this.logic.cur()]?.key?.(input)}
-    dispose(){document.removeEventListener('focusin',this.rememberFocus);window.removeEventListener('hyprland-hardware-keyboard',this.hardwareChanged);for(const app of Object.values(this.apps))app.dispose?.();document.removeEventListener('visibilitychange',this.foreground);window.removeEventListener('online',this.foreground);document.removeEventListener('hyprland-host',this.hostChanged)}
+    dispose(){cancelAnimationFrame(this.focusFrame);for(const event of ['focusout','pointerup','transitionend'])document.removeEventListener(event,this.reconcileFocus);window.removeEventListener('focus',this.reconcileFocus);document.removeEventListener('focusin',this.rememberFocus);window.removeEventListener('hyprland-hardware-keyboard',this.hardwareChanged);for(const app of Object.values(this.apps))app.dispose?.();document.removeEventListener('visibilitychange',this.foreground);window.removeEventListener('online',this.foreground);document.removeEventListener('hyprland-host',this.hostChanged)}
   }
   // Host TUIs share TerminalApp; each one is a catalog app whose session the backend spawns by id.
   const closeSession=async(key,app)=>{const session=app?.sessionRequest?await app.sessionRequest:null;const id=session?.id||storage.get('omarchy-'+key+'-id');if(id)await api(`terminal/${encodeURIComponent(id)}/close`,{});storage.set('omarchy-'+key+'-id',null)};
