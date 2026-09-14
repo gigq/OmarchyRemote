@@ -176,7 +176,7 @@
       this.stopTouchScroll=touchScroll(this.output,this.term,true,()=>this.trackScroll(),()=>this.flushRead());this.applyFit();
       this.term.onScroll(()=>{if(!this.rendering)this.trackScroll()});
       this.output.onclick=()=>{this.showLatest();bridge.keyboard()};
-      this.nativeInput=bridge.createInput(root,true,(text,enter)=>this.input({text,keys:enter?['Enter']:[]}),{dismissOnSend:true});this.nativeInput.select(this.selected);
+      this.nativeInput=bridge.createInput(root,true,(text,enter)=>this.input({text,keys:enter?['Enter']:[]}),{dismissOnSend:true,draftStore:'omarchy-herdr-drafts-v1'});this.nativeInput.select(this.selected);
       this.nativeInput.field.addEventListener('paste',e=>{const files=[...(e.clipboardData?.items||[])].filter(i=>i.kind==='file'&&i.type.startsWith('image/')).map(i=>i.getAsFile()).filter(Boolean);if(files.length){e.preventDefault();this.uploadImages(files,this.selected)}});
       this.resizeObserver=new ResizeObserver(()=>{if(this.lastRead)this.renderOutput(this.lastRead,true)});this.resizeObserver.observe(this.output);
     }

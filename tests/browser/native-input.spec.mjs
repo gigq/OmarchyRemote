@@ -43,3 +43,33 @@ for(const trigger of ['button','keyboard','beforeinput'])test(`Herd dismisses af
  await page.evaluate(()=>window.offline=false);await submit();await expect(field).toBeHidden();await expect(field).not.toBeFocused();expect(await page.evaluate(()=>hiddenCount)).toBe(1);
  expect(await page.evaluate(()=>sent)).toEqual([{text:'Keep this draft',enter:true}]);await expect(field).toHaveValue('');
 });
+
+test('Herd drafts survive page reload per pane, including composition and background image attachments',async({page})=>{
+ const mount=async()=>{
+  await page.setContent('<div id="input"></div>');
+  await page.addScriptTag({url:'/util.js'});await page.addScriptTag({url:'/native-input.js'});
+  await page.evaluate(()=>{window.sent=[];window.input=new NativeInput(document.getElementById('input'),{message:true,draftStore:'omarchy-herdr-drafts-v1',send:text=>{if(window.offline)return false;sent.push(text);return true},key:()=>{},focus:()=>{},hide:()=>{}});input.select('agent-a');input.focus()});
+ };
+ await mount();const field=page.locator('.native-input');await field.fill('First unfinished message');
+ await page.evaluate(()=>input.select('agent-b'));await field.fill('Second message');
+ await page.evaluate(()=>input.attachImage('agent-a','/tmp/attached.png'));
+ // Simulate termination without dispose/pagehide: persistence must happen on input itself.
+ await page.reload();await mount();await expect(field).toHaveValue('First unfinished message\nImage: /tmp/attached.png\n');
+ await page.evaluate(()=>{input.select('agent-b');window.offline=true});await field.press('Enter');await expect(field).toHaveValue('Second message');
+ await page.reload();await mount();await page.evaluate(()=>input.select('agent-b'));await expect(field).toHaveValue('Second message');
+ await field.press('Enter');await page.reload();await mount();await page.evaluate(()=>input.select('agent-b'));await expect(field).toHaveValue('');
+ await field.evaluate(el=>{el.dispatchEvent(new CompositionEvent('compositionstart'));el.value='日本';el.dispatchEvent(new InputEvent('input',{data:'日本',isComposing:true}))});
+ await page.reload();await mount();await page.evaluate(()=>input.select('agent-b'));await expect(field).toHaveValue('日本');
+ await field.fill('');await page.reload();await mount();await page.evaluate(()=>input.select('agent-b'));await expect(field).toHaveValue('');
+ await page.evaluate(()=>input.select('agent-a'));await expect(field).toHaveValue('First unfinished message\nImage: /tmp/attached.png\n');
+});
+
+test('unavailable draft storage warns without losing or sending the current text',async({page})=>{
+ await page.addScriptTag({url:'/util.js'});
+ await page.evaluate(()=>{input.draftStore='omarchy-herdr-drafts-v1';input.select('agent-a');Storage.prototype.setItem=function(){throw Error('Quota exceeded')}});
+ await page.locator('.native-input').fill('Keep this unsaved text');
+ await expect(page.getByRole('status')).toContainText('Draft could not be saved');
+ await expect(page.locator('.native-input')).toHaveValue('Keep this unsaved text');
+ await page.evaluate(()=>{input.select('agent-b');input.select('agent-a')});
+ await expect(page.locator('.native-input')).toHaveValue('Keep this unsaved text');expect(await page.evaluate(()=>sent)).toEqual([]);
+});

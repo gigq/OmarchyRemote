@@ -2,8 +2,8 @@
 (() => {
   const sentinel='\u200b';
   class NativeInput {
-    constructor(root,{message=false,dismissOnSend=false,send,key,focus,hide}){
-      this.dismissOnSend=dismissOnSend;this.send=send;this.key=key;this.onFocus=focus;this.onHide=hide;this.message=message;this.drafts=new Map();this.draft='';this.ctrl=false;this.composing=false;
+    constructor(root,{message=false,dismissOnSend=false,draftStore=null,send,key,focus,hide}){
+      this.draftStore=draftStore;this.dismissOnSend=dismissOnSend;this.send=send;this.key=key;this.onFocus=focus;this.onHide=hide;this.message=message;this.drafts=new Map();this.draft='';this.ctrl=false;this.composing=false;
       this.element=document.createElement('div');this.element.className='native-input-panel';this.element.hidden=true;
       this.tools=document.createElement('div');this.tools.className='native-input-tools';this.element.append(this.tools);
       const button=(text,fn)=>{const b=document.createElement('button');b.type='button';b.textContent=text;b.setAttribute('aria-label',text);b.onpointerdown=e=>{e.stopPropagation();e.preventDefault()};b.onclick=e=>{e.stopPropagation();fn()};this.tools.append(b);return b};
@@ -17,8 +17,8 @@
       for(const type of ['pointerdown','touchstart','touchmove','touchend','click'])this.element.addEventListener(type,e=>e.stopPropagation(),{passive:true});
       this.field.onfocus=()=>this.onFocus();
       this.field.oncompositionstart=()=>{this.composing=true};
-      this.field.oncompositionend=()=>{this.composing=false;if(!this.message)this.rawInput()};
-      this.field.oninput=e=>{if(!e.isComposing&&!this.composing){if(this.message)this.saveDraft();else this.rawInput(e)}};
+      this.field.oncompositionend=()=>{this.composing=false;if(this.message)this.saveDraft();else this.rawInput()};
+      this.field.oninput=e=>{if(this.message)this.saveDraft();else if(!e.isComposing&&!this.composing)this.rawInput(e)};
       this.field.onbeforeinput=e=>{
         if(e.isComposing||this.composing)return;
         if(this.ctrl&&e.data){e.preventDefault();this.sendText(e.data);return}
@@ -32,23 +32,45 @@
         const special={Escape:'esc',Tab:'tab',ArrowLeft:'←',ArrowRight:'→',ArrowUp:'↑',ArrowDown:'↓',Backspace:'⌫'};
         if(special[e.key]&&(!this.message||['Escape','Tab'].includes(e.key))){e.preventDefault();this.key(special[e.key],{});if(!this.message)this.reset()}
       };
+      this.draftStatus=document.createElement('p');this.draftStatus.className='theme-note';this.draftStatus.setAttribute('role','status');this.draftStatus.hidden=true;this.element.append(this.draftStatus);
       this.configure();
     }
-    saveDraft(){if(this.message)this.draft=this.field.value}
+    loadDraft(id){
+      if(this.drafts.has(id))return this.drafts.get(id);
+      if(!this.draftStore||!id)return '';
+      const drafts=window.HyprlandUtil?.storage.read(this.draftStore,{});
+      return typeof drafts?.[id]==='string'?drafts[id]:'';
+    }
+    storeDraft(id,text){
+      if(!id)return;this.drafts.set(id,text);
+      if(!this.draftStore)return;
+      try{
+        const storage=window.HyprlandUtil.storage,raw=storage.read(this.draftStore,{});
+        const drafts=raw&&typeof raw==='object'&&!Array.isArray(raw)?raw:{};
+        if(text)drafts[id]=text;else delete drafts[id];
+        const value=JSON.stringify(drafts);
+        // Stay within the native mirror's record limit; never silently discard other drafts.
+        if(new TextEncoder().encode(value).length>240000)throw Error('full');
+        storage.set(this.draftStore,value);
+        if(storage.get(this.draftStore)!==value)throw Error('unavailable');
+        this.draftStatus.hidden=true;
+      }catch{this.draftStatus.textContent='Draft could not be saved on this device. Keep this window open or copy your text.';this.draftStatus.hidden=false}
+    }
+    saveDraft(){if(this.message){this.draft=this.field.value;this.storeDraft(this.id,this.draft)}}
     configure(){this.tools.hidden=this.message;this.mode.textContent=this.message?'Message':'Keys';this.field.setAttribute('aria-label',this.message?'Message to host':'Direct terminal keys');this.field.setAttribute('autocorrect',this.message?'on':'off');this.field.setAttribute('enterkeyhint',this.message?'send':'enter');this.field.setAttribute('autocapitalize','off');this.field.spellcheck=this.message;this.field.placeholder=this.message?'Write a message…':'';this.submit.textContent=this.message?'Send':'Return';this.field.value=this.message?this.draft:sentinel;this.field.rows=this.message?2:1;this.clearCtrl()}
     reset(){this.field.value=sentinel;this.field.setSelectionRange(1,1)}
     clearCtrl(){this.ctrl=false;this.ctrlButton.setAttribute('aria-pressed','false')}
     sendText(text){if(this.ctrl&&text){this.key(Array.from(text)[0],{ctrl:true});text=Array.from(text).slice(1).join('');this.clearCtrl()}if(text)this.send(text,false)}
     rawInput(e){const text=this.field.value.split(sentinel).join('');if(text)this.sendText(text);else if(e?.inputType==='deleteContentBackward')this.key('⌫',{});this.reset()}
-    enter(){if(this.composing||this.submit.disabled)return;if(this.message){this.saveDraft();if(this.send(this.draft,true)!==false){this.draft='';this.field.value='';if(this.dismissOnSend){this.field.blur();this.onHide();return}}}else this.key('⏎',{});this.focus()}
+    enter(){if(this.composing||this.submit.disabled)return;if(this.message){this.saveDraft();if(this.send(this.draft,true)!==false){this.draft='';this.field.value='';this.storeDraft(this.id,'');if(this.dismissOnSend){this.field.blur();this.onHide();return}}}else this.key('⏎',{});this.focus()}
     attachImage(id,path){
-      this.saveDraft();const before=id===this.id?this.draft:(this.drafts.get(id)||'');const text=before+(before&&!before.endsWith('\n')?'\n':'')+'Image: '+path+'\n';
-      if(id===this.id){this.field.blur();this.message=true;this.draft=text;this.configure()}else this.drafts.set(id,text);
+      this.saveDraft();const before=id===this.id?this.draft:this.loadDraft(id);const text=before+(before&&!before.endsWith('\n')?'\n':'')+'Image: '+path+'\n';
+      if(id===this.id){this.field.blur();this.message=true;this.draft=text;this.configure()}this.storeDraft(id,text);
     }
     focus(){this.element.hidden=false;this.field.focus({preventScroll:true});if(!this.message)this.field.setSelectionRange(this.field.value.length,this.field.value.length)}
     show(visible){this.element.hidden=!visible;if(!visible)this.field.blur()}
-    select(id){this.saveDraft();if(this.id)this.drafts.set(this.id,this.draft);this.id=id;this.draft=this.drafts.get(id)||'';this.configure()}
-    dispose(){this.field.blur();this.element.remove()}
+    select(id){this.saveDraft();if(this.id)this.drafts.set(this.id,this.draft);this.id=id;this.draft=this.loadDraft(id);this.configure()}
+    dispose(){this.saveDraft();this.field.blur();this.element.remove()}
   }
   window.NativeInput=NativeInput;
 })();
