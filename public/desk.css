@@ -96,6 +96,9 @@ html.desk-mode { --workspace-frame-radius:18px; --workspace-expo-radius:28px; }
 .desk-mode #touch-shell :is(#remote-herdr-app,.browser-app:not(.browser-reading),.files-app,.theme-settings) { top:8px !important; }
 
 /* Native visionOS windows resize independently; the system owns their grab/resize affordance. */
+html.desk-mode.vision-mode { --workspace-frame-radius:34px; --workspace-expo-radius:34px; }
+/* Home's pseudo-element frames the clock panel; its sibling widgets have their own corners. */
+.vision-mode #touch-shell:not(.expo-mode) [data-workspace="home"] { border-radius:0 !important; }
 .vision-mode .expo-swipe-hint { display:none; }
 @media (max-height:599px) {
   .vision-mode [data-workspace="home"] > [data-live-time] { font-size:48px !important; letter-spacing:-2px !important; }
