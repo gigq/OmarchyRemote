@@ -184,7 +184,6 @@ final class HardwareShortcutTests: XCTestCase {
         expectWorkspace("settings")
     }
 
-
     func testPhysicalTerminalAndBrowserFromHome() {
         app.typeKey("t", modifierFlags: .command)
         expectWorkspace("terminal")

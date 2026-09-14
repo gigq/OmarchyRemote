@@ -12,10 +12,11 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         self.window = window
         window.makeKeyAndVisible()
         #if os(visionOS)
-        windowScene.requestGeometryUpdate(.Vision(
-            size: CGSize(width: 1280, height: 900),
-            minimumSize: CGSize(width: 600, height: 400),
-            resizingRestrictions: .freeform))
+            windowScene.requestGeometryUpdate(
+                .Vision(
+                    size: CGSize(width: 1280, height: 900),
+                    minimumSize: CGSize(width: 600, height: 400),
+                    resizingRestrictions: .freeform))
         #endif
     }
 }
