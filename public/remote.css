@@ -118,3 +118,7 @@
 @media (min-width:600px) and (min-height:600px) {
   .hardware-keyboard .herdr-composer .native-dismiss { display:none; }
 }
+.herdr-project-label { display:none; }
+@media (min-width:600px) and (min-height:600px) {
+  .herdr-project-label { display:block; align-self:center; flex:none; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-right:4px; color:var(--theme-secondary); font:11px system-ui; }
+}

@@ -10,6 +10,7 @@ for(const viewport of [{width:1194,height:834},{width:402,height:874}]){
   await p.goto('/native/');await p.keyboard.press('Meta+Shift+A');
   await p.locator('.herdr-pane').filter({hasText:'Herd one'}).click();
   const tabs=p.locator('.herdr-pane-tabs:visible');await expect(tabs).toBeVisible();
+  if(viewport.width>600)await expect(tabs.locator('.herdr-project-label')).toHaveText('Tabs QA');else await expect(tabs.locator('.herdr-project-label')).toBeHidden();
   const row=await tabs.boundingBox(),back=await p.getByRole('button',{name:'All panes',exact:true}).boundingBox(),fit=await p.getByRole('button',{name:'Fit to Phone',exact:true}).boundingBox();
   expect(row.x).toBeGreaterThanOrEqual(back.x+back.width);expect(row.x+row.width).toBeLessThanOrEqual(fit.x);
   expect(Math.abs(row.y+row.height/2-(back.y+back.height/2))).toBeLessThan(2);
@@ -45,6 +46,7 @@ test('last tab from another project is separated and swaps when used',async({pag
  await tabs.getByRole('button',{name:'Review',exact:true}).click();await tabs.getByRole('button',{name:'Return to Project B · Beta',exact:true}).click();
  await expect(tabs.getByRole('button',{name:'Return to Project A · Review',exact:true})).toBeVisible();
  await expect(tabs.locator('.herdr-project-divider')).toBeVisible();
+ await expect(tabs.locator('.herdr-project-label')).toHaveText(['Project B','Project A']);
  await p.screenshot({path:'artifacts/browser/herdr-recent-project.png'});
  snapshot.panes=snapshot.panes.filter(x=>x.pane_id!=='a2');stream.send(JSON.stringify({type:'snapshot',snapshot}));
  await expect(tabs.getByRole('button',{name:'Return to Project A · Alpha',exact:true})).toBeVisible();
