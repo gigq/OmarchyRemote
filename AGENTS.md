@@ -4,6 +4,20 @@
 - Honor explicit requests to leave an experiment uncommitted. Preserve unrelated in-progress changes and keep each commit focused.
 - A request to commit does not imply pushing or publishing.
 
+# Code style
+
+- Run `npm run format` before committing. `npm test` fails on unformatted code, and CI runs `npm run lint` (Prettier, `cargo fmt --check`, clippy). Prettier settings are in `.prettierrc`; Swift uses `.swift-format`, applied on the Mac with `xcrun swift-format format -i -r ios/HyprlandTouch ios/HyprlandTouchUITests`.
+- One statement per line. Never join statements with semicolons or write a class, method, or rule set as a single line; merges and reviews happen by line.
+- Keep formatting-only changes in their own commit and add its hash to `.git-blame-ignore-revs`.
+- The markup in `public/index.html` is a design-tool export; leave it as exported. Its component script is formatted by `scripts/format-template.mjs`, which `npm run format` runs.
+- New apps follow CONTRIBUTING.md: a `define` in `public/apps.js`, a `public/<key>.js` module that calls `provide`, and host support in `backend/src/apps.rs` or a route module. Do not add app-specific branches to `remote.js`, `desk.js`, `dashboard.js`, or the shell component; add a provider hook instead.
+
+# Checks before reporting done
+
+- `npm test` and `npm run lint` always. Run the Playwright specs that cover the changed surface (`npm run test:ui -- tests/browser/<spec>.mjs`); `npm run test:backend` for Rust changes; a build on the remote Mac for Swift changes.
+- When behavior changes on purpose, update the specs and the docs (`README.md`, `docs/features.md`) in the same commit. A test that describes the old behavior is a failing test, not an exception.
+- The backend caps terminal sessions at 8 and a failed UI test leaves its session open. If specs report 429 or "unavailable · retrying…", restart `omarchy-remote.service` before rerunning; finish isolated tests first because the restart ends backend-owned shells.
+
 # Prototype iteration
 
 The installed development iPhone app loads the `OmarchyRemoteURL` from `ios/HyprlandTouch/Info.plist` (the host's private HTTPS address plus `/native/`). The persistent host user service is `hyprland-touch-dev.service`; its source server is `scripts/serve.mjs` on loopback port 4187.

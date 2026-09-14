@@ -9,9 +9,10 @@ Follow [Install on the host](README.md#install-on-the-host). Development happens
 Checks, in the order they usually matter:
 
 ```sh
+npm run format              # Prettier, plus the component script in public/index.html
+npm run lint                # Prettier check, cargo fmt --check, clippy
 cargo test --manifest-path backend/Cargo.toml
-cargo clippy --manifest-path backend/Cargo.toml --all-targets -- -D warnings
-npm test
+npm test                    # formatting check plus the Node unit tests
 npm run test:backend        # needs the services; creates and removes its own Herdr workspace
 npm run test:ui             # Playwright against the running dev server
 npm run build && npm test
@@ -79,6 +80,10 @@ The shell reads one catalog, `window.HyprlandApps` in `public/apps.js`. Every wo
 4. **Optional shortcuts.** Desk mode bindings are the `BINDINGS` list in `public/desk.js`; the phone's SUPER keyboard map is `bind` in the shell component in `public/index.html`.
 
 5. **Tests and docs.** For a terminal program, add `[id, marker]` to the table in `scripts/backend.test.mjs` (a string the program draws soon after start) and the id to the loop in `tests/browser/host-tuis.spec.mjs`. For an API app, add a backend unit test and a Playwright spec under `tests/browser/` that reads real host output without sending input to other people's sessions. Describe the app in `docs/features.md` and add it to the app list in `README.md`.
+
+## Code style
+
+Formatting is automated so reviews and merges stay about behavior. Prettier (`.prettierrc`, 100 columns) covers JavaScript, CSS, JSON, and Markdown; `cargo fmt` covers Rust; swift-format (`.swift-format`, four spaces, 120 columns) covers the iOS wrapper and runs on a Mac with `xcrun swift-format format -i -r ios/HyprlandTouch ios/HyprlandTouchUITests`. Write one statement per line and keep formatting-only commits separate, listing them in `.git-blame-ignore-revs` (enable it locally with `git config blame.ignoreRevsFile .git-blame-ignore-revs`). CI (`.github/workflows/ci.yml`) runs the host-independent checks on every push and pull request; the Playwright, live-server, and backend suites need a running host and stay local.
 
 ## Conventions
 

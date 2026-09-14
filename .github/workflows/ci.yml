@@ -1,0 +1,40 @@
+# Host-independent checks. The Playwright suite, `npm run test:live`, and
+# `npm run test:backend` need a running Omarchy host and stay local.
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test # Prettier check plus the Node unit tests
+      - run: npm run build
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+      - run: cargo fmt --manifest-path backend/Cargo.toml --check
+      - run: cargo clippy --manifest-path backend/Cargo.toml --all-targets -- -D warnings
+      - run: cargo test --manifest-path backend/Cargo.toml
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: xcrun swift-format lint --strict --configuration .swift-format -r ios/HyprlandTouch ios/HyprlandTouchUITests
+      - run: >
+          xcodebuild build-for-testing -project ios/HyprlandTouch.xcodeproj -scheme HyprlandTouch
+          -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
