@@ -96,9 +96,9 @@
 .herdr-detail-bar .herdr-pane-tabs { padding:0; min-width:0; }
 .herdr-detail-bar > button { flex:none; }
 
-/* Herd uses neutral composer surfaces and compact, labelled icon controls. */
-.herdr-composer .native-input { background:oklch(from color-mix(in srgb,var(--theme-background) 84%,var(--theme-foreground)) l 0 h); border-color:oklch(from color-mix(in srgb,var(--theme-background) 65%,var(--theme-foreground)) l 0 h); }
-.herdr-composer .native-input:focus { outline-color:oklch(from color-mix(in srgb,var(--theme-background) 45%,var(--theme-foreground)) l 0 h); }
+/* Herd uses theme surfaces and a distinct palette color for composer controls. */
+.herdr-composer .native-input { background:var(--theme-surface); border-color:var(--theme-magenta); }
+.herdr-composer .native-input:focus { outline-color:var(--theme-magenta); }
 .herdr-composer button svg { display:block; margin:auto; pointer-events:none; }
 .herdr-composer .native-mode,.herdr-composer .native-dismiss,.herdr-composer .native-send { width:44px; min-height:44px; padding:0; }
 .herdr-composer button:active { filter:brightness(1.25); }
