@@ -128,11 +128,27 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
     private var appID: String?
     private var webApps: [String: BrowserDeviceBridge] = [:]
     private var observations: [NSKeyValueObservation] = []
-    var ownsKeyboardFocus: Bool {
+    private var pageOwnsKeyboardFocus: Bool {
         func containsResponder(_ view: UIView) -> Bool {
             view.isFirstResponder || view.subviews.contains(where: containsResponder)
         }
-        return (page.map(containsResponder) ?? false) || webApps.values.contains { $0.ownsKeyboardFocus }
+        return page.map(containsResponder) ?? false
+    }
+    var ownsKeyboardFocus: Bool {
+        pageOwnsKeyboardFocus || webApps.values.contains { $0.ownsKeyboardFocus }
+    }
+    private var requestedFocus = false
+    private func updateFocus(_ focused: Bool) {
+        let gainingFocus = focused && !requestedFocus
+        requestedFocus = focused
+        guard let page else { return }
+        if !focused {
+            // Restrict resignation to this page, irrespective of sibling update order.
+            if pageOwnsKeyboardFocus { page.endEditing(true) }
+        } else if gainingFocus, GCKeyboard.coalesced != nil {
+            // A layout animation must not repeatedly steal focus from page controls.
+            page.becomeFirstResponder()
+        }
     }
     private var requestedVisible = false
     private var controlsHidden = false
@@ -164,6 +180,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         reset()
     }
     func reset() {
+        updateFocus(false)
         observations.removeAll()
         page?.stopLoading()
         page?.removeFromSuperview()
@@ -270,14 +287,14 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
             let visible = body["visible"] as? Bool == true
             if !visible {
                 requestedVisible = false
-                page.endEditing(true)
+                updateFocus(false)
                 page.isHidden = true
                 replyHandler(["visible": false], nil)
                 return
             }
             guard let rect = body["rect"] as? [Double], rect.count == 4, rect.allSatisfy({ $0.isFinite }),
                   let viewport = body["viewport"] as? Double, viewport.isFinite, viewport > 0,
-                  rect[2] > 0, rect[3] > 0 else { page.isHidden = true; replyHandler(nil, "Invalid bounds"); return }
+                  rect[2] > 0, rect[3] > 0 else { requestedVisible = false; updateFocus(false); page.isHidden = true; replyHandler(nil, "Invalid bounds"); return }
             let scale = presenter.view.bounds.width / viewport
             // Keep WebKit's viewport intact while a workspace slides partly offscreen.
             // Intersect only for visibility: resizing to the visible slice reflows the page.
@@ -290,6 +307,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
             page.layer.maskedCorners = body["roundedTop"] as? Bool == true ? [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
             requestedVisible = !visibleFrame.isEmpty && !visibleFrame.isNull
             page.isHidden = !requestedVisible
+            updateFocus(requestedVisible && body["focused"] as? Bool == true)
             if let rgb = body["background"] as? [Double], rgb.count == 3, rgb.allSatisfy({ $0.isFinite && (0...255).contains($0) }) {
                 let color = UIColor(red: rgb[0]/255, green: rgb[1]/255, blue: rgb[2]/255, alpha: 1)
                 page.underPageBackgroundColor = color

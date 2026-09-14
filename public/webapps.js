@@ -24,7 +24,7 @@
    if(!this.ready||this.disposed)return;
    const r=this.root.getBoundingClientRect();const visible=!!(this.active&&!this.covered&&!this.failed&&!document.hidden&&!document.querySelector('.desk-sheet')&&r.width>1&&r.height>1&&this.root.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})&&r.right>0&&r.bottom>0&&r.left<innerWidth&&r.top<innerHeight);
    this.root.closest('[data-workspace]')?.classList.toggle('native-surface-visible',visible);const opacity=HyprlandThemes.windowOpacity(this.host.logic.cur()===this.app.id);
-   const v=visualViewport;const payload={visible,opacity,...(visible?{rect:[r.x-(v?.offsetLeft||0),r.y-(v?.offsetTop||0),r.width,r.height],viewport:innerWidth,radius:parseFloat(getComputedStyle(this.root).borderTopLeftRadius)||0,roundedTop:true,controlsHidden:true,background:HyprlandThemes.backgroundRGB()}:{})};
+   const v=visualViewport;const payload={visible,focused:visible&&(this.host.logic.cur()===this.app.id),opacity,...(visible?{rect:[r.x-(v?.offsetLeft||0),r.y-(v?.offsetTop||0),r.width,r.height],viewport:innerWidth,radius:parseFloat(getComputedStyle(this.root).borderTopLeftRadius)||0,roundedTop:true,controlsHidden:true,background:HyprlandThemes.backgroundRGB()}:{})};
    const key=JSON.stringify(payload);if(key!==this.lastLayout){this.lastLayout=key;this.command('layout',payload).catch(e=>{if(!this.disposed)this.error(e.message)})}
    if(visible&&performance.now()-(this.lastPreview||0)>4000){this.lastPreview=performance.now();this.command('snapshot').catch(()=>{})}
   }

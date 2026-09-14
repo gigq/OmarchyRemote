@@ -110,7 +110,7 @@
       }catch(e){this.setStatus('unavailable · retrying…');this.retry=setTimeout(()=>this.connect(),2500)}finally{this.connecting=false}
     }
     resume(){if(this.connecting||this.exited||this.disposed)return;const old=this.ws;this.ws=null;this.ready=false;old?.close();this.connect()}
-    exit(){this.exited=true;this.ready=false;this.ws?.close();this.status.textContent=this.app==='terminal'?'Shell exited':`${this.app} exited`;this.restart.hidden=false;}
+    exit(){if(this.exited)return;this.exited=true;this.ready=false;this.ws?.close();this.status.textContent=this.app==='terminal'?'Shell exited':`${this.app} exited`;this.restart.hidden=false;this.onExit?.();}
     key(input){return this.input(input.data)}
     setStatus(text){if(this.app==='terminal')this.status.hidden=text==='connected';this.statusText=text;this.status.textContent=`${HyprlandApps.host.name} · ${text}`}
     hostChanged(){this.setStatus(this.statusText)}
@@ -130,19 +130,26 @@
     get nativeInput(){return this.active.nativeInput}
     get sessionRequest(){return this.active.sessionRequest}
     get exited(){return this.active.exited}
-    add(key='omarchy-terminal-tab-'+crypto.randomUUID(),activate=true){if(this.tabs.length>=8)return;const root=node('div','terminal-tab');this.body.append(root);const tab=new TerminalApp(root,this.bridge,'terminal',key);this.tabs.push(tab);if(activate)this.activate(this.tabs.length-1);this.save()}
+    add(key='omarchy-terminal-tab-'+crypto.randomUUID(),activate=true){if(this.tabs.length>=8)return;const root=node('div','terminal-tab');this.body.append(root);const tab=new TerminalApp(root,this.bridge,'terminal',key);tab.onExit=()=>this.shellExited(tab);this.tabs.push(tab);if(activate)this.activate(this.tabs.length-1);this.save()}
+    shellExited(tab){
+      if(this.disposed||this.closingTab===tab||!this.tabs.includes(tab))return;
+      if(this.tabs.length===1){this.bridge.logic.closeApp('terminal');return}
+      const sessionId=storage.get(tab.storageKey);if(sessionId)api('terminal/'+encodeURIComponent(sessionId)+'/close',{}).catch(()=>{});
+      const active=this.active,index=this.tabs.indexOf(tab);tab.dispose();tab.root.remove();storage.set(tab.storageKey,null);this.tabs.splice(index,1);this.save();
+      this.activate(active===tab?Math.min(index,this.tabs.length-1):this.tabs.indexOf(active));
+    }
     save(){storage.set('omarchy-terminal-tabs',JSON.stringify(this.tabs.map(t=>t.storageKey)))}
     activate(index){this.confirmation?.remove();this.confirmation=null;this.index=index;this.tabs.forEach((t,i)=>{t.root.hidden=i!==index;t.nativeInput.show(false)});storage.set('omarchy-terminal-active',this.active.storageKey);this.render();this.active.connect();this.active.resize();if(this.bridge.apps.terminal===this)this.bridge.update()}
     render(){this.addButton?.remove();this.bar.hidden=this.tabs.length===1;this.bar.replaceChildren();this.tabs.forEach((tab,i)=>{const b=button((i+1)+' shell',()=>this.activate(i));b.setAttribute('aria-pressed',String(i===this.index));this.bar.append(b)});const add=button('+',()=>this.add());add.setAttribute('aria-label','New terminal tab');add.disabled=this.tabs.length>=8;const close=button('×',()=>this.confirmClose());close.setAttribute('aria-label','Close terminal tab');close.disabled=this.tabs.length===1;this.addButton=add;if(this.tabs.length===1)this.active.root.querySelector('.remote-bar').append(add);else this.bar.append(add,close)}
     confirmClose(){if(this.confirmation||this.tabs.length===1)return;const tab=this.active;const row=this.confirmation=node('div','terminal-close-confirm');row.setAttribute('role','group');row.setAttribute('aria-label','Confirm close shell');row.append(node('span','','Close shell and its running process?'),button('Cancel',()=>{row.remove();this.confirmation=null}),button('Close shell',()=>this.closeCurrent(tab)));this.root.insertBefore(row,this.body)}
-    async closeCurrent(tab){if(this.closing||this.tabs.length===1||!this.tabs.includes(tab))return;this.closing=true;this.confirmation?.querySelectorAll('button').forEach(b=>b.disabled=true);try{const session=tab.sessionRequest?await tab.sessionRequest:null;const id=session?.id||storage.get(tab.storageKey);if(id)await api('terminal/'+encodeURIComponent(id)+'/close',{});tab.dispose();tab.root.remove();storage.set(tab.storageKey,null);this.tabs.splice(this.tabs.indexOf(tab),1);this.save();this.activate(Math.min(this.index,this.tabs.length-1))}catch(e){tab.status.textContent=e.message}finally{this.closing=false;this.confirmation?.remove();this.confirmation=null}}
+    async closeCurrent(tab){if(this.closing||this.tabs.length===1||!this.tabs.includes(tab))return;this.closing=true;this.closingTab=tab;this.confirmation?.querySelectorAll('button').forEach(b=>b.disabled=true);try{const session=tab.sessionRequest?await tab.sessionRequest:null;const id=session?.id||storage.get(tab.storageKey);if(id)await api('terminal/'+encodeURIComponent(id)+'/close',{});tab.dispose();tab.root.remove();storage.set(tab.storageKey,null);this.tabs.splice(this.tabs.indexOf(tab),1);this.save();this.activate(Math.min(this.index,this.tabs.length-1))}catch(e){tab.status.textContent=e.message}finally{this.closing=false;this.closingTab=null;this.confirmation?.remove();this.confirmation=null}}
     async closeSessions(){for(const tab of this.tabs){const session=tab.sessionRequest?await tab.sessionRequest:null;const id=session?.id||storage.get(tab.storageKey);if(id)await api('terminal/'+encodeURIComponent(id)+'/close',{});storage.set(tab.storageKey,null)}storage.set('omarchy-terminal-tabs',null);storage.set('omarchy-terminal-active',null)}
     connect(){this.active.connect()}
     resize(){this.active.resize()}
     resume(){for(const t of this.tabs)if(t.sessionRequest)t.resume()}
     input(data){return this.active.input(data)}
     key(input){return this.active.key(input)}
-    dispose(){this.tabs.forEach(t=>t.dispose())}
+    dispose(){this.disposed=true;this.tabs.forEach(t=>t.dispose())}
   }
   const paneGroup=p=>/blocked/.test(p.agent_status)&&p.attention_kind!=='chat'?'attention':/working|running|progress|busy/.test(p.agent_status)?'running':/idle|ready|blocked/.test(p.agent_status)?'idle':'done';
   class HerdrApp {
@@ -287,11 +294,14 @@
   // and their providers (below and in files.js, browser.js, themes.js). Nothing here knows app names.
   class HostBridge {
     constructor(logic){
-      this.logic=logic;this.apps={};
+      this.logic=logic;this.apps={};this.rememberedFocus=new WeakMap();
+      this.rememberFocus=e=>{const root=e.target.closest?.('[data-workspace]');if(root)this.rememberedFocus.set(root,e.target)};
+      document.addEventListener('focusin',this.rememberFocus);
       this.foreground=()=>{if(!document.hidden)for(const app of Object.values(this.apps))app.resume?.()};
       document.addEventListener('visibilitychange',this.foreground);window.addEventListener('online',this.foreground);
       this.hostChanged=()=>{for(const app of Object.values(this.apps))app.hostChanged?.()};document.addEventListener('hyprland-host',this.hostChanged);
       if(location.protocol!=='file:')fetch('/api/capabilities',{headers:{'X-Hyprland-Client':'1'}}).then(r=>r.ok?r.json():null).then(caps=>{if(caps)HyprlandApps.setHost(caps)}).catch(()=>{});
+      this.hardwareChanged=()=>this.update();window.addEventListener('hyprland-hardware-keyboard',this.hardwareChanged);
       this.update();
     }
     app(key){return this.apps[key]||null}
@@ -327,12 +337,23 @@
         app.nativeInput?.show(native&&focused&&kb);
         app.placeLatest?.();
       }
-      const input=this.currentInput();if(native&&kb&&!ov&&input&&document.activeElement!==input.field&&!this.apps[current]?.term?.nativeView?.selecting())input.focus();
+      const input=this.currentInput();
+      const focusTarget=window.__HYPRLAND_HARDWARE_KEYBOARD__===true&&!ov&&!s.launch&&!s.shade&&!s.map&&!document.querySelector('.desk-sheet')?input:null;
+      if(focusTarget&&this.focusTarget!==focusTarget){this.focusTarget=focusTarget;focusTarget.focus()}
+      this.focusTarget=focusTarget;
+      const activeRoot=window.__HYPRLAND_HARDWARE_KEYBOARD__===true&&!ov&&!s.launch&&!s.shade&&!s.map&&!document.querySelector('.desk-sheet')?mount(HyprlandApps.get(current)?.mount):null;
+      if(activeRoot&&this.activeRoot!==activeRoot&&!input){
+        const card=activeRoot.closest('[data-workspace]'),remembered=this.rememberedFocus.get(card);
+        const target=remembered?.isConnected&&remembered.checkVisibility()?remembered:activeRoot;
+        if(!activeRoot.contains(document.activeElement)){if(target===activeRoot)target.tabIndex=-1;target.focus({preventScroll:true})}
+      }
+      this.activeRoot=activeRoot;
+      if(native&&kb&&!ov&&input&&document.activeElement!==input.field&&!this.apps[current]?.term?.nativeView?.selecting())input.focus();
       for(const app of Object.values(this.apps))app.resize?.();
     }
     async openTerminalAt(path){await this.closeApp('terminal');storage.set('omarchy-terminal-cwd',path);this.logic.openApp('terminal')}
     key(key,mods){const input=keyInput(key,mods);if(!input)return;this.apps[this.logic.cur()]?.key?.(input)}
-    dispose(){for(const app of Object.values(this.apps))app.dispose?.();document.removeEventListener('visibilitychange',this.foreground);window.removeEventListener('online',this.foreground);document.removeEventListener('hyprland-host',this.hostChanged)}
+    dispose(){document.removeEventListener('focusin',this.rememberFocus);window.removeEventListener('hyprland-hardware-keyboard',this.hardwareChanged);for(const app of Object.values(this.apps))app.dispose?.();document.removeEventListener('visibilitychange',this.foreground);window.removeEventListener('online',this.foreground);document.removeEventListener('hyprland-host',this.hostChanged)}
   }
   // Host TUIs share TerminalApp; each one is a catalog app whose session the backend spawns by id.
   const closeSession=async(key,app)=>{const session=app?.sessionRequest?await app.sessionRequest:null;const id=session?.id||storage.get('omarchy-'+key+'-id');if(id)await api(`terminal/${encodeURIComponent(id)}/close`,{});storage.set('omarchy-'+key+'-id',null)};
