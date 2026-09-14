@@ -112,7 +112,7 @@
     resume(){if(this.connecting||this.exited||this.disposed)return;const old=this.ws;this.ws=null;this.ready=false;old?.close();this.connect()}
     exit(){this.exited=true;this.ready=false;this.ws?.close();this.status.textContent=this.app==='terminal'?'Shell exited':`${this.app} exited`;this.restart.hidden=false;}
     key(input){return this.input(input.data)}
-    setStatus(text){this.statusText=text;this.status.textContent=`${HyprlandApps.host.name} · ${text}`}
+    setStatus(text){if(this.app==='terminal')this.status.hidden=text==='connected';this.statusText=text;this.status.textContent=`${HyprlandApps.host.name} · ${text}`}
     hostChanged(){this.setStatus(this.statusText)}
     input(data){this.stopTouchScroll.cancel();if(this.ready&&this.ws?.readyState===1){this.ws.send(JSON.stringify({type:'input',data}));this.term.scrollToBottom();return true}else this.status.textContent=this.exited?'App exited · use Restart':'Disconnected · input was not sent';return false;}
     dispose(){this.disposed=true;clearTimeout(this.retry);this.ws?.close();this.resizeObserver.disconnect();this.stopTouchScroll();this.nativeInput.dispose();this.term.dispose()}

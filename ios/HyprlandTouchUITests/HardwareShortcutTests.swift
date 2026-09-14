@@ -11,7 +11,7 @@ final class HardwareShortcutTests: XCTestCase {
         // Bundled file origin cannot connect to host APIs or existing agent panes.
         app.launchArguments = ["--bundled"]
         app.launch()
-        XCTAssertTrue(app.buttons["Keyboard shortcuts"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["terminal"].firstMatch.waitForExistence(timeout: 20))
     }
 
     private func expectWorkspace(_ text: String, file: StaticString = #filePath, line: UInt = #line) {

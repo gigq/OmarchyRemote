@@ -86,3 +86,9 @@ function updateDeviceBattery(){
 }
 window.addEventListener('hyprland-battery',updateDeviceBattery);
 updateDeviceBattery();
+
+function updateHardwareKeyboard(){
+  document.documentElement.classList.toggle('hardware-keyboard',window.__HYPRLAND_HARDWARE_KEYBOARD__===true);
+}
+window.addEventListener('hyprland-hardware-keyboard',updateHardwareKeyboard);
+updateHardwareKeyboard();

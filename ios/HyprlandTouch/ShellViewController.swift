@@ -2,6 +2,7 @@ import UIKit
 import WebKit
 import OSLog
 import CoreLocation
+import GameController
 
 /// Where the live shell comes from: the `OmarchyRemoteURL` Info.plist key (the address the
 /// backend is published at, for example a Tailscale Serve URL). Debug builds load it and
@@ -446,6 +447,9 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = background
+        for name in [Notification.Name.GCKeyboardDidConnect, .GCKeyboardDidDisconnect, UIApplication.didBecomeActiveNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(publishHardwareKeyboard), name: name, object: nil)
+        }
 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
@@ -579,6 +583,12 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         publishKeyboardGeometry()
     }
 
+    @objc private func publishHardwareKeyboard() {
+        webView?.callAsyncJavaScript(
+            "window.__HYPRLAND_HARDWARE_KEYBOARD__ = connected; window.dispatchEvent(new Event('hyprland-hardware-keyboard'));",
+            arguments: ["connected": GCKeyboard.coalesced != nil], in: nil, in: .page, completionHandler: nil)
+    }
+
     private func publishKeyboardGeometry(force: Bool = false) {
         guard traitCollection.userInterfaceIdiom == .pad, let webView, view.bounds.height > 0 else { return }
         let covered = max(0, view.bounds.maxY - view.keyboardLayoutGuide.layoutFrame.minY)
@@ -672,6 +682,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         retryButton.isHidden = true
         publishKeyboardGeometry(force: true)
+        publishHardwareKeyboard()
         publishBattery()
         if webView.url?.isFileURL == true {
             loadTimeout?.cancel()

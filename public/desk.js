@@ -116,7 +116,7 @@
     {group:'Windows',keys:'F',code:/^KeyF$/,desk:true,label:'Toggle fullscreen window',run:d=>d.toggleFull()},
     {group:'Windows',keys:'W',code:/^KeyW$/,label:'Close window',run:d=>d.logic.closeWs()},
     {group:'Windows',browserOnly:true,keys:'⌫',code:/^Backspace$/,label:'Close window (when the browser owns ⌘W)',run:d=>d.logic.closeWs()},
-    {group:'Apps',keys:'T',code:/^KeyT$/,label:'Terminal (alternate)',run:d=>d.logic.openApp('terminal')},
+    {group:'Apps',keys:'T',code:/^KeyT$/,label:'Terminal / new terminal tab',run:d=>{if(d.logic.cur()==='terminal')d.logic.remote?.app('terminal')?.add();else d.logic.openApp('terminal')}},
     {group:'Apps',keys:'↩',code:/^(Enter|NumpadEnter)$/,label:'Terminal',run:d=>d.logic.openApp('terminal')},
     {group:'Apps',browserOnly:true,keys:'⇧ ↩',shift:true,code:/^(Enter|NumpadEnter)$/,label:'Browser',run:d=>d.logic.openApp('browser')},
     {group:'Apps',keys:'⇧ B',shift:true,code:/^KeyB$/,label:'Browser',run:d=>d.logic.openApp('browser')},
