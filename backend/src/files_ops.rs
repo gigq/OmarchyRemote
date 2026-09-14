@@ -158,10 +158,11 @@ fn search_at(home: &Path, q: Search) -> Result<Value> {
             continue;
         };
         let filename = item.file_name().to_string_lossy().into_owned();
-        if let Some(g) = &glob {
-            if !g.is_match(&filename) && !g.is_match(path.strip_prefix(&scope)?) {
-                continue;
-            }
+        if let Some(g) = &glob
+            && !g.is_match(&filename)
+            && !g.is_match(path.strip_prefix(&scope)?)
+        {
+            continue;
         }
         let Ok(meta) = item.metadata() else { continue };
         if !meta.is_file() && !meta.is_dir() {
@@ -188,14 +189,14 @@ fn search_at(home: &Path, q: Search) -> Result<Value> {
                 truncated = true;
             } else if let Ok(data) = bytes(&path, TEXT_LIMIT) {
                 total_bytes += data.len();
-                if !data.contains(&0) {
-                    if let Ok(text) = std::str::from_utf8(&data) {
-                        for (n, line) in text.lines().enumerate() {
-                            if matcher.is_match(line) {
-                                lines.push(json!({"number":n+1,"text":line.chars().take(500).collect::<String>()}));
-                                if lines.len() == 8 {
-                                    break;
-                                }
+                if !data.contains(&0)
+                    && let Ok(text) = std::str::from_utf8(&data)
+                {
+                    for (n, line) in text.lines().enumerate() {
+                        if matcher.is_match(line) {
+                            lines.push(json!({"number":n+1,"text":line.chars().take(500).collect::<String>()}));
+                            if lines.len() == 8 {
+                                break;
                             }
                         }
                     }

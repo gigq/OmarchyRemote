@@ -55,9 +55,9 @@ pub fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
         .write(true)
         .create_new(true)
         .mode(0o600)
-        .open(&path)?;
+        .open(path)?;
     if let Err(error) = file.write_all(bytes) {
-        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(path);
         return Err(error.into());
     }
     Ok(())

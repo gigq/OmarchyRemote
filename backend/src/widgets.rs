@@ -26,7 +26,12 @@ async fn command(program: &str, args: &[&str]) -> Result<String> {
     }
     Ok(String::from_utf8(out.stdout)?)
 }
-fn cpu(text: &str) -> (u64, u64, usize) {
+/// Total jiffies, idle jiffies, and core count from `/proc/stat`.
+type CpuSample = (u64, u64, usize);
+/// Interface name plus received and transmitted bytes.
+type NetSample = (String, u64, u64);
+
+fn cpu(text: &str) -> CpuSample {
     let values: Vec<u64> = text
         .lines()
         .next()
@@ -56,7 +61,7 @@ fn memory(text: &str) -> (u64, u64) {
     let total = get("MemTotal:");
     (total, total.saturating_sub(get("MemAvailable:")))
 }
-fn network() -> (String, u64, u64) {
+fn network() -> NetSample {
     let route = fs::read_to_string("/proc/net/route").unwrap_or_default();
     let iface = route
         .lines()
@@ -79,10 +84,10 @@ fn temperature() -> Option<f64> {
     for entry in fs::read_dir("/sys/class/hwmon").ok()?.flatten() {
         let p = entry.path();
         let name = fs::read_to_string(p.join("name")).unwrap_or_default();
-        if ["coretemp", "k10temp", "cpu_thermal"].contains(&name.trim()) {
-            if let Ok(text) = fs::read_to_string(p.join("temp1_input")) {
-                return text.trim().parse::<f64>().ok().map(|n| n / 1000.0);
-            }
+        if ["coretemp", "k10temp", "cpu_thermal"].contains(&name.trim())
+            && let Ok(text) = fs::read_to_string(p.join("temp1_input"))
+        {
+            return text.trim().parse::<f64>().ok().map(|n| n / 1000.0);
         }
     }
     None
@@ -184,7 +189,7 @@ pub fn start() -> Widgets {
     });
     let target = state.clone();
     tokio::spawn(async move {
-        let mut previous: Option<((u64, u64, usize), (String, u64, u64), Instant)> = None;
+        let mut previous: Option<(CpuSample, NetSample, Instant)> = None;
         let mut tick = 0;
         loop {
             let at = Instant::now();
@@ -285,10 +290,10 @@ pub async fn weather(lat: f64, lon: f64) -> Result<Value> {
         .lock()
         .await;
     let key = format!("{lat:.3},{lon:.3}");
-    if let Some((time, value)) = cache.get(&key) {
-        if time.elapsed() < Duration::from_secs(900) {
-            return Ok(value.clone());
-        }
+    if let Some((time, value)) = cache.get(&key)
+        && time.elapsed() < Duration::from_secs(900)
+    {
+        return Ok(value.clone());
     }
     let url = format!(
         "https://api.open-meteo.com/v1/forecast?latitude={lat:.3}&longitude={lon:.3}&current=temperature_2m,weather_code,wind_speed_10m&hourly=temperature_2m,precipitation_probability&daily=temperature_2m_max,temperature_2m_min&forecast_days=2&timezone=auto&timeformat=unixtime"

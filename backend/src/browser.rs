@@ -109,17 +109,16 @@ pub async fn start() -> Result<()> {
                                 send: send.clone(),
                             },
                         );
-                    } else if v["type"] == "reply" {
-                        if let Some(request) = v["id"].as_str() {
-                            let mut h = state.lock().unwrap();
-                            if h.pending
-                                .get(request)
-                                .is_some_and(|(owner, _)| owner == &id)
-                            {
-                                if let Some((_, reply)) = h.pending.remove(request) {
-                                    let _ = reply.send(v.clone());
-                                }
-                            }
+                    } else if v["type"] == "reply"
+                        && let Some(request) = v["id"].as_str()
+                    {
+                        let mut h = state.lock().unwrap();
+                        if h.pending
+                            .get(request)
+                            .is_some_and(|(owner, _)| owner == &id)
+                            && let Some((_, reply)) = h.pending.remove(request)
+                        {
+                            let _ = reply.send(v.clone());
                         }
                     }
                 }
@@ -177,23 +176,23 @@ fn validate(peer: &Value, q: &Value) -> Result<()> {
             bail!("Enter an http or https URL")
         }
     }
-    if action == "move" || (action == "create" && !q["window_id"].is_null()) {
-        if !windows.iter().any(|w| w["id"] == q["window_id"]) {
-            bail!("Destination window is no longer open")
-        }
+    if (action == "move" || (action == "create" && !q["window_id"].is_null()))
+        && !windows.iter().any(|w| w["id"] == q["window_id"])
+    {
+        bail!("Destination window is no longer open")
     }
     if !q["workspace_id"].is_null() && peer["workspace_write"] != true {
         bail!(
             "This Vivaldi version supports workspace grouping, but not workspace changes through extensions"
         )
     }
-    if !q["workspace_id"].is_null() && q["workspace_id"] != 0 {
-        if !peer["workspaces"]
+    if !q["workspace_id"].is_null()
+        && q["workspace_id"] != 0
+        && !peer["workspaces"]
             .as_array()
             .is_some_and(|ws| ws.iter().any(|w| w["id"] == q["workspace_id"]))
-        {
-            bail!("Destination workspace is no longer available")
-        }
+    {
+        bail!("Destination workspace is no longer available")
     }
     Ok(())
 }
@@ -396,10 +395,10 @@ fn enrich_workspaces(snapshot: &mut Value) {
                     if let Some(extra) = tab["id"].as_i64().and_then(|id| metadata.get(&id)) {
                         tab["workspace_id"] = extra["workspace_id"].clone();
                         tab["stack_id"] = extra["stack_id"].clone();
-                        if let Some(title) = extra["fixed_title"].as_str() {
-                            if !title.is_empty() {
-                                tab["title"] = json!(title)
-                            }
+                        if let Some(title) = extra["fixed_title"].as_str()
+                            && !title.is_empty()
+                        {
+                            tab["title"] = json!(title)
                         }
                         if let Some(id) = tab["workspace_id"].as_i64().filter(|id| *id != 0) {
                             found.push(id)

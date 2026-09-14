@@ -45,10 +45,11 @@ pub(crate) fn resolve(root: &Path, value: &str) -> Result<PathBuf> {
     if path == secret {
         bail!("This file is reserved for the host service")
     }
-    if let (Ok(a), Ok(b)) = (fs::metadata(&path), fs::metadata(&secret)) {
-        if a.dev() == b.dev() && a.ino() == b.ino() {
-            bail!("This file is reserved for the host service")
-        }
+    if let (Ok(a), Ok(b)) = (fs::metadata(&path), fs::metadata(&secret))
+        && a.dev() == b.dev()
+        && a.ino() == b.ino()
+    {
+        bail!("This file is reserved for the host service")
     }
     Ok(path)
 }

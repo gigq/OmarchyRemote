@@ -41,16 +41,15 @@ impl Herdr {
         );
         let mut snapshot = snapshot?["snapshot"].clone();
         // Activity sequence is authoritative across panes; pane revisions are not.
-        if let (Some(panes), Ok(inventory)) = (snapshot["panes"].as_array_mut(), inventory) {
-            if let Some(agents) = inventory["agents"].as_array() {
-                for pane in panes {
-                    if let Some(agent) = agents.iter().find(|a| {
-                        a["pane_id"] == pane["pane_id"] && a["terminal_id"] == pane["terminal_id"]
-                    }) {
-                        if let Some(sequence) = agent["state_change_seq"].as_u64() {
-                            pane["state_change_seq"] = json!(sequence);
-                        }
-                    }
+        if let (Some(panes), Ok(inventory)) = (snapshot["panes"].as_array_mut(), inventory)
+            && let Some(agents) = inventory["agents"].as_array()
+        {
+            for pane in panes {
+                if let Some(agent) = agents.iter().find(|a| {
+                    a["pane_id"] == pane["pane_id"] && a["terminal_id"] == pane["terminal_id"]
+                }) && let Some(sequence) = agent["state_change_seq"].as_u64()
+                {
+                    pane["state_change_seq"] = json!(sequence);
                 }
             }
         }
