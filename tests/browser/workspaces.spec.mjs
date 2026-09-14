@@ -18,7 +18,7 @@ test('ten workspaces keep five fixed-size numbers per row and fit in Expo',async
  await p.screenshot({path:'artifacts/browser/workspaces-expo-ten.png'});
 });
 
-for(const [name,width,height,radius,expoRadius] of [['phone',402,874,'24px','26px'],['iPad',1194,834,'16px','28px']]){
+for(const [name,width,height,radius,expoRadius] of [['phone',402,874,'24px','26px'],['iPad',1194,834,'18px','28px']]){
  test(name+' app frames share Home corner radius in normal and Expo views',async({page:p})=>{
   await p.setViewportSize({width,height});await p.route('**/api/**',r=>r.abort());await p.goto('/native/');
   const frames=p.locator('#touch-shell [data-workspace]');

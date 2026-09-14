@@ -1,4 +1,4 @@
-:root { --phone-frame-inset:60px 8px 32px; --phone-content-inset:62px 10px 34px; --workspace-frame-radius:24px; --workspace-inner-radius:calc(var(--workspace-frame-radius) - 2px); --workspace-expo-radius:26px; color-scheme: var(--theme-mode, dark); background: var(--theme-background); --canvas-scale: 1; --canvas-height: 874px; }
+:root { --phone-frame-inset:60px 8px 24px; --phone-content-inset:62px 10px 26px; --workspace-frame-radius:24px; --workspace-inner-radius:calc(var(--workspace-frame-radius) - 2px); --workspace-expo-radius:26px; color-scheme: var(--theme-mode, dark); background: var(--theme-background); --canvas-scale: 1; --canvas-height: 874px; }
 html, body { margin: 0; min-height: 100%; overscroll-behavior: none; }
 .prototype-layout { display: flex; gap: 44px; align-items: flex-start; justify-content: center; padding: 36px 40px; flex-wrap: wrap; }
 .prototype-column { display: flex; flex-direction: column; gap: 14px; align-items: center; }

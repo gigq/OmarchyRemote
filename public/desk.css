@@ -1,4 +1,4 @@
-html.desk-mode { --workspace-frame-radius:16px; --workspace-expo-radius:28px; }
+html.desk-mode { --workspace-frame-radius:18px; --workspace-expo-radius:28px; }
 /* Desk layout (iPad, Mac, desktop windows). `html.desk-mode` is set by pwa.js when both viewport
    edges pass 600px; the shell then fills the window at 1:1 and workspaces tile several windows. */
 .desk-mode, .desk-mode body { width:100%; height:100%; overflow:hidden; background:var(--theme-background) !important; }
@@ -8,7 +8,7 @@ html.desk-mode { --workspace-frame-radius:16px; --workspace-expo-radius:28px; }
 .desk-mode #touch-shell { width:100% !important; height:100% !important; transform:none; }
 
 /* Top bar: numbered workspaces and the active window name. */
-.desk-mode .shell-topbar { height:44px !important; padding:6px 15px 0 12px !important; font-size:13px !important; }
+.desk-mode .shell-topbar { box-sizing:border-box; height:44px !important; padding:6px 15px 0 12px !important; font-size:13px !important; }
 .desk-mode .workspace-switcher { width:auto !important; display:flex !important; align-items:center; gap:6px !important; }
 .desk-mode .workspace-pill { width:28px !important; height:28px !important; border-radius:8px !important; font-size:13px !important; }
 .desk-ws-label { display:none; }

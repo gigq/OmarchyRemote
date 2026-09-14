@@ -3,7 +3,7 @@
    The phone shell keeps one app per workspace; nothing here runs below the size threshold. */
 (() => {
   const MIN_SIDE=600, MAX_TILES=4;
-  const CHROME={top:44,side:12,bottom:13,gap:6};
+  const CHROME={top:54,side:10,bottom:10,gap:6};
   const APPLE=/Mac|iPhone|iPad|iPod/i.test(navigator.platform||'')||/Macintosh|iPad|iPhone/.test(navigator.userAgent);
   const MOD=APPLE?'⌘':'Ctrl+Alt';
   const NATIVE=!!window.webkit?.messageHandlers?.shellKeyboard;
