@@ -17,7 +17,8 @@ html.desk-mode { --workspace-frame-radius:18px; --workspace-expo-radius:28px; }
 
 /* Window frames follow the tile instead of the phone's fixed inset. */
 /* `#touch-shell` keeps these ahead of the phone frame insets in dashboard.css. */
-.desk-mode [data-workspace] { border-radius:var(--workspace-frame-radius) !important; }
+/* The visible pseudo-border must start at the outer edge, not inside a transparent CSS border. */
+.desk-mode [data-workspace] { border:0 !important; border-radius:var(--workspace-frame-radius) !important; }
 .desk-mode #touch-shell [data-workspace]::after { inset:0; border-radius:var(--workspace-frame-radius); }
 .desk-mode .expo-mode [data-workspace] { border-radius:var(--workspace-expo-radius) !important; }
 .desk-mode #touch-shell.expo-mode [data-workspace]::after { border-width:6px; border-radius:var(--workspace-expo-radius); }

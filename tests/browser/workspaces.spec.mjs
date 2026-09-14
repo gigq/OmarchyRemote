@@ -24,6 +24,7 @@ for(const [name,width,height,radius,expoRadius] of [['phone',402,874,'24px','26p
   const frames=p.locator('#touch-shell [data-workspace]');
   await expect(frames.first()).toBeAttached();
   const radii=()=>frames.evaluateAll(nodes=>nodes.map(n=>({app:n.dataset.workspace,radius:getComputedStyle(n,'::after').borderTopLeftRadius})));
+  if(name==='iPad'){for(const border of await frames.evaluateAll(nodes=>nodes.map(n=>getComputedStyle(n).borderTopWidth)))expect(border).toBe('0px')}
   const normal=await radii();expect(normal.length).toBeGreaterThan(5);
   for(const frame of normal)expect(frame.radius,frame.app).toBe(radius);
   if(name==='iPad')await p.keyboard.press('Meta+e');
