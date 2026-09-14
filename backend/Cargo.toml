@@ -20,3 +20,4 @@ globset = "0.4"
 sha2 = "0.10"
 libc = "0.2"
 zip = { version = "2", default-features = false }
+rusqlite = { version = "0.40.2", features = ["bundled"] }

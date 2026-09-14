@@ -4,6 +4,7 @@ mod browser;
 mod files;
 mod files_ops;
 mod herdr;
+mod preferences;
 mod terminal;
 mod uploads;
 mod widgets;
@@ -37,6 +38,7 @@ struct App {
     sessions: Sessions,
     herdr: herdr::Herdr,
     widgets: widgets::Widgets,
+    preferences: preferences::Shared,
 }
 type ApiError = (StatusCode, Json<Value>);
 fn error(e: impl std::fmt::Display) -> ApiError {
@@ -400,9 +402,21 @@ async fn main() -> anyhow::Result<()> {
         sessions: Arc::new(Mutex::new(HashMap::new())),
         herdr: herdr::Herdr { path },
         widgets: widgets::start(),
+        preferences: Arc::new(Mutex::new(preferences::Store::open(
+            &apps::data_dir()?.join("settings.sqlite3"),
+        )?)),
     };
     let router = Router::new()
         .route("/api/capabilities", get(capabilities))
+        .route("/api/state", get(preferences::snapshot))
+        .route("/api/state/webapps", post(preferences::change))
+        .route("/api/state/devices", get(preferences::devices))
+        .route(
+            "/api/state/devices/{id}",
+            get(preferences::device)
+                .post(preferences::save)
+                .layer(DefaultBodyLimit::max(262144)),
+        )
         .route("/api/browser/snapshot", get(browser::snapshot))
         .route("/api/browser/action", post(browser::action))
         .route(
