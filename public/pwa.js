@@ -1,6 +1,6 @@
 // Fit the design's logical canvas to the usable viewport without stretching type.
 // Screens with both edges past 600px (iPad, Mac, desktop windows) get the desk layout at 1:1 instead.
-function deskMode() { return Math.min(window.innerWidth, window.innerHeight) >= 600; }
+function deskMode() { return window.__OMARCHY_PLATFORM__ === 'visionos' || Math.min(window.innerWidth, window.innerHeight) >= 600; }
 function keyboardInset() {
   const native=window.__HYPRLAND_KEYBOARD__;
   if(deskMode()&&native&&Number.isFinite(native.inset)&&Number.isFinite(native.height)&&native.height>0){
@@ -12,6 +12,7 @@ function fitCanvas() {
   const viewport = document.getElementById('phone-viewport');
   if (!viewport) return;
   const root = document.documentElement, desk = deskMode();
+  root.classList.toggle('vision-mode', window.__OMARCHY_PLATFORM__ === 'visionos');
   root.classList.toggle('desk-mode', desk);
   root.classList.toggle('desk-landscape', desk && window.innerWidth >= window.innerHeight);
   root.classList.toggle('desk-portrait', desk && window.innerWidth < window.innerHeight);

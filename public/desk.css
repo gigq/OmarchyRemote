@@ -94,3 +94,15 @@ html.desk-mode { --workspace-frame-radius:18px; --workspace-expo-radius:28px; }
 .desk-mode #touch-shell #remote-terminal-app { top:8px !important; }
 
 .desk-mode #touch-shell :is(#remote-herdr-app,.browser-app:not(.browser-reading),.files-app,.theme-settings) { top:8px !important; }
+
+/* Native visionOS windows resize independently; the system owns their grab/resize affordance. */
+.vision-mode .expo-swipe-hint { display:none; }
+@media (max-height:599px) {
+  .vision-mode [data-workspace="home"] > [data-live-time] { font-size:48px !important; letter-spacing:-2px !important; }
+  .vision-mode .home-app-grid { max-height:118px; overflow:auto; }
+  .vision-mode .home-app-grid > div,.vision-mode .home-app-grid sc-for > div,.vision-mode .home-pin { height:56px !important; padding:8px !important; border-radius:12px !important; }
+  .vision-mode #home-attention { font-size:10px; }
+}
+@media (max-width:900px) {
+  .vision-mode .home-app-grid { grid-template-columns:repeat(3,minmax(0,1fr)) !important; }
+}

@@ -141,3 +141,16 @@ test('new iPad workspaces slide sideways without vertical drift',async({page:p})
   for(const frame of frames){expect(frame.y).toBeCloseTo(54,0);expect(frame.height).toBeCloseTo(770,0)}
  }
 });
+
+test('native visionOS stays in desk mode across independently resized window dimensions',async({page:p})=>{
+ await p.addInitScript(()=>{window.__OMARCHY_PLATFORM__='visionos'});
+ await p.setViewportSize({width:1200,height:900});await boot(p);
+ await expect(p.locator('html')).toHaveClass(/vision-mode/);await expect(p.locator('.expo-swipe-hint')).toBeHidden();
+ await p.keyboard.press('Meta+Enter');
+ for(const [width,height] of [[1400,500],[650,900],[600,400]]){
+  await p.setViewportSize({width,height});await expect(p.locator('html')).toHaveClass(/desk-mode/);
+  const terminal=await box(p,'terminal');expect(terminal.width).toBeCloseTo(width-20,0);expect(terminal.height).toBeCloseTo(height-64,0);
+  await expect(p.locator('#touch-shell')).toHaveCSS('transform','none');
+ }
+ await p.keyboard.press('Meta+Digit1');await box(p,'home');await p.screenshot({path:'artifacts/browser/vision-compact-home.png'});
+});

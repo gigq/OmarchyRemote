@@ -24,15 +24,17 @@ enum ShellSource {
 @MainActor
 private final class ShellWebView: WKWebView {
     // The shell supplies its own mode and dismissal controls above the keyboard.
+    #if !os(visionOS)
     override var inputAccessoryView: UIView? { nil }
     override var inputAssistantItem: UITextInputAssistantItem {
         let item = super.inputAssistantItem
-        if traitCollection.userInterfaceIdiom == .pad {
+        if (traitCollection.userInterfaceIdiom == .pad || traitCollection.userInterfaceIdiom == .vision) {
             item.leadingBarButtonGroups = []
             item.trailingBarButtonGroups = []
         }
         return item
     }
+    #endif
 }
 
 @MainActor
@@ -423,7 +425,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     // Register shell actions with UIKit: DOM keydown alone loses commands to iPadOS.
     // Only claim arrows outside text fields; clipboard and OS launcher keys stay native.
     override var keyCommands: [UIKeyCommand]? {
-        guard traitCollection.userInterfaceIdiom == .pad else { return super.keyCommands }
+        guard (traitCollection.userInterfaceIdiom == .pad || traitCollection.userInterfaceIdiom == .vision) else { return super.keyCommands }
         var bindings: [(String, String, Bool, String)] = [
             ("j", "KeyJ", false, "Next window in workspace"),
             ("j", "KeyJ", true, "Previous window in workspace"),
@@ -484,14 +486,17 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
             arguments: ["key": payload], in: nil, in: .page, completionHandler: nil)
     }
 
+    #if !os(visionOS)
     override var prefersStatusBarHidden: Bool { true }
     override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge { [.top, .bottom] }
     // Keep the system's dimmed escape indicator when bottom-edge deferral is active.
     override var prefersHomeIndicatorAutoHidden: Bool { false }
     // iPhone keeps the portrait phone shell; iPad rotates freely and the web shell relays out in desk mode.
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        traitCollection.userInterfaceIdiom == .pad ? .all : .portrait
+        (traitCollection.userInterfaceIdiom == .pad || traitCollection.userInterfaceIdiom == .vision) ? .all : .portrait
     }
+
+    #endif
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -501,11 +506,16 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         }
 
         let configuration = WKWebViewConfiguration()
+        #if os(visionOS)
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: "window.__OMARCHY_PLATFORM__ = 'visionos';",
+            injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        #endif
         // Keep shell preferences on disk, separate from embedded websites and their logins.
         configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: UUID(uuidString: "D4D78234-4474-4CD8-9D29-C9F226134F66")!)
         configuration.userContentController.add(storageBridge, name: "shellStorage")
         refreshDeviceIdentity(in: configuration.userContentController)
-        if traitCollection.userInterfaceIdiom == .pad {
+        if (traitCollection.userInterfaceIdiom == .pad || traitCollection.userInterfaceIdiom == .vision) {
             keyboardState.owner = self
             configuration.userContentController.add(keyboardState, name: "shellKeyboard")
             configuration.userContentController.addUserScript(WKUserScript(source: """
@@ -543,7 +553,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         #endif
         view.addSubview(webView)
         browserDevice.shell = webView
-        if traitCollection.userInterfaceIdiom == .pad {
+        if (traitCollection.userInterfaceIdiom == .pad || traitCollection.userInterfaceIdiom == .vision) {
             // Track docked keyboard coverage, not WebKit's sometimes-stale visual viewport.
             view.keyboardLayoutGuide.followsUndockedKeyboard = false
             keyboardProbe.translatesAutoresizingMaskIntoConstraints = false
@@ -604,15 +614,18 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
             view.addGestureRecognizer(sourceGesture)
         }
         NotificationCenter.default.addObserver(self, selector: #selector(resumeLive), name: UIApplication.didBecomeActiveNotification, object: nil)
+        #if !os(visionOS)
         UIDevice.current.isBatteryMonitoringEnabled = true
         for name in [UIDevice.batteryLevelDidChangeNotification, UIDevice.batteryStateDidChangeNotification, UIApplication.didBecomeActiveNotification] {
             NotificationCenter.default.addObserver(self, selector: #selector(publishBattery), name: name, object: nil)
         }
+        #endif
         loadShell()
     }
 
     @objc private func publishBattery() {
         guard let webView else { return }
+        #if !os(visionOS)
         let device = UIDevice.current
         let state: String
         switch device.batteryState {
@@ -625,6 +638,9 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         if device.batteryLevel >= 0 {
             battery["percent"] = Int((device.batteryLevel * 100).rounded())
         }
+        #else
+        let battery: [String: Any] = ["percent": NSNull(), "state": "unknown"]
+        #endif
         webView.callAsyncJavaScript(
             "window.__HYPRLAND_BATTERY__ = battery; window.dispatchEvent(new Event('hyprland-battery'));",
             arguments: ["battery": battery], in: nil, in: .page, completionHandler: nil)
@@ -642,7 +658,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     }
 
     private func publishKeyboardGeometry(force: Bool = false) {
-        guard traitCollection.userInterfaceIdiom == .pad, let webView, view.bounds.height > 0 else { return }
+        guard (traitCollection.userInterfaceIdiom == .pad || traitCollection.userInterfaceIdiom == .vision), let webView, view.bounds.height > 0 else { return }
         let covered = max(0, view.bounds.maxY - view.keyboardLayoutGuide.layoutFrame.minY)
         // A floating keyboard/shortcut strip doesn't reserve the whole bottom of the desk.
         let inset = covered > 80 ? covered : 0
@@ -657,7 +673,9 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        #if !os(visionOS)
         setNeedsStatusBarAppearanceUpdate()
+        #endif
         setNeedsUpdateOfScreenEdgesDeferringSystemGestures()
     }
 
