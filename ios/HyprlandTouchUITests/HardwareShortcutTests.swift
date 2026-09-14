@@ -20,6 +20,39 @@ final class HardwareShortcutTests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground, file: file, line: line)
     }
 
+    func testBrowserPhysicalShortcuts() {
+        app.terminate()
+        app.launchArguments = ["--bundled", "--browser-shortcuts-test"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["terminal"].firstMatch.waitForExistence(timeout: 20))
+        app.typeKey("b", modifierFlags: [.command, .shift])
+        let returnToTabs = app.buttons["Desktop tabs"].firstMatch
+        if returnToTabs.waitForExistence(timeout: 2), returnToTabs.isHittable { returnToTabs.tap() }
+        let example = app.links["Open Example Domain on phone"]
+        XCTAssertTrue(example.waitForExistence(timeout: 10))
+        example.tap()
+        let page = app.webViews["hyprland.browser.page"]
+        XCTAssertTrue(page.waitForExistence(timeout: 10))
+        XCTAssertTrue(page.staticTexts["Example Domain"].waitForExistence(timeout: 15))
+        app.typeKey("l", modifierFlags: .command)
+        let address = app.textFields["Page address"]
+        XCTAssertTrue(address.waitForExistence(timeout: 5))
+        app.typeText("https://example.com/#draft")
+        XCTAssertEqual(address.value as? String, "https://example.com/#draft")
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        app.typeKey("l", modifierFlags: [.command, .shift])
+        XCTAssertTrue(app.searchFields["Find a tab"].waitForExistence(timeout: 5))
+        app.typeKey("t", modifierFlags: .command)
+        XCTAssertTrue(app.staticTexts["New desktop tab"].waitForExistence(timeout: 5))
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        app.typeKey("w", modifierFlags: [.command, .shift])
+        expectWorkspace("home")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Browser native shortcuts complete"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testPhysicalModifierKeysCycleCloseAndLauncher() {
         // XCUIAutomation sends physical keyboard events; no JavaScript dispatch.
         app.typeKey("f", modifierFlags: [.command, .shift])

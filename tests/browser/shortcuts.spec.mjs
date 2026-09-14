@@ -32,6 +32,7 @@ for(const mod of ['Meta','Control+Alt']){
   await p.keyboard.press('Escape');expect((await state(p)).ov).toBe(false);
  });
  test(`${mod}: every app binding, launcher and help`,async({page:p})=>{
+   await p.evaluate(()=>logic.go(0)); // T launches Terminal from Home; in Terminal it adds a tab.
   for(const [key,app] of [['KeyT','terminal'],['Enter','terminal'],['NumpadEnter','terminal'],['Shift+Enter','browser'],['Shift+NumpadEnter','browser'],['Shift+KeyB','browser'],['Shift+KeyF','files'],['Shift+KeyA','herdr'],['Shift+KeyD','lazydocker'],['Comma','settings']]){
    await p.keyboard.press(`${mod}+${key}`);expect(await p.evaluate(()=>logic.calls.at(-1))).toEqual(['open',app]);
   }

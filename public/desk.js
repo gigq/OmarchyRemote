@@ -155,6 +155,7 @@
     }
     keydown(e){
       const s=this.logic.state,logic=this.logic;
+      if(!this.sheet&&!s.ov&&!s.shade&&!s.launch&&logic.cur()==='browser'&&logic.remote?.app('browser')?.shortcut?.(e))return;
       if(e.key==='Escape'&&!e.metaKey&&!e.ctrlKey&&!e.altKey){
         if(this.sheet){this.closeSheet();e.preventDefault();e.stopImmediatePropagation();return}
         if(editable(e.target))return;
@@ -195,6 +196,7 @@
         for(const b of BINDINGS.filter(b=>b.group===group&&(!b.desk||this.logic.state.desk)&&(!b.browserOnly||!NATIVE))){const row=node('div','desk-sheet-row');row.append(node('kbd','',`${MOD} ${b.keys}`),node('span','',b.label));section.append(row)}
         grid.append(section);
       }
+      if(this.logic.cur()==='browser'){const section=node('section','desk-sheet-group');section.append(node('h3','','Browser (overrides shell keys)'));for(const[keys,text]of (window.HostBrowserApp?.shortcuts||[])){const row=node('div','desk-sheet-row');row.append(node('kbd','',keys),node('span','',text));section.append(row)}grid.prepend(section)}
       sheet.append(grid,node('p','widget-muted desk-sheet-foot','0 selects workspace 10. J needs two or more tiled windows in the same workspace. Use [ / ] to switch workspaces. Text editing keys stay with the focused field. ⌘Space and ⌘` are left to iPadOS. Esc or Done closes this list.'));
       sheet.addEventListener('pointerdown',e=>{if(e.target===sheet)this.closeSheet();e.stopPropagation()});
       this.returnFocus=document.activeElement;this.shell.append(sheet);this.sheet=sheet;close.focus({preventScroll:true});
@@ -203,9 +205,9 @@
     dispose(){this.closeSheet();this.abort.abort()}
   }
   let activeDesk;
-  const nativeKey=({code,shift=false,alt=false})=>{
+  const nativeKey=({code,shift=false,alt=false,ctrl=false,plain=false})=>{
     if(!activeDesk)return false;
-    const event={code,key:code==='Slash'?'/':code,shiftKey:shift,metaKey:true,ctrlKey:false,altKey:alt,repeat:false,target:document.activeElement,
+    const event={code,key:code==='Slash'?'/':code==='Escape'?'Escape':code,shiftKey:shift,metaKey:!ctrl&&!plain,ctrlKey:ctrl,altKey:alt,repeat:false,target:document.activeElement,
       defaultPrevented:false,preventDefault(){this.defaultPrevented=true},stopImmediatePropagation(){}};
     activeDesk.keydown(event);
     return event.defaultPrevented;

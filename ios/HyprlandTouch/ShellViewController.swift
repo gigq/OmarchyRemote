@@ -143,6 +143,9 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
     weak var shell: WKWebView?
     private var page: WKWebView?
     private var appID: String?
+    private(set) var shortcutsActive = false {
+        didSet { if shortcutsActive != oldValue { UIMenuSystem.main.setNeedsRebuild() } }
+    }
     private var webApps: [String: BrowserDeviceBridge] = [:]
     private var observations: [NSKeyValueObservation] = []
     private var pageOwnsKeyboardFocus: Bool {
@@ -197,8 +200,10 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         reset()
     }
     func reset() {
+        shortcutsActive = false
         updateFocus(false)
         observations.removeAll()
+        page?.findInteraction?.dismissFindNavigator()
         page?.stopLoading()
         page?.removeFromSuperview()
         page = nil
@@ -220,9 +225,13 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         browser.scrollView.contentInsetAdjustmentBehavior = .never
         browser.scrollView.panGestureRecognizer.addTarget(self, action: #selector(pageScrolled(_:)))
         browser.allowsBackForwardNavigationGestures = true
+        browser.isFindInteractionEnabled = true
         browser.accessibilityIdentifier = appID.map { "hyprland.webapp." + $0 } ?? "hyprland.browser.page"
         let focus = UITapGestureRecognizer()
         focus.delegate = self
+        focus.cancelsTouchesInView = false
+        focus.delaysTouchesBegan = false
+        focus.delaysTouchesEnded = false
         browser.addGestureRecognizer(focus)
         presenter.view.addSubview(browser)
         page = browser
@@ -253,7 +262,12 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         if page.scrollView.contentOffset.y <= 0 { showControls(false) }
         else if scrollTravel < -20 && page.scrollView.contentSize.height > page.bounds.height { showControls(true) }
     }
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive event: UIEvent) -> Bool {
+        // Focus observation must never participate in trackpad wheel recognition.
+        event.type != .scroll
+    }
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard let page, let touched = touch.view, touched === page || touched.isDescendant(of: page) else { return false }
         publish(focused: true)
         return false // Observe focus without recognizing or cancelling website touches.
     }
@@ -297,12 +311,19 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
             if action == "close" { webApps.removeValue(forKey: id) }
             return
         }
-        if action == "capabilities" { replyHandler(["embedded": true, "webApps": true, "darkMode": darkSource != nil, "dark": forceDark], nil); return }
+        if action == "capabilities" { replyHandler(["nativeFind": true, "shortcuts": true, "embedded": true, "webApps": true, "darkMode": darkSource != nil, "dark": forceDark], nil); return }
+        if action == "context" {
+            guard appID == nil else { replyHandler(nil, "Browser context only"); return }
+            shortcutsActive = body["active"] as? Bool == true
+            replyHandler(["active": shortcutsActive], nil)
+            return
+        }
         if action == "close" { reset(); replyHandler(["closed": true], nil); return }
         if action == "layout" {
             guard let page, let presenter else { replyHandler(["visible": false], nil); return }
             let visible = body["visible"] as? Bool == true
             if !visible {
+                page.findInteraction?.dismissFindNavigator()
                 requestedVisible = false
                 updateFocus(false)
                 page.isHidden = true
@@ -320,7 +341,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
             if let hidden = body["controlsHidden"] as? Bool { controlsHidden = hidden }
             if let opacity = body["opacity"] as? Double, opacity.isFinite { page.alpha = max(0.5, min(1, opacity)) }
             page.frame = frame
-            if let radius = body["radius"] as? Double, radius.isFinite { page.layer.cornerRadius = max(0, min(24, radius * scale)) }
+            if let radius = body["radius"] as? Double, radius.isFinite { page.layer.cornerRadius = max(0, min(min(frame.width, frame.height) / 2, radius * scale)) }
             page.layer.maskedCorners = body["roundedTop"] as? Bool == true ? [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
             requestedVisible = !visibleFrame.isEmpty && !visibleFrame.isNull
             page.isHidden = !requestedVisible
@@ -337,6 +358,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         switch action {
         case "open":
             guard let raw = body["url"] as? String, let url = URL(string: raw), ["https", "http"].contains(url.scheme?.lowercased() ?? ""), url.host != nil else { replyHandler(nil, "Use an http or https URL"); return }
+            page.findInteraction?.dismissFindNavigator()
             page.load(URLRequest(url: url))
         case "dark":
             guard let enabled = body["enabled"] as? Bool, darkSource != nil else { replyHandler(nil, "Dark mode unavailable"); return }
@@ -356,7 +378,31 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         case "snapshot": snapshot()
         case "back": page.goBack()
         case "forward": page.goForward()
-        case "reload": page.reload()
+        case "reload":
+            if body["bypassCache"] as? Bool == true { page.reloadFromOrigin() } else { page.reload() }
+        case "stop": page.stopLoading()
+        case "focus":
+            if body["active"] as? Bool == false {
+                if pageOwnsKeyboardFocus { page.endEditing(true) }
+                shell?.becomeFirstResponder()
+            } else { page.becomeFirstResponder() }
+        case "zoom":
+            guard let value = body["value"] as? Double, value.isFinite else { replyHandler(nil, "Invalid zoom"); return }
+            page.pageZoom = max(0.25, min(5, value))
+            replyHandler(["zoom": page.pageZoom], nil)
+            return
+        case "findOpen":
+            page.becomeFirstResponder()
+            page.findInteraction?.presentFindNavigator(showingReplace: false)
+        case "findNext":
+            if page.findInteraction?.isFindNavigatorVisible != true { page.findInteraction?.presentFindNavigator(showingReplace: false) }
+            else if body["backwards"] as? Bool == true { page.findInteraction?.findPrevious() }
+            else { page.findInteraction?.findNext() }
+        case "findClose":
+            let closed = page.findInteraction?.isFindNavigatorVisible == true
+            page.findInteraction?.dismissFindNavigator()
+            replyHandler(["closed": closed], nil)
+            return
         default: replyHandler(nil, "Unknown browser action"); return
         }
         replyHandler(["opened": true], nil)
@@ -425,7 +471,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     // Register shell actions with UIKit: DOM keydown alone loses commands to iPadOS.
     // Only claim arrows outside text fields; clipboard and OS launcher keys stay native.
     override var keyCommands: [UIKeyCommand]? {
-        guard (traitCollection.userInterfaceIdiom == .pad || traitCollection.userInterfaceIdiom == .vision) else { return super.keyCommands }
+        guard traitCollection.userInterfaceIdiom == .pad || traitCollection.userInterfaceIdiom == .vision || (browserDevice.shortcutsActive && GCKeyboard.coalesced != nil) else { return super.keyCommands }
         var bindings: [(String, String, Bool, String)] = [
             ("j", "KeyJ", false, "Next window in workspace"),
             ("j", "KeyJ", true, "Previous window in workspace"),
@@ -462,7 +508,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
                 (UIKeyCommand.inputDownArrow, "ArrowDown", true, "Swap window below")
             ]
         }
-        return bindings.map { input, code, shift, title in
+        var commands = bindings.map { input, code, shift, title in
             // Shift-Command-3/4 belong to iPadOS screenshots; use Option for numbered moves.
             let option = shift && code.hasPrefix("Digit")
             let modifiers: UIKeyModifierFlags = option ? [.command, .alternate] : shift ? [.command, .shift] : [.command]
@@ -472,6 +518,41 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
             command.wantsPriorityOverSystemBehavior = true
             return command
         }
+        if browserDevice.shortcutsActive {
+            func add(_ input: String, _ code: String, _ flags: UIKeyModifierFlags = .command, _ title: String) {
+                commands.removeAll { $0.input == input && $0.modifierFlags == flags }
+                let command = UIKeyCommand(title: title, action: #selector(handleShellKey(_:)), input: input,
+                    modifierFlags: flags, propertyList: ["code": code, "shift": flags.contains(.shift),
+                    "alt": flags.contains(.alternate), "ctrl": flags.contains(.control),
+                    "plain": !flags.contains(.command) && !flags.contains(.control)])
+                command.wantsPriorityOverSystemBehavior = true
+                commands.append(command)
+            }
+            for (input, code, title) in [
+                ("l", "KeyL", "Address"), ("n", "KeyN", "New desktop window"), ("t", "KeyT", "New tab"), ("w", "KeyW", "Close tab"),
+                ("f", "KeyF", "Find"), ("r", "KeyR", "Reload"), ("g", "KeyG", "Find next"),
+                ("=", "Equal", "Zoom in"), ("+", "Equal", "Zoom in"), ("-", "Minus", "Zoom out"),
+                ("[", "BracketLeft", "Back"), ("]", "BracketRight", "Forward")
+            ] { add(input, code, .command, title) }
+            for number in 0...9 { add(String(number), "Digit\(number)", .command, number == 0 ? "Reset zoom" : "Select tab") }
+            for (input, code, title) in [
+                ("r", "KeyR", "Reload from origin"), ("g", "KeyG", "Find previous"),
+                ("t", "KeyT", "Reopen tab"), ("w", "KeyW", "Close Browser"),
+                ("l", "KeyL", "Tab manager"), ("f", "KeyF", "Toggle fullscreen"), ("+", "Equal", "Zoom in")
+            ] { add(input, code, [.command, .shift], title) }
+            add(UIKeyCommand.inputLeftArrow, "ArrowLeft", [.command, .alternate], "Previous tab")
+            add(UIKeyCommand.inputRightArrow, "ArrowRight", [.command, .alternate], "Next tab")
+            add(UIKeyCommand.inputPageUp, "PageUp", .control, "Previous tab")
+            add(UIKeyCommand.inputPageDown, "PageDown", .control, "Next tab")
+            add("\t", "Tab", .control, "Next tab")
+            add("\t", "Tab", [.control, .shift], "Previous tab")
+            add(UIKeyCommand.inputEscape, "Escape", [], "Dismiss Browser controls")
+            for (input, code) in [(UIKeyCommand.f2, "F2"), (UIKeyCommand.f3, "F3"), (UIKeyCommand.f5, "F5")] {
+                add(input, code, [], "Browser action")
+                add(input, code, .shift, "Browser alternate action")
+            }
+        }
+        return commands
     }
 
     fileprivate func updateKeyboardEditing(_ editing: Bool) {
@@ -511,26 +592,46 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
             source: "window.__OMARCHY_PLATFORM__ = 'visionos';",
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
         #endif
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--browser-shortcuts-test"), prefersBundle {
+            // Isolated XCTest fixture: no browser actions or other API calls reach the host.
+            configuration.userContentController.addUserScript(WKUserScript(source: """
+                let fixtureApps;
+                Object.defineProperty(window, 'HyprlandApps', {configurable:true,
+                    get:()=>fixtureApps, set:value=>{fixtureApps=value; value.catalog.browser.offline=true;}});
+                const browserFixture = {instances:[{id:'qa',label:'QA Browser',workspace_write:true,workspaces:[],windows:[{id:1,focused:true,tabs:[
+                    {id:10,title:'Example Domain',url:'https://example.com/',index:0,active:true},
+                    {id:11,title:'Other Example',url:'https://example.org/',index:1,active:false}
+                ]}]}]};
+                const originalFetch = window.fetch.bind(window);
+                window.fetch = async (url, options) => {
+                    const path = String(url);
+                    if (path === '/api/browser/snapshot') return new Response(JSON.stringify(browserFixture), {status:200});
+                    if (path === '/api/browser/action') return new Response(JSON.stringify({ok:true}), {status:200});
+                    if (path.startsWith('/api/')) return new Response('{}', {status:503});
+                    return originalFetch(url, options);
+                };
+                """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
+        #endif
         // Keep shell preferences on disk, separate from embedded websites and their logins.
         configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: UUID(uuidString: "D4D78234-4474-4CD8-9D29-C9F226134F66")!)
         configuration.userContentController.add(storageBridge, name: "shellStorage")
         refreshDeviceIdentity(in: configuration.userContentController)
-        if (traitCollection.userInterfaceIdiom == .pad || traitCollection.userInterfaceIdiom == .vision) {
-            keyboardState.owner = self
-            configuration.userContentController.add(keyboardState, name: "shellKeyboard")
-            configuration.userContentController.addUserScript(WKUserScript(source: """
-                (() => {
-                    const report = () => {
-                        const el = document.activeElement;
-                        const editing = !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
-                        window.webkit.messageHandlers.shellKeyboard.postMessage(editing);
-                    };
-                    document.addEventListener('focusin', report, true);
-                    document.addEventListener('focusout', () => queueMicrotask(report), true);
-                    document.addEventListener('DOMContentLoaded', report);
-                })();
-                """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        }
+        keyboardState.owner = self
+        configuration.userContentController.add(keyboardState, name: "shellKeyboard")
+        configuration.userContentController.addUserScript(WKUserScript(source: """
+            (() => {
+                const report = () => {
+                    const el = document.activeElement;
+                    const editing = !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+                    window.webkit.messageHandlers.shellKeyboard.postMessage(editing);
+                };
+                document.addEventListener('focusin', report, true);
+                document.addEventListener('focusout', () => queueMicrotask(report), true);
+                document.addEventListener('DOMContentLoaded', report);
+            })();
+            """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         browserDevice.presenter = self
         configuration.userContentController.addScriptMessageHandler(browserDevice, contentWorld: .page, name: "browserDevice")
         configuration.userContentController.addScriptMessageHandler(weatherDevice, contentWorld: .page, name: "weatherDevice")
@@ -608,6 +709,10 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         ])
         if developmentURL != nil {
             let sourceGesture = UILongPressGestureRecognizer(target: self, action: #selector(showSourceMenu(_:)))
+            // This debug shortcut is for two fingers on the touchscreen, never a trackpad.
+            sourceGesture.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
+            sourceGesture.delaysTouchesBegan = false
+            sourceGesture.delaysTouchesEnded = false
             sourceGesture.numberOfTouchesRequired = 2
             sourceGesture.minimumPressDuration = 0.8
             sourceGesture.cancelsTouchesInView = false

@@ -104,6 +104,31 @@ The native shell uses persistent website storage plus a native preferences mirro
 
 The Rust backend stores the catalog and per-device backups in `settings.sqlite3` under its application data directory (`$XDG_DATA_HOME/omarchy-remote`, or the standard user data directory). Include this database in host backups; use SQLite’s backup API for a consistent copy while the service is running. The schema is versioned, updates use revision checks, and deleted web-app records prevent stale devices from reinstalling removed apps during migration. Browser tests isolate these APIs so they do not create records in the live catalog.
 
+## Browser navigation and keyboard
+
+Browser reopens the last viewed HTTP(S) tab on this device if it is still in the desktop snapshot. The saved selection uses the extension's stable profile ID across bridge reconnections. A closed or internal tab falls back to the tab manager; a disconnected profile keeps its selection for reconnection. The back chevron in Browser opens the tab manager explicitly. In its search field, Return opens the first matching web tab. Website navigation still updates the selected desktop tab's URL.
+
+When Browser is active, its keyboard commands take precedence over conflicting shell commands. The `⌘ /` shortcut list includes Browser commands. Clipboard and website text editing stay native. Find uses WebKit’s native search panel, keeping the query and match navigation in the website’s own view.
+
+| Keys | Action |
+| --- | --- |
+| ⌘ L | Select address; in the manager, search tabs |
+| ⌘ ⇧ L or F2 | Open and search the tab manager |
+| ⌘ T / ⌘ N | Create a desktop tab / window (enter its URL) |
+| ⌘ W | Close the current desktop tab and select the next available tab |
+| ⌘ ⇧ T | Reopen a tab closed here, restoring its URL |
+| Ctrl Tab / Ctrl ⇧ Tab, Ctrl PageDown / PageUp | Next / previous openable tab across profiles and windows |
+| ⌘ ⌥ → / ← | Next / previous openable tab |
+| ⌘ 1–8 / ⌘ 9 | Numbered tab / last openable tab in the current desktop window |
+| ⌘ [ / ] | Page back / forward |
+| ⌘ R / ⌘ ⇧ R, F5 / ⇧ F5 | Reload / reload bypassing cache |
+| ⌘ F, ⌘ G / ⌘ ⇧ G, F3 / ⇧ F3 | Find in page, next / previous match |
+| ⌘ + / − / 0 | Page zoom in / out / reset |
+| Escape | Dismiss dialog/find/options, otherwise stop loading |
+| ⌘ ⇧ W / ⌘ ⇧ F | Close Browser's shell window / toggle its fullscreen layout |
+
+Use ⌘ E for Expo, ⌘ J / ⇧ J for adjacent shell panes, and ⌘ Return for Terminal while Browser owns the usual tab keys. Native shortcut interception and find/zoom require build 27 or later. These commands operate the embedded WebKit page or the desktop tab adapter; they do not reproduce Vivaldi-only features such as panels, bookmarks, command chains, or DevTools. Reopening a tab restores its URL, not its old page history or form state. The last tab and the last 20 tabs closed here are stored locally and included in the native local preferences mirror, not the shared installed-app catalog.
+
 ## Native iPhone, iPad, and Vision Pro app
 
 `ios/HyprlandTouch.xcodeproj` is a UIKit/WKWebView wrapper for iOS 18 or later and native visionOS with the shared **HyprlandTouch** scheme and automatic development signing. It hides the status bar, defers the system edge gestures so the shell's swipes work, registers native iPad key commands and routes them to the shell, adds a Core Location bridge for the weather widget, and opens browser pages in an isolated WKWebView inside the themed Browser window.

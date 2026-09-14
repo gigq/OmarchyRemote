@@ -69,7 +69,7 @@ test('Embedded iPad page follows tiling, fullscreen, rotation and app disposal',
  const layout=()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1));
  await expect.poll(async()=>(await layout())?.visible).toBe(true);
  await p.keyboard.press('Meta+Comma');await p.waitForTimeout(600);
- const tiled=await layout();expect(tiled.radius).toBe(14);expect(tiled.rect[2]).toBeLessThan(600);
+ const tiled=await layout();expect(tiled.radius).toBe(16);expect(tiled.rect[2]).toBeLessThan(600);
  await p.evaluate(()=>window.dispatchEvent(new CustomEvent('host-browser-state',{detail:{focused:true}})));
  await expect(p.locator('.desk-ws-label:visible')).toHaveText('browser');
  await p.keyboard.press('Meta+ArrowRight');
@@ -79,7 +79,7 @@ test('Embedded iPad page follows tiling, fullscreen, rotation and app disposal',
  await expect.poll(async()=>(await layout())?.visible).toBe(true);
  await p.setViewportSize({width:834,height:1194});await p.waitForTimeout(600);
  const portrait=await layout();expect(portrait.viewport).toBe(834);expect(portrait.rect[0]+portrait.rect[2]).toBeLessThanOrEqual(834);expect(portrait.rect[1]+portrait.rect[3]).toBeLessThan(1194);
- await p.keyboard.press('Meta+ArrowUp');await p.keyboard.press('Meta+w');
+ await p.keyboard.press('Meta+ArrowUp');await p.keyboard.press('Meta+Shift+w');
  await expect.poll(()=>p.evaluate(()=>window.browserCommands.some(q=>q.action==='close'))).toBe(true);
 });
 
