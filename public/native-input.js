@@ -2,8 +2,8 @@
 (() => {
   const sentinel='\u200b';
   class NativeInput {
-    constructor(root,{message=false,dismissOnSend=false,draftStore=null,send,key,focus,hide}){
-      this.draftStore=draftStore;this.dismissOnSend=dismissOnSend;this.send=send;this.key=key;this.onFocus=focus;this.onHide=hide;this.message=message;this.drafts=new Map();this.draft='';this.ctrl=false;this.composing=false;
+    constructor(root,{message=false,dismissOnSend=false,draftStore=null,compactControls=false,send,key,focus,hide}){
+      this.compactControls=compactControls;this.draftStore=draftStore;this.dismissOnSend=dismissOnSend;this.send=send;this.key=key;this.onFocus=focus;this.onHide=hide;this.message=message;this.drafts=new Map();this.draft='';this.ctrl=false;this.composing=false;
       this.element=document.createElement('div');this.element.className='native-input-panel';this.element.hidden=true;
       this.tools=document.createElement('div');this.tools.className='native-input-tools';this.element.append(this.tools);
       const button=(text,fn)=>{const b=document.createElement('button');b.type='button';b.textContent=text;b.setAttribute('aria-label',text);b.onpointerdown=e=>{e.stopPropagation();e.preventDefault()};b.onclick=e=>{e.stopPropagation();fn()};this.tools.append(b);return b};
@@ -33,6 +33,7 @@
         if(special[e.key]&&(!this.message||['Escape','Tab'].includes(e.key))){e.preventDefault();this.key(special[e.key],{});if(!this.message)this.reset()}
       };
       this.draftStatus=document.createElement('p');this.draftStatus.className='theme-note';this.draftStatus.setAttribute('role','status');this.draftStatus.hidden=true;this.element.append(this.draftStatus);
+      if(this.compactControls){this.element.classList.add('herdr-composer');this.mode.classList.add('native-mode');this.hideButton.classList.add('native-dismiss')}
       this.configure();
     }
     loadDraft(id){
@@ -57,7 +58,8 @@
       }catch{this.draftStatus.textContent='Draft could not be saved on this device. Keep this window open or copy your text.';this.draftStatus.hidden=false}
     }
     saveDraft(){if(this.message){this.draft=this.field.value;this.storeDraft(this.id,this.draft)}}
-    configure(){this.tools.hidden=this.message;this.mode.textContent=this.message?'Message':'Keys';this.field.setAttribute('aria-label',this.message?'Message to host':'Direct terminal keys');this.field.setAttribute('autocorrect',this.message?'on':'off');this.field.setAttribute('enterkeyhint',this.message?'send':'enter');this.field.setAttribute('autocapitalize','off');this.field.spellcheck=this.message;this.field.placeholder=this.message?'Write a message…':'';this.submit.textContent=this.message?'Send':'Return';this.field.value=this.message?this.draft:sentinel;this.field.rows=this.message?2:1;this.clearCtrl()}
+    icon(button,path,label){button.innerHTML='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+path+'"/></svg>';button.title=label}
+    configure(){this.tools.hidden=this.message;this.mode.textContent=this.message?'Message':'Keys';this.field.setAttribute('aria-label',this.message?'Message to host':'Direct terminal keys');this.field.setAttribute('autocorrect',this.message?'on':'off');this.field.setAttribute('enterkeyhint',this.message?'send':'enter');this.field.setAttribute('autocapitalize','off');this.field.spellcheck=this.message;this.field.placeholder=this.message?'Write a message…':'';this.submit.textContent=this.message?'Send':'Return';if(this.compactControls){this.icon(this.mode,this.message?'M21 11a8 8 0 0 1-8 8H7l-5 3V11a8 8 0 0 1 8-8h3a8 8 0 0 1 8 8Z':'M3 5h18v14H3ZM7 9h.01M11 9h.01M15 9h.01M18 9h.01M7 12h.01M11 12h.01M15 12h.01M18 12h.01M8 16h8',this.message?'Message mode · switch to keys':'Keys mode · switch to message');this.icon(this.submit,this.message?'m22 2-7 20-4-9-9-4 20-7ZM11 13 22 2':'M20 5v8H4m5-5-5 5 5 5',this.message?'Send':'Return');this.submit.setAttribute('aria-label',this.message?'Send':'Return');this.icon(this.hideButton,'m6 9 6 6 6-6','Hide keyboard')}this.field.value=this.message?this.draft:sentinel;this.field.rows=this.message?2:1;this.clearCtrl()}
     reset(){this.field.value=sentinel;this.field.setSelectionRange(1,1)}
     clearCtrl(){this.ctrl=false;this.ctrlButton.setAttribute('aria-pressed','false')}
     sendText(text){if(this.ctrl&&text){this.key(Array.from(text)[0],{ctrl:true});text=Array.from(text).slice(1).join('');this.clearCtrl()}if(text)this.send(text,false)}

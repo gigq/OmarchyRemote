@@ -19,6 +19,14 @@ for(const viewport of [{width:1194,height:834},{width:402,height:874}]){
   await expect(tabs.getByRole('button',{name:'Agent four',exact:true})).toBeVisible();
   snapshot.tabs[1].label='Renamed in Herd';stream.send(JSON.stringify({type:'snapshot',snapshot}));
   await expect(tabs.getByRole('button',{name:'Renamed in Herd',exact:true})).toHaveAttribute('aria-pressed','true');
+  await p.locator('.herdr-output').click();
+  const composer=p.locator('.herdr-composer');await expect(composer).toBeVisible();
+  const field=composer.locator('textarea');await field.fill('A draft ready for the next step.');
+  await expect(composer.getByRole('button',{name:'Send',exact:true}).locator('svg')).toHaveCount(1);
+  if(viewport.width>600){
+   const box=await field.boundingBox();
+   for(const name of ['Switch typing mode','Send','Hide keyboard']){const b=await composer.getByRole('button',{name,exact:true}).boundingBox();expect(Math.abs(b.y+b.height/2-box.y-box.height/2)).toBeLessThan(2)}
+  }
   await p.screenshot({path:`artifacts/browser/herdr-tabs-${viewport.width}.png`});
  });
 }
