@@ -30,6 +30,14 @@ for(const viewport of [{width:1194,height:834},{width:402,height:874}]){
   }
   if(viewport.width>600){await p.evaluate(()=>document.documentElement.classList.add('hardware-keyboard'));await expect(composer.getByRole('button',{name:'Hide keyboard',exact:true})).toBeHidden()}
   await p.screenshot({path:`artifacts/browser/herdr-tabs-${viewport.width}.png`});
+  if(viewport.width<600){
+   await composer.getByRole('button',{name:'Switch typing mode'}).click();
+   await expect(composer.getByRole('button',{name:'Tab',exact:true})).toBeHidden();await expect(composer.getByRole('button',{name:'Ctrl',exact:true})).toBeHidden();
+   const mode=await composer.getByRole('button',{name:'Switch typing mode'}).boundingBox(),hide=await composer.getByRole('button',{name:'Hide keyboard'}).boundingBox();
+   for(const name of ['Esc','←','↑','↓','→']){const b=await composer.getByRole('button',{name,exact:true}).boundingBox();expect(b.x).toBeGreaterThanOrEqual(mode.x+mode.width);expect(b.x+b.width).toBeLessThanOrEqual(hide.x);expect(Math.abs(b.y-mode.y)).toBeLessThan(2)}
+   await p.screenshot({path:'artifacts/browser/herdr-phone-keys.png'});
+   await composer.getByRole('button',{name:'Switch typing mode'}).click();await expect(field).toHaveValue('A draft ready for the next step.');
+  }
  });
 }
 

@@ -33,7 +33,7 @@
         if(special[e.key]&&(!this.message||['Escape','Tab'].includes(e.key))){e.preventDefault();this.key(special[e.key],{});if(!this.message)this.reset()}
       };
       this.draftStatus=document.createElement('p');this.draftStatus.className='theme-note';this.draftStatus.setAttribute('role','status');this.draftStatus.hidden=true;this.element.append(this.draftStatus);
-      if(this.compactControls){this.element.classList.add('herdr-composer');this.mode.classList.add('native-mode');this.hideButton.classList.add('native-dismiss')}
+      if(this.compactControls){this.header.insertBefore(this.tools,this.hideButton);this.element.classList.add('herdr-composer');this.mode.classList.add('native-mode');this.hideButton.classList.add('native-dismiss')}
       this.configure();
     }
     loadDraft(id){

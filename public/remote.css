@@ -122,3 +122,11 @@
 @media (min-width:600px) and (min-height:600px) {
   .herdr-project-label { display:block; align-self:center; flex:none; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-right:4px; color:var(--theme-secondary); font:11px system-ui; }
 }
+@media (max-width:599px), (max-height:599px) {
+  .herdr-composer { position:relative; }
+  .herdr-composer .native-input-header { gap:4px; }
+  .herdr-composer .native-input-tools { flex:1; min-width:0; gap:3px; }
+  .herdr-composer .native-input-tools button { padding:0; min-width:0; min-height:44px; }
+  .herdr-composer .native-input-tools :is([aria-label="Tab"],[aria-label="Ctrl"]) { display:none; }
+  .herdr-composer .native-input-header:has(.native-input-tools:not([hidden])) .herdr-latest { position:absolute; bottom:calc(100% + 8px); right:0; margin:0; }
+}
