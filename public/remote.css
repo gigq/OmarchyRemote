@@ -97,7 +97,7 @@
 .herdr-detail-bar > button { flex:none; }
 
 /* Herd uses neutral composer surfaces and compact, labelled icon controls. */
-.herdr-composer .native-input { background:color-mix(in srgb,var(--theme-background) 95%,var(--theme-foreground)); }
+.herdr-composer .native-input { background:oklch(from color-mix(in srgb,var(--theme-background) 88%,var(--theme-foreground)) l 0 h); }
 .herdr-composer .native-input:focus { outline-color:var(--theme-accent); }
 .herdr-composer button svg { display:block; margin:auto; pointer-events:none; }
 .herdr-composer .native-mode,.herdr-composer .native-dismiss,.herdr-composer .native-send { width:44px; min-height:44px; padding:0; }
