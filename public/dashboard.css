@@ -89,7 +89,7 @@
 .dashboard-pin-panel > button[aria-pressed=true] { border-color:var(--theme-accent); color:var(--theme-accent); }
 .dashboard-pin-panel > button[aria-pressed=true]::after { content:'✓'; float:right; }
 #touch-shell.expo-mode [data-workspace]::after { inset:0; border-width:6px; border-radius:var(--workspace-expo-radius); }
-#remote-terminal-app { inset:64px 24px 44px; }
+#remote-terminal-app { inset:76px 24px 44px; }
 #remote-terminal-app.with-keyboard { bottom:max(40px,calc(var(--keyboard-inset,0px) + 8px)); }
 .terminal-close-confirm { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:12px; margin-bottom:10px; border:1px solid var(--theme-yellow); border-radius:14px; font-size:12px; background:var(--theme-surface); }
 .terminal-close-confirm > span { flex-basis:100%; }
@@ -105,7 +105,7 @@
 .hardware-keyboard #remote-terminal-app .native-input-panel:has(.native-input[aria-label="Direct terminal keys"]) { position:absolute; width:1px; height:1px; overflow:hidden; padding:0; opacity:0; }
 
 #remote-herdr-app .herdr-connection:has([hidden]) { display:none; }
-#remote-herdr-app { top:64px; }
+#remote-herdr-app { top:76px; }
 #remote-herdr-app .herdr-metadata { display:none; }
 .files-heading:empty { display:none; }
-.browser-app:not(.browser-reading), .files-app { top:64px; }
+.browser-app:not(.browser-reading), .files-app { top:70px; }

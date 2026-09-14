@@ -16,7 +16,7 @@
   --theme-blue: #31748f;
   --theme-cyan: #56949f;
 }
-.theme-settings { position:absolute; inset:64px 20px 42px; overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; padding:8px 0 20px; }
+.theme-settings { position:absolute; inset:72px 20px 42px; overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; padding:0 0 20px; }
 .theme-settings header { padding:0 4px 22px; }
 .theme-eyebrow { color:var(--theme-accent); font-size:11px; }
 .theme-settings h1 { font:500 32px 'Space Grotesk',sans-serif; letter-spacing:-1px; margin:14px 0 6px; }
