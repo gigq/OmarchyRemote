@@ -110,7 +110,7 @@
       }catch(e){this.setStatus('unavailable · retrying…');this.retry=setTimeout(()=>this.connect(),2500)}finally{this.connecting=false}
     }
     resume(){if(this.connecting||this.exited||this.disposed)return;const old=this.ws;this.ws=null;this.ready=false;old?.close();this.connect()}
-    exit(){if(this.exited)return;this.exited=true;this.ready=false;this.ws?.close();this.status.textContent=this.app==='terminal'?'Shell exited':`${this.app} exited`;this.restart.hidden=false;this.onExit?.();}
+    exit(){if(this.exited)return;this.exited=true;this.ready=false;this.ws?.close();if(this.app==='terminal'){this.onExit?.();return}this.status.textContent=`${this.app} exited`;this.restart.hidden=false;}
     key(input){return this.input(input.data)}
     setStatus(text){this.status.hidden=text==='connected';this.statusText=text;this.status.textContent=`${HyprlandApps.host.name} · ${text}`}
     hostChanged(){this.setStatus(this.statusText)}
