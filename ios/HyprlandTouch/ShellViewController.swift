@@ -394,6 +394,9 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     private var loadGeneration = 0
     private var loadTimeout: DispatchWorkItem?
     private var usingOfflineFallback = false
+    private var contentNeedsRecovery = false
+    private var recoveryAttempts: [Date] = []
+    private var reconnectTask: Task<Void, Never>?
     private var developmentURL: URL? {
         #if DEBUG
         ShellSource.liveURL
@@ -488,16 +491,8 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         let configuration = WKWebViewConfiguration()
         // Keep shell preferences on disk, separate from embedded websites and their logins.
         configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: UUID(uuidString: "D4D78234-4474-4CD8-9D29-C9F226134F66")!)
-        let identityKey = "omarchyDeviceIdentifier"
-        let deviceID = UserDefaults.standard.string(forKey: identityKey) ?? UUID().uuidString.lowercased()
-        UserDefaults.standard.set(deviceID, forKey: identityKey)
         configuration.userContentController.add(storageBridge, name: "shellStorage")
-        let identity: [String: Any] = ["id": deviceID, "name": UIDevice.current.model, "snapshot": storageBridge.snapshot]
-        if let data = try? JSONSerialization.data(withJSONObject: identity), let json = String(data: data, encoding: .utf8) {
-            configuration.userContentController.addUserScript(WKUserScript(
-                source: "window.__OMARCHY_DEVICE__ = " + json + ";",
-                injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        }
+        refreshDeviceIdentity(in: configuration.userContentController)
         if traitCollection.userInterfaceIdiom == .pad {
             keyboardState.owner = self
             configuration.userContentController.add(keyboardState, name: "shellKeyboard")
@@ -595,8 +590,8 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
             sourceGesture.minimumPressDuration = 0.8
             sourceGesture.cancelsTouchesInView = false
             view.addGestureRecognizer(sourceGesture)
-            NotificationCenter.default.addObserver(self, selector: #selector(resumeLive), name: UIApplication.willEnterForegroundNotification, object: nil)
         }
+        NotificationCenter.default.addObserver(self, selector: #selector(resumeLive), name: UIApplication.didBecomeActiveNotification, object: nil)
         UIDevice.current.isBatteryMonitoringEnabled = true
         for name in [UIDevice.batteryLevelDidChangeNotification, UIDevice.batteryStateDidChangeNotification, UIApplication.didBecomeActiveNotification] {
             NotificationCenter.default.addObserver(self, selector: #selector(publishBattery), name: name, object: nil)
@@ -654,7 +649,28 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         setNeedsUpdateOfScreenEdgesDeferringSystemGestures()
     }
 
+    private var deviceIdentityScript: WKUserScript?
+    private func refreshDeviceIdentity(in controller: WKUserContentController) {
+        let identityKey = "omarchyDeviceIdentifier"
+        let deviceID = UserDefaults.standard.string(forKey: identityKey) ?? UUID().uuidString.lowercased()
+        UserDefaults.standard.set(deviceID, forKey: identityKey)
+        let identity: [String: Any] = ["id": deviceID, "name": UIDevice.current.model, "snapshot": storageBridge.snapshot]
+        guard let data = try? JSONSerialization.data(withJSONObject: identity),
+              let json = String(data: data, encoding: .utf8) else { return }
+        let remaining = controller.userScripts.filter { $0 !== deviceIdentityScript }
+        controller.removeAllUserScripts()
+        let script = WKUserScript(source: "window.__OMARCHY_DEVICE__ = " + json + ";",
+                                 injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        deviceIdentityScript = script
+        controller.addUserScript(script)
+        for existing in remaining { controller.addUserScript(existing) }
+    }
+
     @objc private func loadShell() {
+        refreshDeviceIdentity(in: webView.configuration.userContentController)
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        contentNeedsRecovery = false
         loadGeneration += 1
         loadTimeout?.cancel()
         remoteNavigation = nil
@@ -684,6 +700,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
             return
         }
         webRoot = root
+        refreshDeviceIdentity(in: webView.configuration.userContentController)
         retryButton.isHidden = true
         webView.loadFileURL(root.appendingPathComponent("index.html"), allowingReadAccessTo: root)
     }
@@ -698,6 +715,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         sourceButton.isHidden = false
         logger.notice("Live shell unavailable; using bundled copy")
         loadBundledShell()
+        scheduleLiveReconnect()
     }
 
     @objc private func retryLive() {
@@ -706,7 +724,53 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     }
 
     @objc private func resumeLive() {
-        if usingOfflineFallback && !prefersBundle { loadShell() }
+        if contentNeedsRecovery || !retryButton.isHidden {
+            recoverContent()
+        } else if usingOfflineFallback && !prefersBundle {
+            loadShell()
+        }
+    }
+
+    private func recoverContent() {
+        guard UIApplication.shared.applicationState == .active else {
+            contentNeedsRecovery = true
+            return
+        }
+        let now = Date()
+        recoveryAttempts = recoveryAttempts.filter { now.timeIntervalSince($0) < 60 }
+        guard recoveryAttempts.count < 3 else {
+            contentNeedsRecovery = false
+            retryButton.isHidden = false
+            return
+        }
+        recoveryAttempts.append(now)
+        logger.notice("Recovering web content automatically")
+        loadShell()
+    }
+
+    // Probe without replacing the usable offline page on every failed attempt.
+    private func scheduleLiveReconnect() {
+        reconnectTask?.cancel()
+        guard let url = developmentURL, !prefersBundle else { return }
+        reconnectTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(15)) } catch { return }
+                guard let self, self.usingOfflineFallback, !self.prefersBundle else { return }
+                guard UIApplication.shared.applicationState == .active else { continue }
+                let generation = self.loadGeneration
+                var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 4)
+                request.httpMethod = "HEAD"
+                do {
+                    let (_, response) = try await URLSession.shared.data(for: request)
+                    guard !Task.isCancelled, self.loadGeneration == generation else { return }
+                    guard UIApplication.shared.applicationState == .active else { continue }
+                    if (response as? HTTPURLResponse)?.statusCode == 200 {
+                        self.loadShell()
+                        return
+                    }
+                } catch { /* Keep the local shell usable until the host returns. */ }
+            }
+        }
     }
 
     @objc private func showSourceMenu(_ gesture: UILongPressGestureRecognizer) {
@@ -766,8 +830,9 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        logger.error("Web content process terminated; offering reload")
-        retryButton.isHidden = false
+        logger.error("Web content process terminated; recovering")
+        contentNeedsRecovery = true
+        recoverContent()
     }
 
     private func showLoadFailure(_ error: Error) {
