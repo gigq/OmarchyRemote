@@ -97,7 +97,7 @@
 .herdr-detail-bar > button { flex:none; }
 
 /* Herd uses theme surfaces and a distinct palette color for composer controls. */
-.herdr-composer .native-input { background:var(--theme-surface); border-color:var(--theme-magenta); }
+.herdr-composer .native-input { background:var(--theme-terminal); border-color:var(--theme-magenta); }
 .herdr-composer .native-input:focus { outline-color:var(--theme-magenta); }
 .herdr-composer button svg { display:block; margin:auto; pointer-events:none; }
 .herdr-composer .native-mode,.herdr-composer .native-dismiss,.herdr-composer .native-send { width:44px; min-height:44px; padding:0; }
