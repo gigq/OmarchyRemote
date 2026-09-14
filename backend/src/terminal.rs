@@ -8,6 +8,44 @@ use std::{
 };
 use tokio::sync::broadcast;
 
+fn compact_prompt(source: &str) -> String {
+    // add_newline is a root boolean, before any TOML section headers.
+    let split = source.find("\n[").unwrap_or(source.len());
+    let (root, sections) = source.split_at(split);
+    let pattern =
+        regex::Regex::new(r"(?m)^\s*add_newline\s*=\s*(true|false)[ \t]*(#.*)?$").unwrap();
+    let root = if pattern.is_match(root) {
+        pattern.replace(root, "add_newline = false").into_owned()
+    } else {
+        format!("add_newline = false\n{root}")
+    };
+    format!("{root}{sections}")
+}
+fn compact_prompt_config() -> Result<std::path::PathBuf> {
+    let config = std::env::var_os("STARSHIP_CONFIG")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            std::env::var_os("XDG_CONFIG_HOME")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| crate::apps::home().unwrap_or_default().join(".config"))
+                .join("starship.toml")
+        });
+    let source = match std::fs::read_to_string(config) {
+        Ok(source) => source,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(error.into()),
+    };
+    let dir = crate::apps::data_dir()?;
+    let path = dir.join("starship-remote.toml");
+    let temporary = dir.join(format!(".starship-{}.toml", uuid::Uuid::new_v4()));
+    crate::uploads::write_new(&temporary, compact_prompt(&source).as_bytes())?;
+    if let Err(error) = std::fs::rename(&temporary, &path) {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(error.into());
+    }
+    Ok(path)
+}
+
 pub struct Output {
     pub sequence: u64,
     pub parser: vt100::Parser,
@@ -31,6 +69,10 @@ impl Terminal {
             let mut cmd =
                 CommandBuilder::new(std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into()));
             cmd.arg("-l");
+            // Give remote shells a compact prompt without changing the desktop config.
+            if let Ok(path) = compact_prompt_config() {
+                cmd.env("STARSHIP_CONFIG", path);
+            }
             return Self::spawn_command_at(cmd, program, cwd, true);
         }
         let Some(app) = crate::apps::tui(program) else {
@@ -207,5 +249,19 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(30));
         }
         terminal.input(b"exit\r").unwrap();
+    }
+}
+
+#[cfg(test)]
+mod prompt_tests {
+    #[test]
+    fn removes_prompt_gap_without_changing_modules() {
+        assert_eq!(
+            super::compact_prompt(
+                "add_newline = true\nformat = '$directory'\n[directory]\ntruncation_length = 2\n"
+            ),
+            "add_newline = false\nformat = '$directory'\n[directory]\ntruncation_length = 2\n"
+        );
+        assert_eq!(super::compact_prompt(""), "add_newline = false\n");
     }
 }
