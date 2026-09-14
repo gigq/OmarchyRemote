@@ -1,8 +1,8 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 test('all Omarchy themes apply to shell and ANSI output and persist',async({page})=>{
  await page.route('**/api/**',r=>r.abort());
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto('/native/');await page.getByText('settings',{exact:true}).first().click();
+ await page.goto('/native/');await page.keyboard.press('Meta+Comma');
  await expect(page.locator('.theme-choice')).toHaveCount(23);
  await page.getByRole('button',{name:'Catppuccin Latte',exact:true}).click();
  await expect(page.locator('html')).toHaveAttribute('data-theme','catppuccin-latte');
@@ -10,7 +10,7 @@ test('all Omarchy themes apply to shell and ANSI output and persist',async({page
  await expect(page.locator('.theme-settings')).toHaveCSS('color','rgb(76, 79, 105)');
  await page.screenshot({path:'artifacts/browser/themes-light.png'});
  await page.reload();await expect(page.locator('html')).toHaveAttribute('data-theme','catppuccin-latte');
- await page.getByText('settings',{exact:true}).first().click();
+ await page.keyboard.press('Meta+Comma');
  await page.getByRole('button',{name:'Tokyo Night',exact:true}).click();
  await expect(page.locator('html')).toHaveAttribute('data-theme','tokyo-night');
  await page.screenshot({path:'artifacts/browser/themes-dark.png'});

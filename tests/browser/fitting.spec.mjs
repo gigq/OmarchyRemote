@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 import {captureTerminals} from './terminal-helper.mjs';
 test('fit wraps words and wide glyphs without changing source columns or losing ANSI text',async({page})=>{
  await captureTerminals(page);await page.route('**/api/**',route=>route.abort());

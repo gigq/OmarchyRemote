@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 test.use({locale:'en-GB'});
 const metrics={host:'test-host',cores:8,cpu_percent:25,memory_total:16*1024**3,memory_used:4*1024**3,disk_total:1024**4,disk_used:512*1024**3,rx_bps:2048,tx_bps:1024,uptime:90000,processes:120,temperature:null,updated_at:1789087200};
 const weather={current:{temperature_2m:20,weather_code:0,wind_speed_10m:10},daily:{temperature_2m_max:[23],temperature_2m_min:[12]},hourly:{time:Array.from({length:6},(_,i)=>1789087200+i*3600),temperature_2m:[20,21,22,23,20,19]},timezone:'America/Chicago',fetched_at:1789087200};

@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 const data=()=>({instances:[{id:'one',workspace_write:true,label:'Vivaldi · Personal',workspaces:[{id:3,name:'Work'}],windows:[{id:1,focused:true,tabs:[{id:10,title:'Example Domain',url:'https://example.com/',workspace_id:3,index:0,active:true}]},{id:2,tabs:[{id:11,title:'Internal settings',url:'vivaldi://settings',workspace_id:0,index:0}]}]},{id:'two',label:'Vivaldi · Other',workspaces:[],windows:[{id:3,tabs:[{id:12,title:'Other tab',url:'https://example.org/',workspace_id:0,index:0}]}]}]});
 test('Browser groups every instance/window/workspace, opens native URLs and closes exact desktop tab',async({page:p})=>{
  let snapshot=data();const actions=[];

@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 test.beforeEach(async({page})=>{
  await page.goto('/native-input.js');
  await page.setContent('<div id="input"></div>');

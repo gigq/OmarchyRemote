@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 test('ten workspaces keep five fixed-size numbers per row and fit in Expo',async({page:p})=>{
  await p.route('**/api/**',r=>r.abort());await p.goto('/native/');
  const pills=p.locator('.workspace-switcher:visible .workspace-pill');

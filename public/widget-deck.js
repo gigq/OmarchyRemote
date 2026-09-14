@@ -13,16 +13,16 @@
    listen('pointerup',e=>{const p=this.touch;clearTimeout(this.hold);this.touch=null;if(!p||p.id!==e.pointerId)return;if(p.swipe){e.stopPropagation();this.suppress=Date.now()+500;if(Math.abs(p.dx)>40)this.select(this.order[Math.max(0,Math.min(this.order.length-1,this.index()+(p.dx<0?1:-1)))]);else this.position();}if(this.viewport.hasPointerCapture(e.pointerId))this.viewport.releasePointerCapture(e.pointerId)});
    listen('pointercancel',()=>{clearTimeout(this.hold);this.touch=null;this.position()});
    listen('click',e=>{if(Date.now()<this.suppress){e.preventDefault();e.stopImmediatePropagation()}});
-   this.render();
+   this.render(false);
   }
   index(){return Math.max(0,this.order.indexOf(this.selected))}
-  save(){try{localStorage.setItem('omarchy-widgets',JSON.stringify(this.order));localStorage.setItem('omarchy-widget-current',JSON.stringify(this.selected))}catch{}}
+  save(){try{HyprlandUtil.storage.write('omarchy-widgets',this.order);HyprlandUtil.storage.write('omarchy-widget-current',this.selected)}catch{}}
   select(key){if(!this.order.includes(key))return;this.selected=key;this.save();this.position();this.renderDots()}
   position(){this.strip.style.transition='transform .3s cubic-bezier(.22,.9,.24,1)';this.strip.style.transform=`translateX(${-this.index()*100}%)`}
   button(label,fn,cls=''){const b=el('button','widget-button '+cls,label);b.type='button';b.onclick=e=>{e.stopPropagation();fn()};return b}
-  render(){
+  render(persist=true){
    this.strip.replaceChildren(...this.order.map(k=>this.roots[k]));if(!this.order.length)this.strip.append(this.button('+ Widgets',()=>this.open(),'widget-empty'));
-   this.position();this.renderDots();this.save();
+   this.position();this.renderDots();if(persist)this.save();
   }
   renderDots(){this.dots.replaceChildren(...this.order.map(k=>{const b=this.button('',()=>this.select(k),'widget-dot');b.setAttribute('aria-label','Show '+catalog[k]);b.setAttribute('aria-pressed',String(k===this.selected));b.append(el('i'));return b}));this.dots.append(this.button('⚙',()=>this.open(),'widget-manage'));this.dots.lastChild.setAttribute('aria-label','Manage widgets')}
   preview(key){const copy=this.roots[key].cloneNode(true);copy.removeAttribute('id');copy.querySelectorAll('[id]').forEach(n=>n.removeAttribute('id'));copy.querySelectorAll('button,a,input,select').forEach(n=>{n.tabIndex=-1});copy.setAttribute('aria-hidden','true');copy.classList.add('widget-preview');return copy}

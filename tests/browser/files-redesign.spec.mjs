@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 import {mkdtemp,mkdir,rm,writeFile,readFile} from 'node:fs/promises';
 async function menu(p,name){await p.getByRole('button',{name:'Files menu',exact:true}).click();await p.getByRole('button',{name,exact:true}).click()}
 test('Files redesign supports search, editing, selections, ZIP and destination actions',async({page:p})=>{

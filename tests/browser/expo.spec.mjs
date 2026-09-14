@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 const card=(p,k)=>p.locator(`[data-workspace="${k}"]`).last();
 async function expo(p){await p.locator('#touch-shell > div').first().locator('[data-dc-tpl="10"]').last().click();await expect(p.locator('#touch-shell')).toHaveClass(/expo-mode/);await p.waitForTimeout(500)}
 async function drag(p,from,to,hold=0){await p.mouse.move(from.x,from.y);await p.mouse.down();if(hold)await p.waitForTimeout(hold);await p.mouse.move(to.x,to.y,{steps:10});await p.mouse.up();await p.waitForTimeout(550)}

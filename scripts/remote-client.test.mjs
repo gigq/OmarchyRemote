@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
-const window={};const ctx={window,document:{createElement:()=>({}),querySelectorAll:()=>[]}};for(const f of ['util','remote'])vm.runInNewContext(readFileSync(new URL(`../public/${f}.js`,import.meta.url),'utf8'),ctx);
+const window={addEventListener(){}};const ctx={window,document:{createElement:()=>({}),querySelectorAll:()=>[]}};for(const f of ['util','remote'])vm.runInNewContext(readFileSync(new URL(`../public/${f}.js`,import.meta.url),'utf8'),ctx);
 const key=window.HyprlandRemote.keyInput;
 test('terminal and Herdr receive equivalent character, control and navigation keys',()=>{
  assert.equal(key('c',{ctrl:true}).data,'\x03');assert.equal(key('c',{ctrl:true}).keys[0],'Ctrl+c');

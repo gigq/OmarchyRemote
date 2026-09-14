@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 const snapshot={metrics:{error:'Test metrics'},tailscale:{state:'Running',peers:[]},codexbar:{providers:[{id:'codex',windows:[{label:'Weekly',used_percent:63,resets_at:'2026-09-17T03:53:30Z'}],updated_at:'2026-09-11T01:00:00Z'},{id:'claude',windows:[{label:'Session',used_percent:50}],updated_at:'2026-09-11T01:00:00Z'}]}};
 const center=async el=>{const r=await el.boundingBox();return{x:r.x+r.width/2,y:r.y+r.height/2}};
 const order=p=>p.evaluate(()=>JSON.parse(localStorage.getItem('omarchy-widgets')));

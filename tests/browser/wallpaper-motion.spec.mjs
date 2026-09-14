@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 test('phone wallpaper moves subtly over ten fixed workspace positions and returns with a swipe',async({page:p})=>{
  await p.setViewportSize({width:402,height:874});await p.route('**/api/**',r=>r.abort());await p.goto('/native/');
  const shell=p.locator('#touch-shell');await expect(shell).toHaveCSS('background-position-x','50%');

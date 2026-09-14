@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 for(const viewport of [{width:402,height:874},{width:1194,height:834}]){
  test(`device battery updates and fits the header at ${viewport.width}px`,async({page:p})=>{
   await p.setViewportSize(viewport);await p.route('**/api/**',r=>r.abort());await p.goto('/native/');

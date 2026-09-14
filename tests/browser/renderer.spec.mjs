@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 import {captureTerminals,visibleText} from './terminal-helper.mjs';
 
 test.beforeEach(async({page})=>{

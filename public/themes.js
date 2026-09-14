@@ -12,7 +12,7 @@
     const value=selected?.id||'none';
     document.documentElement.style.setProperty('--theme-wallpaper',selected?`url("${assetURL(selected.url)}")`:'none');
     document.documentElement.dataset.background=value;
-    if(persist){wallpapers[current.id]=value;try{localStorage.setItem('omarchy-wallpapers',JSON.stringify(wallpapers))}catch{}}
+    if(persist){wallpapers[current.id]=value;try{HyprlandUtil.storage.write('omarchy-wallpapers',wallpapers)}catch{}}
     document.querySelectorAll('[data-background-choice]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.backgroundChoice===value)));
   }
   function drawBackgrounds(){
@@ -38,7 +38,7 @@
     for(const [name,value] of Object.entries(vars))document.documentElement.style.setProperty('--theme-'+name,value);
     document.documentElement.dataset.theme=current.id;
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content',c.background);
-    if(persist)try{localStorage.setItem('omarchy-theme',current.id)}catch{}
+    if(persist)try{HyprlandUtil.storage.set('omarchy-theme',current.id)}catch{}
     background(wallpapers[current.id],false);drawBackgrounds();refresh();window.dispatchEvent(new Event('hyprland-theme-change'));
   }
   function refresh(){
@@ -51,6 +51,7 @@
     if(!host||host.childElementCount)return;
     host.innerHTML=`<header><div class="theme-current">Current <strong data-theme-name></strong></div></header><div class="theme-grid" role="group" aria-label="Choose a theme"></div>`;
     window.HyprlandWebApps?.settings(host);
+    window.HyprlandPreferences?.settings(host);
     const grid=host.querySelector('.theme-grid');
     for(const t of catalog){
       const c=t.colors,b=document.createElement('button');b.type='button';b.className='theme-choice';b.dataset.themeChoice=t.id;b.setAttribute('aria-label',t.name);
@@ -67,6 +68,6 @@
     refresh();
   }
   window.HyprlandApps?.provide('settings',{create:root=>{attach(root);return {}}});
-  window.HyprlandThemes={apply,background,attach,catalog,windowOpacity:active=>active?.985:.96,backgroundRGB:()=>current.colors.background.slice(1).match(/../g).map(x=>parseInt(x,16)),terminalTheme,palette:()=>{const t=terminalTheme();return ansiKeys.map(k=>t[k])}};
+  window.HyprlandThemes={restore:()=>{wallpapers=HyprlandUtil.storage.read('omarchy-wallpapers',{})||{};apply(HyprlandUtil.storage.get('omarchy-theme'),false)},apply,background,attach,catalog,windowOpacity:active=>active?.985:.96,backgroundRGB:()=>current.colors.background.slice(1).match(/../g).map(x=>parseInt(x,16)),terminalTheme,palette:()=>{const t=terminalTheme();return ansiKeys.map(k=>t[k])}};
   let saved;try{saved=localStorage.getItem('omarchy-theme')}catch{}apply(saved,false);
 })();

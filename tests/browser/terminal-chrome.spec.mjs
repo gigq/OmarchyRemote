@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 test('hardware keyboard terminal uses keyboard tabs and keeps its prompt at the top',async({page:p})=>{
  await p.setViewportSize({width:1194,height:834});let id=0;
  await p.route('**/api/terminal/session',r=>r.fulfill({json:{id:'qa-'+(++id)}}));

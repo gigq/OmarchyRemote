@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 import {mkdtemp,rm,writeFile,readFile} from 'node:fs/promises';
 test('Files browses the host, previews literal text, creates a folder and uploads there',async({page:p})=>{
  const folder=await mkdtemp(process.env.HOME+'/omarchy-files-ui-');

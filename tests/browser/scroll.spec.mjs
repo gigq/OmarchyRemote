@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 import net from 'node:net';
 async function herdr(method,params){return new Promise((resolve,reject)=>{const s=net.createConnection(`${process.env.HOME}/.config/herdr/herdr.sock`);let text='';s.setTimeout(8000);s.on('connect',()=>s.write(JSON.stringify({id:'mobile-scroll-test',method,params})+'\n'));s.on('data',chunk=>{text+=chunk;if(text.includes('\n')){s.end();const r=JSON.parse(text.split('\n')[0]);r.error?reject(Error(JSON.stringify(r.error))):resolve(r.result)}});s.on('error',reject);s.on('timeout',()=>{s.destroy();reject(Error('Herdr timeout'))})})}
 import {captureTerminals,visibleText,exitShell} from './terminal-helper.mjs';

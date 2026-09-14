@@ -57,3 +57,7 @@ html:not(.desk-mode) #touch-shell:not(.expo-mode) [data-workspace]::before{conte
 #touch-shell [data-workspace].native-surface-visible::before{background:transparent!important}
 .desk-mode #touch-shell:not(.expo-mode) [data-workspace="home"]{background:transparent!important}
 .desk-mode #touch-shell:not(.expo-mode) [data-workspace="home"]::after{background:var(--theme-background);z-index:-1}
+
+.device-settings{margin-top:24px;border-top:1px solid var(--theme-border);padding-top:12px}
+.device-settings h2{font-size:16px}.device-name-form{display:flex;gap:8px;align-items:end}.device-name-form label{flex:1;min-width:0;font-size:12px}.device-name-form input{display:block;box-sizing:border-box;width:100%;margin-top:6px;background:var(--theme-surface);color:var(--theme-foreground);border:1px solid var(--theme-border);border-radius:10px;padding:10px;font:16px system-ui;user-select:text}
+.device-actions,.device-backups{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.device-backups button{text-align:left;overflow-wrap:anywhere}.device-backups p{width:100%}.device-settings button{font-size:12px}

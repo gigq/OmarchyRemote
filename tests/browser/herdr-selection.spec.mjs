@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 test('Herd selection survives output refresh and does not trigger tap-to-type',async({page:p})=>{
  await p.setViewportSize({width:402,height:874});await p.route('**/api/**',r=>r.abort());
  let stream;const pane='selection-qa';

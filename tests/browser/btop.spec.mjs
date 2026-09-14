@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 import {captureTerminals} from './terminal-helper.mjs';
 test.beforeEach(async({page})=>captureTerminals(page));
 test('btop has a dedicated monitor session, touch controls and survives reload',async({page:p})=>{

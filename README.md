@@ -94,7 +94,15 @@ Everything runs on the host you already own. There is no cloud relay: a Rust bac
 
 **Backgrounds and transparency.** Settings offers the installed Omarchy theme backgrounds, with a separate remembered choice for each theme and a Solid color option. Windows use Omarchy’s default opacity: 98.5% focused and 96% unfocused, including native Browser and web-app views. `python scripts/import-themes.py` imports palettes and optimized WebP backgrounds from the installed themes (requires Pillow).
 
-**Web apps.** In Settings, enter a name and an http/https URL under Web apps, then choose Install web app. Saved apps appear on Home and in the launcher. Each opens an independent native website view without browser controls and supports workspaces, iPad tiling, and Expo. Remove an installation from Settings; closing its Expo card only closes the running view. Installations are saved on that device, use its web login sessions, and do not sync navigation to desktop tabs.
+**Web apps.** In Settings, enter a name and an http/https URL under Web apps, then choose Install web app. Saved apps appear on Home and in the launcher. Each opens an independent native website view without browser controls and supports workspaces, iPad tiling, and Expo. Remove an installation from Settings; closing its Expo card only closes the running view. Installations are shared by all devices connected to the host. Installing pins the app on the current device; other devices can find it in the launcher and choose their own pins. Uninstalling removes it from the host catalog for every device. Website login sessions stay on each device, and web apps do not sync navigation to desktop tabs.
+
+## Saved settings and device backups
+
+Settings → This device lets you name the device, back up now, or restore another device’s backup. Themes, wallpaper choices, Home pins, widgets, app preferences, and window arrangements stay independent on each device. Local changes save immediately and retry their host backup after reconnecting. Open windows can be restored, but a terminated host terminal process is not recreated with its old contents.
+
+The native shell uses persistent website storage plus a native preferences mirror shared with its bundled offline copy. Website cookies use a separate on-device store and are never included in host backups. A new device downloads the host’s web-app catalog and starts with its own preferences; restoring an existing device backup is an explicit choice. Existing local web apps migrate into the shared catalog on connection. Settings that an older, temporary-storage build already lost cannot be recovered unless it had time to back them up.
+
+The Rust backend stores the catalog and per-device backups in `settings.sqlite3` under its application data directory (`$XDG_DATA_HOME/omarchy-remote`, or the standard user data directory). Include this database in host backups; use SQLite’s backup API for a consistent copy while the service is running. The schema is versioned, updates use revision checks, and deleted web-app records prevent stale devices from reinstalling removed apps during migration. Browser tests isolate these APIs so they do not create records in the live catalog.
 
 ## Native iPhone and iPad app
 

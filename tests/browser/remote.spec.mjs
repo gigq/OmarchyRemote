@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 import {captureTerminals,visibleText,exitShell} from './terminal-helper.mjs';
 test.beforeEach(async({page})=>captureTerminals(page));
 async function key(page,label){const field=page.locator('.native-input:visible');if(label==='⏎')await field.press('Enter');else await field.pressSequentially(label==='space'?' ':label)}

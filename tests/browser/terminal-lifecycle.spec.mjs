@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 test('active terminal accepts typing immediately and exited tabs/windows disappear',async({page:p})=>{
  await p.setViewportSize({width:1194,height:834});let next=0;const sockets=[],inputs=[];
  await p.route('**/api/**',r=>r.fulfill({json:r.request().url().endsWith('/session')?{id:'qa-'+(++next)}:{ok:true}}));

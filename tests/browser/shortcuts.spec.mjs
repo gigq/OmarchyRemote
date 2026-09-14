@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 // Exercise browser key delivery and real Desk operations, with host actions isolated.
 // These do not simulate iPadOS hardware-key interception.
 test.use({viewport:{width:1194,height:834},isMobile:false,hasTouch:false});

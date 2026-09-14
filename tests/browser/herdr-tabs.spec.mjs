@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 for(const viewport of [{width:1194,height:834},{width:402,height:874}]){
  test(`Herd pane tabs share the button row at ${viewport.width}px`,async({page:p})=>{
   await p.setViewportSize(viewport);await p.route('**/api/**',r=>r.abort());

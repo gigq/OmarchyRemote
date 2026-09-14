@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures.mjs';
 // Desk mode: iPad, Mac, and desktop windows tile workspaces and take ⌘ shortcuts.
 const label=p=>p.locator('.desk-ws-label:visible');
 const pills=p=>p.locator('.workspace-switcher:visible .workspace-pill');
