@@ -36,6 +36,21 @@ private final class ShellWebView: WKWebView {
 }
 
 @MainActor
+private final class ShellStorageBridge: NSObject, WKScriptMessageHandler {
+    private var key: String { "omarchyShellStorage." + (ShellSource.liveURL?.absoluteString ?? "offline") }
+    var snapshot: [String: String] { UserDefaults.standard.dictionary(forKey: key) as? [String: String] ?? [:] }
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame,
+              ShellSource.trusts(message.frameInfo.securityOrigin) || message.frameInfo.request.url?.isFileURL == true,
+              let values = message.body as? [String: String], values.count <= 128,
+              values.allSatisfy({ $0.key.hasPrefix("omarchy-") && $0.key.count <= 100 && $0.value.utf8.count <= 262144 }),
+              values.reduce(0, { $0 + $1.value.utf8.count }) <= 1048576 else { return }
+        // A local mirror also seeds the bundled offline origin and a changed live URL path.
+        UserDefaults.standard.set(values, forKey: key)
+    }
+}
+
+@MainActor
 private final class ShellKeyboardStateBridge: NSObject, WKScriptMessageHandler {
     weak var owner: ShellViewController?
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -368,6 +383,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     private let weatherDevice = WeatherDeviceBridge()
     private let browserDevice = BrowserDeviceBridge()
     private let keyboardState = ShellKeyboardStateBridge()
+    private let storageBridge = ShellStorageBridge()
     private var shellEditing = false
     private var lastKeyboardGeometry: [Double]?
     private let keyboardProbe = UIView()
@@ -470,7 +486,18 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         }
 
         let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
+        // Keep shell preferences on disk, separate from embedded websites and their logins.
+        configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: UUID(uuidString: "D4D78234-4474-4CD8-9D29-C9F226134F66")!)
+        let identityKey = "omarchyDeviceIdentifier"
+        let deviceID = UserDefaults.standard.string(forKey: identityKey) ?? UUID().uuidString.lowercased()
+        UserDefaults.standard.set(deviceID, forKey: identityKey)
+        configuration.userContentController.add(storageBridge, name: "shellStorage")
+        let identity: [String: Any] = ["id": deviceID, "name": UIDevice.current.model, "snapshot": storageBridge.snapshot]
+        if let data = try? JSONSerialization.data(withJSONObject: identity), let json = String(data: data, encoding: .utf8) {
+            configuration.userContentController.addUserScript(WKUserScript(
+                source: "window.__OMARCHY_DEVICE__ = " + json + ";",
+                injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
         if traitCollection.userInterfaceIdiom == .pad {
             keyboardState.owner = self
             configuration.userContentController.add(keyboardState, name: "shellKeyboard")
