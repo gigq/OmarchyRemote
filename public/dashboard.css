@@ -89,7 +89,7 @@
 .dashboard-pin-panel > button[aria-pressed=true] { border-color:var(--theme-accent); color:var(--theme-accent); }
 .dashboard-pin-panel > button[aria-pressed=true]::after { content:'✓'; float:right; }
 #touch-shell.expo-mode [data-workspace]::after { inset:0; border-width:6px; border-radius:var(--workspace-expo-radius); }
-#remote-terminal-app { inset:80px 24px 44px; }
+#remote-terminal-app { inset:64px 24px 44px; }
 #remote-terminal-app.with-keyboard { bottom:max(40px,calc(var(--keyboard-inset,0px) + 8px)); }
 .terminal-close-confirm { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:12px; margin-bottom:10px; border:1px solid var(--theme-yellow); border-radius:14px; font-size:12px; background:var(--theme-surface); }
 .terminal-close-confirm > span { flex-basis:100%; }

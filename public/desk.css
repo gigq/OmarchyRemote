@@ -88,3 +88,6 @@ html.desk-mode { --workspace-frame-radius:16px; --workspace-expo-radius:28px; }
 .desk-sheet-foot { width:min(100%,960px); font-size:12px; line-height:1.6; }
 .desk-mode .workspace-switcher { min-width:0; }
 .desk-mode .desk-ws-label { overflow:hidden; text-overflow:ellipsis; }
+
+/* Put terminal output immediately inside its frame. */
+.desk-mode #touch-shell #remote-terminal-app { top:2px !important; }
