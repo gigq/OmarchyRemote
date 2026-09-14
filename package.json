@@ -7,7 +7,10 @@
   "scripts": {
     "dev": "node scripts/serve.mjs",
     "build": "node scripts/build.mjs",
-    "test": "node --test scripts/worker.test.mjs scripts/keyboard.test.mjs scripts/remote-client.test.mjs",
+    "format": "prettier --write . && node scripts/format-template.mjs",
+    "format:check": "prettier --check . && node scripts/format-template.mjs --check",
+    "lint": "npm run format:check && cargo fmt --manifest-path backend/Cargo.toml --check && cargo clippy --manifest-path backend/Cargo.toml --all-targets -- -D warnings",
+    "test": "npm run format:check && node --test scripts/worker.test.mjs scripts/keyboard.test.mjs scripts/remote-client.test.mjs",
     "test:live": "node --test scripts/live-server.test.mjs",
     "test:backend": "node --test scripts/backend.test.mjs",
     "test:ui": "playwright test",
@@ -19,6 +22,7 @@
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
+    "prettier": "3.9.6",
     "ws": "8.21.3"
   }
 }

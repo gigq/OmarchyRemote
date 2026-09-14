@@ -15,7 +15,12 @@
       const response = await fetch('/__dev/status', { cache: 'no-store' });
       if (!response.ok) return;
       const state = await response.json();
-      if (state.version !== loadedVersion && !reloading) { reloading = true; location.reload(); }
-    } catch { /* EventSource reconnects when the server or tailnet returns. */ }
+      if (state.version !== loadedVersion && !reloading) {
+        reloading = true;
+        location.reload();
+      }
+    } catch {
+      /* EventSource reconnects when the server or tailnet returns. */
+    }
   });
 })();

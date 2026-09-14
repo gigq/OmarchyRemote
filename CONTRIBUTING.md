@@ -28,14 +28,14 @@ The shell reads one catalog, `window.HyprlandApps` in `public/apps.js`. Every wo
 
    ```js
    define('notes', {
-     name: 'notes',                    // label on tiles, pills, and the launcher
-     color: 'var(--theme-magenta)',    // tile color, any theme token
-     glyph: 'nt',                      // two-letter tile glyph
-     description: 'scratch notes',     // launcher subtitle
-     surface: 'page',                  // 'terminal' cards use the terminal background
-     native: false,                    // true: the touch keyboard and hardware keys go to instance.key()
-     offline: false,                   // true: usable without the backend (no "connect to the host" placeholder)
-     typing: null,                     // keyboard status label while focused (defaults to the name)
+     name: 'notes', // label on tiles, pills, and the launcher
+     color: 'var(--theme-magenta)', // tile color, any theme token
+     glyph: 'nt', // two-letter tile glyph
+     description: 'scratch notes', // launcher subtitle
+     surface: 'page', // 'terminal' cards use the terminal background
+     native: false, // true: the touch keyboard and hardware keys go to instance.key()
+     offline: false, // true: usable without the backend (no "connect to the host" placeholder)
+     typing: null, // keyboard status label while focused (defaults to the name)
    });
    ```
 
@@ -45,21 +45,25 @@ The shell reads one catalog, `window.HyprlandApps` in `public/apps.js`. Every wo
 
    ```js
    (() => {
-     const {node, button, storage} = window.HyprlandUtil;
+     const { node, button, storage } = window.HyprlandUtil;
      class NotesApp {
-       constructor(root, bridge) { this.root = root; this.bridge = bridge; root.append(node('p', 'remote-status', 'hello')); }
-       connect() {}                 // called once after create; open sockets, fetch state
-       resume() {}                  // page returned to the foreground or came back online
-       show(visible) {}             // the card is on screen (desk mode may show several)
-       blur() {}                    // another app took focus
-       resize() {}                  // viewport or keyboard changed
-       key(input) {}                // native apps only: bytes from the touch/hardware keyboard
-       hostChanged() {}             // HyprlandApps.host was updated from /api/capabilities
-       dispose() {}                 // shell teardown
+       constructor(root, bridge) {
+         this.root = root;
+         this.bridge = bridge;
+         root.append(node('p', 'remote-status', 'hello'));
+       }
+       connect() {} // called once after create; open sockets, fetch state
+       resume() {} // page returned to the foreground or came back online
+       show(visible) {} // the card is on screen (desk mode may show several)
+       blur() {} // another app took focus
+       resize() {} // viewport or keyboard changed
+       key(input) {} // native apps only: bytes from the touch/hardware keyboard
+       hostChanged() {} // HyprlandApps.host was updated from /api/capabilities
+       dispose() {} // shell teardown
      }
      window.HyprlandApps?.provide('notes', {
        create: (root, bridge) => new NotesApp(root, bridge),
-       close: app => {}             // the card was tossed from Expo; app is null if never created
+       close: app => {}, // the card was tossed from Expo; app is null if never created
      });
    })();
    ```

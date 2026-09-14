@@ -1,55 +1,430 @@
 /* Live dashboard, attention inbox and a native-input universal launcher. */
 (() => {
- const {node:el,mount}=window.HyprlandUtil;
- const read=window.HyprlandUtil.storage.read, save=window.HyprlandUtil.storage.write;
- const group=p=>HyprlandRemote.paneGroup(p);
- const title=p=>p.terminal_title_stripped||p.agent||p.pane_id;
- class Dashboard {
-  constructor(logic){
-   this.logic=logic;this.abort=new AbortController();this.dismissed=read('omarchy-inbox-dismissed',[]);this.muted=read('omarchy-inbox-muted',false);this.snapshot=null;
-   this.home=mount('home-attention');this.metrics=mount('home-metrics');this.launch=mount('dashboard-launcher');this.inbox=mount('dashboard-notifications');this.buildLauncher();
-   const host=el('div','home-host',HyprlandApps.host.name+' · connecting…');this.host=host;this.home.parentElement.insertBefore(host,this.home.parentElement.querySelector('[data-live-date]'));
-   this.home.append(el('p','dashboard-muted','Connecting to Herd…'));this.drawInbox();const pins=read('omarchy-home-pins',null);if(Array.isArray(pins))logic.set({homePins:[...new Set(pins.filter(k=>k!=='home'&&logic.APPS[k]))]});this.timer=setInterval(()=>this.poll(),5000);this.poll();
-   this.visibility=()=>{if(!document.hidden)this.poll()};document.addEventListener('visibilitychange',this.visibility);
+  const { node: el, mount } = window.HyprlandUtil;
+  const read = window.HyprlandUtil.storage.read,
+    save = window.HyprlandUtil.storage.write;
+  const group = p => HyprlandRemote.paneGroup(p);
+  const title = p => p.terminal_title_stripped || p.agent || p.pane_id;
+  class Dashboard {
+    constructor(logic) {
+      this.logic = logic;
+      this.abort = new AbortController();
+      this.dismissed = read('omarchy-inbox-dismissed', []);
+      this.muted = read('omarchy-inbox-muted', false);
+      this.snapshot = null;
+      this.home = mount('home-attention');
+      this.metrics = mount('home-metrics');
+      this.launch = mount('dashboard-launcher');
+      this.inbox = mount('dashboard-notifications');
+      this.buildLauncher();
+      const host = el('div', 'home-host', HyprlandApps.host.name + ' · connecting…');
+      this.host = host;
+      this.home.parentElement.insertBefore(
+        host,
+        this.home.parentElement.querySelector('[data-live-date]')
+      );
+      this.home.append(el('p', 'dashboard-muted', 'Connecting to Herd…'));
+      this.drawInbox();
+      const pins = read('omarchy-home-pins', null);
+      if (Array.isArray(pins))
+        logic.set({ homePins: [...new Set(pins.filter(k => k !== 'home' && logic.APPS[k]))] });
+      this.timer = setInterval(() => this.poll(), 5000);
+      this.poll();
+      this.visibility = () => {
+        if (!document.hidden) this.poll();
+      };
+      document.addEventListener('visibilitychange', this.visibility);
+    }
+    managePins() {
+      if (this.pinPanel) return;
+      const panel = (this.pinPanel = el('section', 'dashboard-pin-panel'));
+      panel.setAttribute('role', 'dialog');
+      panel.setAttribute('aria-label', 'Pinned apps');
+      const draw = () => {
+        const keys = this.logic.state.homePins || HyprlandApps.DEFAULT_PINS;
+        panel.replaceChildren();
+        const head = el('div', 'dashboard-line');
+        head.append(
+          el('h2', '', 'Pinned apps'),
+          this.button('Done', () => {
+            panel.remove();
+            this.pinPanel = null;
+          })
+        );
+        panel.append(
+          head,
+          el(
+            'p',
+            'dashboard-muted',
+            'Choose which apps appear on Home. All apps remain in the launcher.'
+          )
+        );
+        for (const [key, app] of Object.entries(this.logic.APPS).filter(([k]) => k !== 'home')) {
+          const b = this.button(app.name, () => {
+            const next = keys.includes(key) ? keys.filter(k => k !== key) : [...keys, key];
+            save('omarchy-home-pins', next);
+            this.logic.set({ homePins: next });
+            draw();
+          });
+          b.setAttribute('aria-label', app.name);
+          b.setAttribute('aria-pressed', String(keys.includes(key)));
+          panel.append(b);
+        }
+      };
+      for (const type of ['pointerdown', 'pointerup', 'touchstart', 'touchmove', 'touchend'])
+        panel.addEventListener(type, e => e.stopPropagation(), { passive: true });
+      mount('touch-shell').append(panel);
+      draw();
+    }
+    button(label, fn, cls = '') {
+      const b = el('button', 'dashboard-button ' + cls, label);
+      b.type = 'button';
+      b.onclick = e => {
+        e.stopPropagation();
+        fn();
+      };
+      return b;
+    }
+    async api(path) {
+      const r = await fetch('/api/' + path, {
+        headers: { 'X-Hyprland-Client': '1' },
+        signal: AbortSignal.any([this.abort.signal, AbortSignal.timeout(8000)]),
+      });
+      if (!r.ok) throw Error(HyprlandApps.host.name + ' unavailable');
+      return r.json();
+    }
+    async poll() {
+      if (this.busy || document.hidden) return;
+      this.busy = true;
+      try {
+        const [herd, widgets] = await Promise.allSettled([
+          this.api('herdr/snapshot'),
+          this.api('widgets'),
+        ]);
+        if (herd.status === 'fulfilled') {
+          this.snapshot = herd.value;
+          this.online = true;
+          this.drawHome();
+          this.drawInbox();
+        } else {
+          this.online = false;
+          this.drawHome();
+          this.drawInbox();
+        }
+        if (widgets.status === 'fulfilled') {
+          const m = widgets.value.metrics;
+          if (m && !m.error) {
+            const hours = Math.floor(m.uptime / 3600);
+            this.host.replaceChildren(
+              el('span', '', '● ' + HyprlandApps.host.name),
+              el('span', '', 'up ' + Math.floor(hours / 24) + 'd ' + (hours % 24) + 'h')
+            );
+            const pct = n => (Number.isFinite(n) ? Math.round(n) + '%' : '—');
+            this.metrics.replaceChildren(
+              ...[
+                ['cpu', pct(m.cpu_percent)],
+                ['mem', pct((m.memory_used / m.memory_total) * 100)],
+                ['disk', pct((m.disk_used / m.disk_total) * 100)],
+                ['', Number.isFinite(m.temperature) ? Math.round(m.temperature) + '°C' : ''],
+              ].map(([label, value]) => el('span', '', label + ' ' + value))
+            );
+          } else this.host.textContent = HyprlandApps.host.name + ' · metrics unavailable';
+        } else {
+          this.host.textContent = HyprlandApps.host.name + ' · disconnected';
+          this.metrics.textContent = 'Host metrics unavailable';
+        }
+      } finally {
+        this.busy = false;
+      }
+    }
+    panes() {
+      return this.snapshot ? HyprlandRemote.orderHerdr(this.snapshot).flatMap(w => w.panes) : [];
+    }
+    navigate(key, action) {
+      if (!this.logic.state.open.includes(key) && this.logic.state.open.length >= 10) {
+        this.logic.openApp(key);
+        return;
+      }
+      this.pending = { key, action };
+      this.logic.openApp(key);
+    }
+    openPane(p) {
+      this.navigate('herdr', () => this.logic.remote.app('herdr')?.select(p.pane_id));
+    }
+    drawHome() {
+      this.home.replaceChildren();
+      const panes = this.panes(),
+        waiting = panes.filter(p => group(p) === 'attention');
+      const head = el('div', 'dashboard-line');
+      head.append(
+        this.button('herdr', () => this.logic.openApp('herdr')),
+        el(
+          'span',
+          'dashboard-muted',
+          this.online
+            ? `${panes.length} panes · ${panes.filter(p => group(p) === 'running').length} running`
+            : 'Disconnected'
+        )
+      );
+      this.home.append(head);
+      if (this.logic.state.herdAttention !== waiting.length)
+        this.logic.set({ herdAttention: waiting.length });
+      for (const p of waiting.slice(0, 2))
+        this.home.append(
+          this.button('● ' + title(p) + ' · needs you', () => this.openPane(p), 'attention-preview')
+        );
+      if (!waiting.length)
+        this.home.append(
+          el(
+            'div',
+            'dashboard-muted',
+            this.online ? 'No agents need your attention.' : 'Reconnect to see agent status.'
+          )
+        );
+    }
+    eventKey(p) {
+      return p.pane_id + ':' + p.state_change_seq + ':' + p.agent_status;
+    }
+    drawInbox() {
+      const signature = JSON.stringify([
+        this.online,
+        this.muted,
+        this.dismissed,
+        this.panes().map(p => [this.eventKey(p), title(p)]),
+      ]);
+      if (signature === this.inboxSignature) return;
+      this.inboxSignature = signature;
+      const scroll = this.inbox.scrollTop;
+      this.inbox.replaceChildren();
+      const panes = this.panes().filter(
+        p => group(p) === 'attention' && !this.dismissed.includes(this.eventKey(p))
+      );
+      const header = el('div', 'dashboard-line');
+      header.append(
+        el('span', '', `notifications · ${this.muted ? 0 : panes.length}`),
+        this.button('clear all', () => {
+          this.dismissed = [...this.dismissed, ...panes.map(p => this.eventKey(p))].slice(-500);
+          save('omarchy-inbox-dismissed', this.dismissed);
+          this.drawInbox();
+        }),
+        this.button('×', () => this.logic.set({ shade: null }))
+      );
+      this.inbox.append(header);
+      const source = el('div', 'dashboard-line');
+      source.append(
+        el('span', 'dashboard-muted', 'HERD'),
+        this.button(this.muted ? 'unmute' : 'mute', () => {
+          this.muted = !this.muted;
+          save('omarchy-inbox-muted', this.muted);
+          this.drawInbox();
+        })
+      );
+      this.inbox.append(source);
+      if (!this.online)
+        this.inbox.append(el('p', 'dashboard-muted', 'Disconnected · showing last known state.'));
+      if (this.muted || !panes.length)
+        this.inbox.append(
+          el(
+            'p',
+            'dashboard-empty',
+            this.muted ? 'Herd notifications are muted.' : 'You’re all caught up.'
+          )
+        );
+      if (!this.muted)
+        for (const p of panes) {
+          const card = el('article', 'attention-card');
+          card.append(
+            el('div', 'dashboard-muted', title(p) + ' · ' + (p.agent || 'shell')),
+            el('h3', '', 'waiting for you'),
+            el(
+              'p',
+              'dashboard-muted',
+              p.attention_kind === 'permission'
+                ? 'Permission request · review in pane'
+                : 'Open the pane to read and respond.'
+            )
+          );
+          const actions = el('div', 'dashboard-actions');
+          actions.append(
+            this.button('open pane', () => this.openPane(p), 'primary'),
+            this.button('dismiss', () => this.dismiss(p))
+          );
+          card.append(actions);
+          let start;
+          card.onpointerdown = e => (start = { x: e.clientX, y: e.clientY });
+          card.onpointerup = e => {
+            if (start && Math.abs(e.clientX - start.x) > 80 && Math.abs(e.clientY - start.y) < 40)
+              this.dismiss(p);
+            start = null;
+          };
+          this.inbox.append(card);
+        }
+      this.inbox.scrollTop = scroll;
+    }
+    dismiss(p) {
+      this.dismissed.push(this.eventKey(p));
+      this.dismissed = this.dismissed.slice(-500);
+      save('omarchy-inbox-dismissed', this.dismissed);
+      this.drawInbox();
+    }
+    buildLauncher() {
+      const line = el('div', 'launcher-search-line');
+      this.field = el('input', 'dashboard-search');
+      this.field.type = 'search';
+      this.field.placeholder = 'apps, panes, files…';
+      this.field.setAttribute('aria-label', 'Search apps, panes and files');
+      this.field.autocapitalize = 'none';
+      this.field.autocomplete = 'off';
+      this.field.spellcheck = false;
+      this.field.setAttribute('autocorrect', 'off');
+      line.append(
+        el('span', '', '›'),
+        this.field,
+        this.button('esc', () => this.logic.set({ launch: false, kb: false, query: '' }))
+      );
+      this.results = el('div', 'dashboard-results');
+      this.hint = el('div', 'dashboard-muted launcher-hint', '/ files   @ panes   > snippets');
+      this.launch.append(line, this.results, this.hint);
+      this.field.oninput = () => {
+        ++this.seq;
+        this.results.replaceChildren(el('p', 'dashboard-muted', 'Searching…'));
+        clearTimeout(this.debounce);
+        this.debounce = setTimeout(() => this.search(), 180);
+      };
+      this.field.onkeydown = e => {
+        if (e.key === 'Escape') this.logic.set({ launch: false, kb: false });
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          this.results.querySelector('button')?.click();
+        }
+      };
+      for (const root of [this.launch, this.inbox])
+        for (const type of ['pointerdown', 'pointerup', 'touchstart', 'touchmove', 'touchend'])
+          root.addEventListener(type, e => e.stopPropagation(), { passive: true });
+    }
+    async search() {
+      const seq = (this.seq = (this.seq || 0) + 1);
+      const raw = this.field.value.trim(),
+        mode = raw[0],
+        q = raw.replace(/^[@/>]\s*/, '').toLowerCase();
+      this.results.replaceChildren();
+      const add = (heading, items) => {
+        if (!items.length) return;
+        this.results.append(el('div', 'launcher-group', heading));
+        for (const item of items.slice(0, 6)) {
+          const b = this.button('', item.run, 'launcher-result');
+          b.append(el('strong', '', item.name), el('span', 'dashboard-muted', item.detail));
+          this.results.append(b);
+        }
+      };
+      if (!['@', '/', '>'].includes(mode))
+        add(
+          'APPS',
+          Object.entries(this.logic.APPS)
+            .filter(([k, a]) => (a.name + ' ' + a.description).toLowerCase().includes(q))
+            .map(([k, a]) => ({
+              name: a.name,
+              detail: a.description,
+              run: () => this.logic.openApp(k),
+            }))
+        );
+      if (!['/', '>'].includes(mode))
+        add(
+          'PANES',
+          this.panes()
+            .filter(p => (title(p) + ' ' + p.agent + ' ' + p.cwd).toLowerCase().includes(q))
+            .map(p => ({
+              name: title(p),
+              detail: (p.agent || 'shell') + ' · ' + p.agent_status,
+              run: () => this.openPane(p),
+            }))
+        );
+      if (mode === '>') {
+        const snippets = ['git status', 'systemctl --user status', 'df -h', 'uptime'];
+        add(
+          'SNIPPETS · INSERT INTO TERMINAL',
+          snippets
+            .filter(s => s.includes(q))
+            .map(command => ({
+              name: command,
+              detail: 'Review and send',
+              run: () => {
+                this.navigate('terminal', () => {
+                  this.logic.remote.keyboard();
+                  const input = this.logic.remote.currentInput();
+                  input.message = true;
+                  input.draft = command;
+                  input.configure();
+                  input.focus();
+                });
+              },
+            }))
+        );
+      }
+      if (q.length >= 2 && !['@', '>'].includes(mode)) {
+        try {
+          const data = await this.api(
+            'files/search?' +
+              new URLSearchParams({
+                path: '',
+                query: q,
+                mode: 'fuzzy',
+                hidden: 'false',
+                regex: 'false',
+                sensitive: 'false',
+                glob: '',
+              })
+          );
+          if (seq !== this.seq || !this.logic.state.launch) return;
+          add(
+            'FILES',
+            data.entries.map(e => ({
+              name: e.name,
+              detail: e.path,
+              run: () => {
+                this.navigate('files', () => this.logic.remote.app('files')?.open(e));
+              },
+            }))
+          );
+          if (data.truncated)
+            this.results.append(
+              el('p', 'dashboard-muted', 'Results limited · narrow your search.')
+            );
+        } catch {
+          if (seq === this.seq)
+            this.results.append(el('p', 'dashboard-muted', 'File search unavailable.'));
+        }
+      }
+      if (seq === this.seq && !this.results.children.length)
+        this.results.append(el('p', 'dashboard-empty', 'No matches.'));
+    }
+    update() {
+      if (this.pending && this.logic.cur() === this.pending.key) {
+        const { action } = this.pending;
+        this.pending = null;
+        action();
+      }
+      const open = this.logic.state.launch;
+      mount('touch-shell').classList.toggle('dashboard-launch-open', open);
+      if (open !== this.wasOpen) {
+        this.wasOpen = open;
+        if (open) {
+          this.field.value = '';
+          this.search();
+          this.field.focus();
+        } else {
+          ++this.seq;
+          this.field.blur();
+        }
+      }
+    }
+    dispose() {
+      this.pinPanel?.remove();
+      this.abort.abort();
+      clearInterval(this.timer);
+      clearTimeout(this.debounce);
+      document.removeEventListener('visibilitychange', this.visibility);
+    }
   }
-  managePins(){
-   if(this.pinPanel)return;const panel=this.pinPanel=el('section','dashboard-pin-panel');panel.setAttribute('role','dialog');panel.setAttribute('aria-label','Pinned apps');const draw=()=>{const keys=this.logic.state.homePins||HyprlandApps.DEFAULT_PINS;panel.replaceChildren();const head=el('div','dashboard-line');head.append(el('h2','','Pinned apps'),this.button('Done',()=>{panel.remove();this.pinPanel=null}));panel.append(head,el('p','dashboard-muted','Choose which apps appear on Home. All apps remain in the launcher.'));for(const [key,app] of Object.entries(this.logic.APPS).filter(([k])=>k!=='home')){const b=this.button(app.name,()=>{const next=keys.includes(key)?keys.filter(k=>k!==key):[...keys,key];save('omarchy-home-pins',next);this.logic.set({homePins:next});draw()});b.setAttribute('aria-label',app.name);b.setAttribute('aria-pressed',String(keys.includes(key)));panel.append(b)}};
-   for(const type of ['pointerdown','pointerup','touchstart','touchmove','touchend'])panel.addEventListener(type,e=>e.stopPropagation(),{passive:true});mount('touch-shell').append(panel);draw();
-  }
-  button(label,fn,cls=''){const b=el('button','dashboard-button '+cls,label);b.type='button';b.onclick=e=>{e.stopPropagation();fn()};return b}
-  async api(path){const r=await fetch('/api/'+path,{headers:{'X-Hyprland-Client':'1'},signal:AbortSignal.any([this.abort.signal,AbortSignal.timeout(8000)])});if(!r.ok)throw Error(HyprlandApps.host.name+' unavailable');return r.json()}
-  async poll(){if(this.busy||document.hidden)return;this.busy=true;try{const [herd,widgets]=await Promise.allSettled([this.api('herdr/snapshot'),this.api('widgets')]);if(herd.status==='fulfilled'){this.snapshot=herd.value;this.online=true;this.drawHome();this.drawInbox()}else{this.online=false;this.drawHome();this.drawInbox()}
-   if(widgets.status==='fulfilled'){const m=widgets.value.metrics;if(m&&!m.error){const hours=Math.floor(m.uptime/3600);this.host.replaceChildren(el('span','','● '+HyprlandApps.host.name),el('span','', 'up '+Math.floor(hours/24)+'d '+hours%24+'h'));const pct=n=>Number.isFinite(n)?Math.round(n)+'%':'—';this.metrics.replaceChildren(...[['cpu',pct(m.cpu_percent)],['mem',pct(m.memory_used/m.memory_total*100)],['disk',pct(m.disk_used/m.disk_total*100)],['',Number.isFinite(m.temperature)?Math.round(m.temperature)+'°C':'']].map(([label,value])=>el('span','',label+' '+value)));}else this.host.textContent=HyprlandApps.host.name+' · metrics unavailable'}else{this.host.textContent=HyprlandApps.host.name+' · disconnected';this.metrics.textContent='Host metrics unavailable'}
-   }finally{this.busy=false}
-  }
-  panes(){return this.snapshot?HyprlandRemote.orderHerdr(this.snapshot).flatMap(w=>w.panes):[]}
-  navigate(key,action){if(!this.logic.state.open.includes(key)&&this.logic.state.open.length>=10){this.logic.openApp(key);return}this.pending={key,action};this.logic.openApp(key)}
-  openPane(p){this.navigate('herdr',()=>this.logic.remote.app('herdr')?.select(p.pane_id))}
-  drawHome(){this.home.replaceChildren();const panes=this.panes(),waiting=panes.filter(p=>group(p)==='attention');const head=el('div','dashboard-line');head.append(this.button('herdr',()=>this.logic.openApp('herdr')),el('span','dashboard-muted',this.online?`${panes.length} panes · ${panes.filter(p=>group(p)==='running').length} running`:'Disconnected'));this.home.append(head);if(this.logic.state.herdAttention!==waiting.length)this.logic.set({herdAttention:waiting.length});
-   for(const p of waiting.slice(0,2))this.home.append(this.button('● '+title(p)+' · needs you',()=>this.openPane(p),'attention-preview'));
-   if(!waiting.length)this.home.append(el('div','dashboard-muted',this.online?'No agents need your attention.':'Reconnect to see agent status.'));
-  }
-  eventKey(p){return p.pane_id+':'+p.state_change_seq+':'+p.agent_status}
-  drawInbox(){const signature=JSON.stringify([this.online,this.muted,this.dismissed,this.panes().map(p=>[this.eventKey(p),title(p)])]);if(signature===this.inboxSignature)return;this.inboxSignature=signature;const scroll=this.inbox.scrollTop;this.inbox.replaceChildren();const panes=this.panes().filter(p=>group(p)==='attention'&&!this.dismissed.includes(this.eventKey(p)));const header=el('div','dashboard-line');header.append(el('span','',`notifications · ${this.muted?0:panes.length}`),this.button('clear all',()=>{this.dismissed=[...this.dismissed,...panes.map(p=>this.eventKey(p))].slice(-500);save('omarchy-inbox-dismissed',this.dismissed);this.drawInbox()}),this.button('×',()=>this.logic.set({shade:null})));this.inbox.append(header);
-   const source=el('div','dashboard-line');source.append(el('span','dashboard-muted','HERD'),this.button(this.muted?'unmute':'mute',()=>{this.muted=!this.muted;save('omarchy-inbox-muted',this.muted);this.drawInbox()}));this.inbox.append(source);
-   if(!this.online)this.inbox.append(el('p','dashboard-muted','Disconnected · showing last known state.'));
-   if(this.muted||!panes.length)this.inbox.append(el('p','dashboard-empty',this.muted?'Herd notifications are muted.':'You’re all caught up.'));
-   if(!this.muted)for(const p of panes){const card=el('article','attention-card');card.append(el('div','dashboard-muted',title(p)+' · '+(p.agent||'shell')),el('h3','','waiting for you'),el('p','dashboard-muted',p.attention_kind==='permission'?'Permission request · review in pane':'Open the pane to read and respond.'));const actions=el('div','dashboard-actions');actions.append(this.button('open pane',()=>this.openPane(p),'primary'),this.button('dismiss',()=>this.dismiss(p)));card.append(actions);let start;card.onpointerdown=e=>start={x:e.clientX,y:e.clientY};card.onpointerup=e=>{if(start&&Math.abs(e.clientX-start.x)>80&&Math.abs(e.clientY-start.y)<40)this.dismiss(p);start=null};this.inbox.append(card)}this.inbox.scrollTop=scroll;
-  }
-  dismiss(p){this.dismissed.push(this.eventKey(p));this.dismissed=this.dismissed.slice(-500);save('omarchy-inbox-dismissed',this.dismissed);this.drawInbox()}
-  buildLauncher(){const line=el('div','launcher-search-line');this.field=el('input','dashboard-search');this.field.type='search';this.field.placeholder='apps, panes, files…';this.field.setAttribute('aria-label','Search apps, panes and files');this.field.autocapitalize='none';this.field.autocomplete='off';this.field.spellcheck=false;this.field.setAttribute('autocorrect','off');line.append(el('span','','›'),this.field,this.button('esc',()=>this.logic.set({launch:false,kb:false,query:''})));this.results=el('div','dashboard-results');this.hint=el('div','dashboard-muted launcher-hint','/ files   @ panes   > snippets');this.launch.append(line,this.results,this.hint);
-   this.field.oninput=()=>{++this.seq;this.results.replaceChildren(el('p','dashboard-muted','Searching…'));clearTimeout(this.debounce);this.debounce=setTimeout(()=>this.search(),180)};this.field.onkeydown=e=>{if(e.key==='Escape')this.logic.set({launch:false,kb:false});if(e.key==='Enter'){e.preventDefault();this.results.querySelector('button')?.click()}};
-   for(const root of [this.launch,this.inbox])for(const type of ['pointerdown','pointerup','touchstart','touchmove','touchend'])root.addEventListener(type,e=>e.stopPropagation(),{passive:true});
-  }
-  async search(){const seq=this.seq=(this.seq||0)+1;const raw=this.field.value.trim(),mode=raw[0],q=raw.replace(/^[@/>]\s*/,'').toLowerCase();this.results.replaceChildren();const add=(heading,items)=>{if(!items.length)return;this.results.append(el('div','launcher-group',heading));for(const item of items.slice(0,6)){const b=this.button('',item.run,'launcher-result');b.append(el('strong','',item.name),el('span','dashboard-muted',item.detail));this.results.append(b)}};
-   if(!['@','/','>'].includes(mode))add('APPS',Object.entries(this.logic.APPS).filter(([k,a])=>(a.name+' '+a.description).toLowerCase().includes(q)).map(([k,a])=>({name:a.name,detail:a.description,run:()=>this.logic.openApp(k)})));
-   if(!['/','>'].includes(mode))add('PANES',this.panes().filter(p=>(title(p)+' '+p.agent+' '+p.cwd).toLowerCase().includes(q)).map(p=>({name:title(p),detail:(p.agent||'shell')+' · '+p.agent_status,run:()=>this.openPane(p)})));
-   if(mode==='>'){const snippets=['git status','systemctl --user status','df -h','uptime'];add('SNIPPETS · INSERT INTO TERMINAL',snippets.filter(s=>s.includes(q)).map(command=>({name:command,detail:'Review and send',run:()=>{this.navigate('terminal',()=>{this.logic.remote.keyboard();const input=this.logic.remote.currentInput();input.message=true;input.draft=command;input.configure();input.focus()})}})))}
-   if(q.length>=2&&!['@','>'].includes(mode)){try{const data=await this.api('files/search?'+new URLSearchParams({path:'',query:q,mode:'fuzzy',hidden:'false',regex:'false',sensitive:'false',glob:''}));if(seq!==this.seq||!this.logic.state.launch)return;add('FILES',data.entries.map(e=>({name:e.name,detail:e.path,run:()=>{this.navigate('files',()=>this.logic.remote.app('files')?.open(e))}})));if(data.truncated)this.results.append(el('p','dashboard-muted','Results limited · narrow your search.'))}catch{if(seq===this.seq)this.results.append(el('p','dashboard-muted','File search unavailable.'))}}
-   if(seq===this.seq&&!this.results.children.length)this.results.append(el('p','dashboard-empty','No matches.'));
-  }
-  update(){if(this.pending&&this.logic.cur()===this.pending.key){const {action}=this.pending;this.pending=null;action()}const open=this.logic.state.launch;mount('touch-shell').classList.toggle('dashboard-launch-open',open);if(open!==this.wasOpen){this.wasOpen=open;if(open){this.field.value='';this.search();this.field.focus()}else{++this.seq;this.field.blur()}}}
-  dispose(){this.pinPanel?.remove();this.abort.abort();clearInterval(this.timer);clearTimeout(this.debounce);document.removeEventListener('visibilitychange',this.visibility)}
- }
- window.HyprlandDashboard={attach:logic=>new Dashboard(logic)};
+  window.HyprlandDashboard = { attach: logic => new Dashboard(logic) };
 })();

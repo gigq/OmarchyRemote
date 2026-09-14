@@ -1,144 +1,446 @@
-import {test,expect} from './fixtures.mjs';
-const data=()=>({instances:[{id:'one',workspace_write:true,label:'Vivaldi · Personal',workspaces:[{id:3,name:'Work'}],windows:[{id:1,focused:true,tabs:[{id:10,title:'Example Domain',url:'https://example.com/',workspace_id:3,index:0,active:true}]},{id:2,tabs:[{id:11,title:'Internal settings',url:'vivaldi://settings',workspace_id:0,index:0}]}]},{id:'two',label:'Vivaldi · Other',workspaces:[],windows:[{id:3,tabs:[{id:12,title:'Other tab',url:'https://example.org/',workspace_id:0,index:0}]}]}]});
-test('Browser groups every instance/window/workspace, opens native URLs and closes exact desktop tab',async({page:p})=>{
- let snapshot=data();const actions=[];
- await p.route('**/api/browser/snapshot',r=>r.fulfill({json:snapshot}));await p.route('**/api/browser/action',r=>{const q=r.request().postDataJSON();actions.push(q);if(q.action==='close')for(const i of snapshot.instances)for(const w of i.windows)if(i.id===q.instance_id)w.tabs=w.tabs.filter(t=>t.id!==q.tab_id);return r.fulfill({json:{ok:true}})});
- await p.addInitScript(()=>{window.webkit={messageHandlers:{browserDevice:{postMessage:async value=>window.openedBrowser=value}}}});
- await p.goto('/native/');await p.getByText('browser',{exact:true}).first().click();const app=p.locator('#remote-browser-app');await expect(app.locator('.browser-tab')).toHaveCount(3);await expect(app).toContainText('Work');await expect(app).toContainText('Window 2');await p.waitForTimeout(500);await p.screenshot({path:'artifacts/browser/tabs-multiple.png'});
- await p.getByRole('link',{name:'Open Example Domain on phone'}).click();expect(await p.evaluate(()=>window.openedBrowser.url)).toBe('https://example.com/');expect(actions).toEqual([]);
- await p.getByRole('button',{name:'Open Internal settings on phone'}).click();await expect(app).toContainText('only open on the desktop');
- await p.getByRole('button',{name:'Manage Example Domain'}).click();await p.getByRole('button',{name:'Move…'}).click();await p.getByRole('combobox',{name:'Window',exact:true}).selectOption('2');await p.getByRole('combobox',{name:'Workspace',exact:true}).selectOption('0');await p.getByRole('button',{name:'Move',exact:true}).click();expect(actions.at(-1)).toMatchObject({instance_id:'one',tab_id:10,action:'move',window_id:2,workspace_id:0});
- await p.getByRole('button',{name:'Close Example Domain on desktop'}).click();await expect(app.locator('.browser-tab')).toHaveCount(2);expect(actions.at(-1)).toMatchObject({instance_id:'one',tab_id:10,action:'close'});await expect(p.getByRole('link',{name:'Open Other tab on phone'})).toBeVisible();
- await p.getByRole('searchbox',{name:'Find a tab'}).fill('Other');await expect(app.locator('.browser-tab')).toHaveCount(1);
+import { test, expect } from './fixtures.mjs';
+const data = () => ({
+  instances: [
+    {
+      id: 'one',
+      workspace_write: true,
+      label: 'Vivaldi · Personal',
+      workspaces: [{ id: 3, name: 'Work' }],
+      windows: [
+        {
+          id: 1,
+          focused: true,
+          tabs: [
+            {
+              id: 10,
+              title: 'Example Domain',
+              url: 'https://example.com/',
+              workspace_id: 3,
+              index: 0,
+              active: true,
+            },
+          ],
+        },
+        {
+          id: 2,
+          tabs: [
+            {
+              id: 11,
+              title: 'Internal settings',
+              url: 'vivaldi://settings',
+              workspace_id: 0,
+              index: 0,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'two',
+      label: 'Vivaldi · Other',
+      workspaces: [],
+      windows: [
+        {
+          id: 3,
+          tabs: [
+            { id: 12, title: 'Other tab', url: 'https://example.org/', workspace_id: 0, index: 0 },
+          ],
+        },
+      ],
+    },
+  ],
 });
-test('Disconnected Browser explains setup and failed close keeps the tab',async({page:p})=>{
- let snapshot={instances:[]};await p.route('**/api/browser/snapshot',r=>r.fulfill({json:snapshot}));await p.route('**/api/browser/action',r=>r.fulfill({status:400,json:{error:'Browser disconnected'}}));await p.goto('/native/');await p.getByText('browser',{exact:true}).first().click();await expect(p.locator('#remote-browser-app')).toContainText('Connect Vivaldi');snapshot=data();await p.getByRole('button',{name:'Refresh tabs'}).click();await p.getByRole('button',{name:'Close Example Domain on desktop'}).click();await expect(p.locator('#remote-browser-app')).toContainText('Browser disconnected');await expect(p.getByRole('link',{name:'Open Example Domain on phone'})).toBeVisible();
+test('Browser groups every instance/window/workspace, opens native URLs and closes exact desktop tab', async ({
+  page: p,
+}) => {
+  let snapshot = data();
+  const actions = [];
+  await p.route('**/api/browser/snapshot', r => r.fulfill({ json: snapshot }));
+  await p.route('**/api/browser/action', r => {
+    const q = r.request().postDataJSON();
+    actions.push(q);
+    if (q.action === 'close')
+      for (const i of snapshot.instances)
+        for (const w of i.windows)
+          if (i.id === q.instance_id) w.tabs = w.tabs.filter(t => t.id !== q.tab_id);
+    return r.fulfill({ json: { ok: true } });
+  });
+  await p.addInitScript(() => {
+    window.webkit = {
+      messageHandlers: {
+        browserDevice: { postMessage: async value => (window.openedBrowser = value) },
+      },
+    };
+  });
+  await p.goto('/native/');
+  await p.getByText('browser', { exact: true }).first().click();
+  const app = p.locator('#remote-browser-app');
+  await expect(app.locator('.browser-tab')).toHaveCount(3);
+  await expect(app).toContainText('Work');
+  await expect(app).toContainText('Window 2');
+  await p.waitForTimeout(500);
+  await p.screenshot({ path: 'artifacts/browser/tabs-multiple.png' });
+  await p.getByRole('link', { name: 'Open Example Domain on phone' }).click();
+  expect(await p.evaluate(() => window.openedBrowser.url)).toBe('https://example.com/');
+  expect(actions).toEqual([]);
+  await p.getByRole('button', { name: 'Open Internal settings on phone' }).click();
+  await expect(app).toContainText('only open on the desktop');
+  await p.getByRole('button', { name: 'Manage Example Domain' }).click();
+  await p.getByRole('button', { name: 'Move…' }).click();
+  await p.getByRole('combobox', { name: 'Window', exact: true }).selectOption('2');
+  await p.getByRole('combobox', { name: 'Workspace', exact: true }).selectOption('0');
+  await p.getByRole('button', { name: 'Move', exact: true }).click();
+  expect(actions.at(-1)).toMatchObject({
+    instance_id: 'one',
+    tab_id: 10,
+    action: 'move',
+    window_id: 2,
+    workspace_id: 0,
+  });
+  await p.getByRole('button', { name: 'Close Example Domain on desktop' }).click();
+  await expect(app.locator('.browser-tab')).toHaveCount(2);
+  expect(actions.at(-1)).toMatchObject({ instance_id: 'one', tab_id: 10, action: 'close' });
+  await expect(p.getByRole('link', { name: 'Open Other tab on phone' })).toBeVisible();
+  await p.getByRole('searchbox', { name: 'Find a tab' }).fill('Other');
+  await expect(app.locator('.browser-tab')).toHaveCount(1);
+});
+test('Disconnected Browser explains setup and failed close keeps the tab', async ({ page: p }) => {
+  let snapshot = { instances: [] };
+  await p.route('**/api/browser/snapshot', r => r.fulfill({ json: snapshot }));
+  await p.route('**/api/browser/action', r =>
+    r.fulfill({ status: 400, json: { error: 'Browser disconnected' } })
+  );
+  await p.goto('/native/');
+  await p.getByText('browser', { exact: true }).first().click();
+  await expect(p.locator('#remote-browser-app')).toContainText('Connect Vivaldi');
+  snapshot = data();
+  await p.getByRole('button', { name: 'Refresh tabs' }).click();
+  await p.getByRole('button', { name: 'Close Example Domain on desktop' }).click();
+  await expect(p.locator('#remote-browser-app')).toContainText('Browser disconnected');
+  await expect(p.getByRole('link', { name: 'Open Example Domain on phone' })).toBeVisible();
 });
 
-test('Embedded page stays in its frame, hides for Expo and retains navigation state',async({page:p})=>{
- await p.route('**/api/browser/action',r=>r.fulfill({json:{ok:true}}));
- await p.route('**/api/browser/snapshot',r=>r.fulfill({json:data()}));
- await p.addInitScript(()=>{window.browserCommands=[];window.webkit={messageHandlers:{browserDevice:{postMessage:async q=>{window.browserCommands.push(q);return q.action==='capabilities'?{embedded:true}:{}}}}}});
- await p.goto('/native/');await p.getByText('browser',{exact:true}).first().click();
- await p.getByRole('link',{name:'Open Example Domain on phone'}).click();
- await expect(p.getByRole('textbox',{name:'Page address'})).toHaveValue('https://example.com/');
- await expect.poll(()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1)?.visible)).toBe(true);
- const frame=await p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1));
- expect(frame.radius).toBe(22);expect(frame.rect[0]).toBeGreaterThan(0);expect(frame.rect[1]).toBeGreaterThan(0);expect(frame.rect[0]+frame.rect[2]).toBeLessThanOrEqual(402);expect(frame.rect[1]+frame.rect[3]).toBeLessThan(874);
- await p.evaluate(()=>window.dispatchEvent(new CustomEvent('host-browser-state',{detail:{url:'https://example.org/',back:true,forward:false,loading:false}})));
- await expect(p.getByRole('textbox',{name:'Page address'})).toHaveValue('https://example.org/');
- const expanded=await p.locator('.browser-native-slot').boundingBox();
- await p.evaluate(()=>window.dispatchEvent(new CustomEvent('host-browser-state',{detail:{controlsHidden:true}})));
- await expect(p.locator('.browser-chrome')).toHaveCSS('max-height','0px');
- await p.waitForTimeout(300);
- const full=await p.locator('.browser-native-slot').boundingBox(),root=await p.locator('.browser-app').boundingBox();
- expect(Math.abs(full.x-root.x)).toBeLessThan(1);expect(Math.abs(full.y-root.y)).toBeLessThan(1);
- expect(Math.abs(full.width-root.width)).toBeLessThan(1);expect(Math.abs(full.height-root.height)).toBeLessThan(1);
- expect(full.height-expanded.height).toBeGreaterThan(90);
- await p.evaluate(()=>window.dispatchEvent(new CustomEvent('host-browser-state',{detail:{controlsHidden:false}})));
- await expect(p.getByRole('button',{name:'Back',exact:true})).toBeVisible();
- await p.getByRole('button',{name:'Back',exact:true}).click();
- expect(await p.evaluate(()=>window.browserCommands.some(q=>q.action==='back'))).toBe(true);
- await p.getByRole('button',{name:'Desktop tabs',exact:true}).click();
- await expect(p.getByRole('searchbox',{name:'Find a tab'})).toBeVisible();
- await expect.poll(()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1)?.visible)).toBe(false);
- await p.getByRole('button',{name:'Return to page'}).click();
- await expect.poll(()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1)?.visible)).toBe(true);
- // A desk modal must cover native content even though Browser remains active.
- await p.evaluate(()=>{const d=document.createElement('div');d.className='desk-sheet';document.body.append(d)});
- await expect.poll(()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1)?.visible)).toBe(false);
- await p.evaluate(()=>document.querySelector('.desk-sheet').remove());
- await expect.poll(()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1)?.visible)).toBe(true);
- await p.locator('#touch-shell > div').first().locator('[data-dc-tpl="10"]').last().click();
- await expect(p.locator('#touch-shell')).toHaveClass(/expo-mode/);
- await expect.poll(()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1)?.visible)).toBe(false);
- await p.locator('[data-workspace="browser"]').last().click();
- await expect(p.locator('#touch-shell')).not.toHaveClass(/expo-mode/);
- await p.getByRole('textbox',{name:'Page address'}).fill('example.net');
- await p.getByRole('textbox',{name:'Page address'}).press('Enter');
- await expect.poll(()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='open').at(-1)?.url)).toBe('https://example.net/');
+test('Embedded page stays in its frame, hides for Expo and retains navigation state', async ({
+  page: p,
+}) => {
+  await p.route('**/api/browser/action', r => r.fulfill({ json: { ok: true } }));
+  await p.route('**/api/browser/snapshot', r => r.fulfill({ json: data() }));
+  await p.addInitScript(() => {
+    window.browserCommands = [];
+    window.webkit = {
+      messageHandlers: {
+        browserDevice: {
+          postMessage: async q => {
+            window.browserCommands.push(q);
+            return q.action === 'capabilities' ? { embedded: true } : {};
+          },
+        },
+      },
+    };
+  });
+  await p.goto('/native/');
+  await p.getByText('browser', { exact: true }).first().click();
+  await p.getByRole('link', { name: 'Open Example Domain on phone' }).click();
+  await expect(p.getByRole('textbox', { name: 'Page address' })).toHaveValue(
+    'https://example.com/'
+  );
+  await expect
+    .poll(() =>
+      p.evaluate(() => window.browserCommands.filter(q => q.action === 'layout').at(-1)?.visible)
+    )
+    .toBe(true);
+  const frame = await p.evaluate(() =>
+    window.browserCommands.filter(q => q.action === 'layout').at(-1)
+  );
+  expect(frame.radius).toBe(22);
+  expect(frame.rect[0]).toBeGreaterThan(0);
+  expect(frame.rect[1]).toBeGreaterThan(0);
+  expect(frame.rect[0] + frame.rect[2]).toBeLessThanOrEqual(402);
+  expect(frame.rect[1] + frame.rect[3]).toBeLessThan(874);
+  await p.evaluate(() =>
+    window.dispatchEvent(
+      new CustomEvent('host-browser-state', {
+        detail: { url: 'https://example.org/', back: true, forward: false, loading: false },
+      })
+    )
+  );
+  await expect(p.getByRole('textbox', { name: 'Page address' })).toHaveValue(
+    'https://example.org/'
+  );
+  const expanded = await p.locator('.browser-native-slot').boundingBox();
+  await p.evaluate(() =>
+    window.dispatchEvent(
+      new CustomEvent('host-browser-state', { detail: { controlsHidden: true } })
+    )
+  );
+  await expect(p.locator('.browser-chrome')).toHaveCSS('max-height', '0px');
+  await p.waitForTimeout(300);
+  const full = await p.locator('.browser-native-slot').boundingBox(),
+    root = await p.locator('.browser-app').boundingBox();
+  expect(Math.abs(full.x - root.x)).toBeLessThan(1);
+  expect(Math.abs(full.y - root.y)).toBeLessThan(1);
+  expect(Math.abs(full.width - root.width)).toBeLessThan(1);
+  expect(Math.abs(full.height - root.height)).toBeLessThan(1);
+  expect(full.height - expanded.height).toBeGreaterThan(90);
+  await p.evaluate(() =>
+    window.dispatchEvent(
+      new CustomEvent('host-browser-state', { detail: { controlsHidden: false } })
+    )
+  );
+  await expect(p.getByRole('button', { name: 'Back', exact: true })).toBeVisible();
+  await p.getByRole('button', { name: 'Back', exact: true }).click();
+  expect(await p.evaluate(() => window.browserCommands.some(q => q.action === 'back'))).toBe(true);
+  await p.getByRole('button', { name: 'Desktop tabs', exact: true }).click();
+  await expect(p.getByRole('searchbox', { name: 'Find a tab' })).toBeVisible();
+  await expect
+    .poll(() =>
+      p.evaluate(() => window.browserCommands.filter(q => q.action === 'layout').at(-1)?.visible)
+    )
+    .toBe(false);
+  await p.getByRole('button', { name: 'Return to page' }).click();
+  await expect
+    .poll(() =>
+      p.evaluate(() => window.browserCommands.filter(q => q.action === 'layout').at(-1)?.visible)
+    )
+    .toBe(true);
+  // A desk modal must cover native content even though Browser remains active.
+  await p.evaluate(() => {
+    const d = document.createElement('div');
+    d.className = 'desk-sheet';
+    document.body.append(d);
+  });
+  await expect
+    .poll(() =>
+      p.evaluate(() => window.browserCommands.filter(q => q.action === 'layout').at(-1)?.visible)
+    )
+    .toBe(false);
+  await p.evaluate(() => document.querySelector('.desk-sheet').remove());
+  await expect
+    .poll(() =>
+      p.evaluate(() => window.browserCommands.filter(q => q.action === 'layout').at(-1)?.visible)
+    )
+    .toBe(true);
+  await p.locator('#touch-shell > div').first().locator('[data-dc-tpl="10"]').last().click();
+  await expect(p.locator('#touch-shell')).toHaveClass(/expo-mode/);
+  await expect
+    .poll(() =>
+      p.evaluate(() => window.browserCommands.filter(q => q.action === 'layout').at(-1)?.visible)
+    )
+    .toBe(false);
+  await p.locator('[data-workspace="browser"]').last().click();
+  await expect(p.locator('#touch-shell')).not.toHaveClass(/expo-mode/);
+  await p.getByRole('textbox', { name: 'Page address' }).fill('example.net');
+  await p.getByRole('textbox', { name: 'Page address' }).press('Enter');
+  await expect
+    .poll(() =>
+      p.evaluate(() => window.browserCommands.filter(q => q.action === 'open').at(-1)?.url)
+    )
+    .toBe('https://example.net/');
 });
 
-test('Embedded iPad page follows tiling, fullscreen, rotation and app disposal',async({page:p})=>{
- await p.setViewportSize({width:1194,height:834});
- await p.route('**/api/**',r=>r.abort());
- await p.route('**/api/browser/snapshot',r=>r.fulfill({json:data()}));
- await p.addInitScript(()=>{window.browserCommands=[];window.webkit={messageHandlers:{browserDevice:{postMessage:async q=>{window.browserCommands.push(q);return q.action==='capabilities'?{embedded:true}:{}}}}}});
- await p.goto('/native/');await p.keyboard.press('Meta+Shift+Enter');
- await p.getByRole('link',{name:'Open Example Domain on phone'}).click();
- const layout=()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1));
- await expect.poll(async()=>(await layout())?.visible).toBe(true);
- await p.keyboard.press('Meta+Comma');await p.waitForTimeout(600);
- const tiled=await layout();expect(tiled.radius).toBe(16);expect(tiled.rect[2]).toBeLessThan(600);
- await p.evaluate(()=>window.dispatchEvent(new CustomEvent('host-browser-state',{detail:{focused:true}})));
- await expect(p.locator('.desk-ws-label:visible')).toHaveText('browser');
- await p.keyboard.press('Meta+ArrowRight');
- await p.keyboard.press('Meta+f');
- await expect.poll(async()=>(await layout())?.visible).toBe(false);
- await p.keyboard.press('Meta+f');
- await expect.poll(async()=>(await layout())?.visible).toBe(true);
- await p.setViewportSize({width:834,height:1194});await p.waitForTimeout(600);
- const portrait=await layout();expect(portrait.viewport).toBe(834);expect(portrait.rect[0]+portrait.rect[2]).toBeLessThanOrEqual(834);expect(portrait.rect[1]+portrait.rect[3]).toBeLessThan(1194);
- await p.keyboard.press('Meta+ArrowUp');await p.keyboard.press('Meta+Shift+w');
- await expect.poll(()=>p.evaluate(()=>window.browserCommands.some(q=>q.action==='close'))).toBe(true);
+test('Embedded iPad page follows tiling, fullscreen, rotation and app disposal', async ({
+  page: p,
+}) => {
+  await p.setViewportSize({ width: 1194, height: 834 });
+  await p.route('**/api/**', r => r.abort());
+  await p.route('**/api/browser/snapshot', r => r.fulfill({ json: data() }));
+  await p.addInitScript(() => {
+    window.browserCommands = [];
+    window.webkit = {
+      messageHandlers: {
+        browserDevice: {
+          postMessage: async q => {
+            window.browserCommands.push(q);
+            return q.action === 'capabilities' ? { embedded: true } : {};
+          },
+        },
+      },
+    };
+  });
+  await p.goto('/native/');
+  await p.keyboard.press('Meta+Shift+Enter');
+  await p.getByRole('link', { name: 'Open Example Domain on phone' }).click();
+  const layout = () =>
+    p.evaluate(() => window.browserCommands.filter(q => q.action === 'layout').at(-1));
+  await expect.poll(async () => (await layout())?.visible).toBe(true);
+  await p.keyboard.press('Meta+Comma');
+  await p.waitForTimeout(600);
+  const tiled = await layout();
+  expect(tiled.radius).toBe(16);
+  expect(tiled.rect[2]).toBeLessThan(600);
+  await p.evaluate(() =>
+    window.dispatchEvent(new CustomEvent('host-browser-state', { detail: { focused: true } }))
+  );
+  await expect(p.locator('.desk-ws-label:visible')).toHaveText('browser');
+  await p.keyboard.press('Meta+ArrowRight');
+  await p.keyboard.press('Meta+f');
+  await expect.poll(async () => (await layout())?.visible).toBe(false);
+  await p.keyboard.press('Meta+f');
+  await expect.poll(async () => (await layout())?.visible).toBe(true);
+  await p.setViewportSize({ width: 834, height: 1194 });
+  await p.waitForTimeout(600);
+  const portrait = await layout();
+  expect(portrait.viewport).toBe(834);
+  expect(portrait.rect[0] + portrait.rect[2]).toBeLessThanOrEqual(834);
+  expect(portrait.rect[1] + portrait.rect[3]).toBeLessThan(1194);
+  await p.keyboard.press('Meta+ArrowUp');
+  await p.keyboard.press('Meta+Shift+w');
+  await expect
+    .poll(() => p.evaluate(() => window.browserCommands.some(q => q.action === 'close')))
+    .toBe(true);
 });
 
-test('Dark toggle persists native choice and the tab list uses Herd back chevron',async({page:p})=>{
- await p.route('**/api/browser/snapshot',r=>r.fulfill({json:data()}));
- await p.addInitScript(()=>{window.browserCommands=[];window.webkit={messageHandlers:{browserDevice:{postMessage:async q=>{window.browserCommands.push(q);return q.action==='capabilities'?{embedded:true,darkMode:true,dark:true}:q.action==='dark'?{dark:q.enabled}:{}}}}}});
- await p.goto('/native/');await p.getByText('browser',{exact:true}).first().click();await p.getByRole('link',{name:'Open Example Domain on phone'}).click();
- await expect(p.getByRole('button',{name:'Desktop tabs',exact:true})).toHaveText('‹');
- await p.getByRole('button',{name:'Browser options',exact:true}).click();
- const dark=p.getByRole('button',{name:'Force dark mode',includeHidden:true});
- await expect(dark).toHaveAttribute('aria-pressed','true');await dark.click();await expect(dark).toHaveAttribute('aria-pressed','false');
- await p.getByRole('button',{name:'Browser options',exact:true}).click();
- await dark.click();await expect(dark).toHaveAttribute('aria-pressed','true');
- expect(await p.evaluate(()=>window.browserCommands.filter(q=>q.action==='dark').map(q=>q.enabled))).toEqual([false,true]);
- await p.getByRole('button',{name:'Browser options',exact:true}).click();
- expect(await p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1).visible)).toBe(false);
- await p.getByRole('button',{name:'Reload page'}).click();
- await expect(p.getByRole('dialog',{name:'Browser options'})).toBeHidden();
- await expect.poll(()=>p.evaluate(()=>window.browserCommands.filter(q=>q.action==='layout').at(-1).visible)).toBe(true);
- expect(await p.evaluate(()=>window.browserCommands.some(q=>q.action==='reload'))).toBe(true);
- await p.getByRole('button',{name:'Browser options',exact:true}).click();await p.keyboard.press('Escape');
- await expect(p.getByRole('dialog',{name:'Browser options'})).toBeHidden();
+test('Dark toggle persists native choice and the tab list uses Herd back chevron', async ({
+  page: p,
+}) => {
+  await p.route('**/api/browser/snapshot', r => r.fulfill({ json: data() }));
+  await p.addInitScript(() => {
+    window.browserCommands = [];
+    window.webkit = {
+      messageHandlers: {
+        browserDevice: {
+          postMessage: async q => {
+            window.browserCommands.push(q);
+            return q.action === 'capabilities'
+              ? { embedded: true, darkMode: true, dark: true }
+              : q.action === 'dark'
+                ? { dark: q.enabled }
+                : {};
+          },
+        },
+      },
+    };
+  });
+  await p.goto('/native/');
+  await p.getByText('browser', { exact: true }).first().click();
+  await p.getByRole('link', { name: 'Open Example Domain on phone' }).click();
+  await expect(p.getByRole('button', { name: 'Desktop tabs', exact: true })).toHaveText('‹');
+  await p.getByRole('button', { name: 'Browser options', exact: true }).click();
+  const dark = p.getByRole('button', { name: 'Force dark mode', includeHidden: true });
+  await expect(dark).toHaveAttribute('aria-pressed', 'true');
+  await dark.click();
+  await expect(dark).toHaveAttribute('aria-pressed', 'false');
+  await p.getByRole('button', { name: 'Browser options', exact: true }).click();
+  await dark.click();
+  await expect(dark).toHaveAttribute('aria-pressed', 'true');
+  expect(
+    await p.evaluate(() =>
+      window.browserCommands.filter(q => q.action === 'dark').map(q => q.enabled)
+    )
+  ).toEqual([false, true]);
+  await p.getByRole('button', { name: 'Browser options', exact: true }).click();
+  expect(
+    await p.evaluate(() => window.browserCommands.filter(q => q.action === 'layout').at(-1).visible)
+  ).toBe(false);
+  await p.getByRole('button', { name: 'Reload page' }).click();
+  await expect(p.getByRole('dialog', { name: 'Browser options' })).toBeHidden();
+  await expect
+    .poll(() =>
+      p.evaluate(() => window.browserCommands.filter(q => q.action === 'layout').at(-1).visible)
+    )
+    .toBe(true);
+  expect(await p.evaluate(() => window.browserCommands.some(q => q.action === 'reload'))).toBe(
+    true
+  );
+  await p.getByRole('button', { name: 'Browser options', exact: true }).click();
+  await p.keyboard.press('Escape');
+  await expect(p.getByRole('dialog', { name: 'Browser options' })).toBeHidden();
 });
 
-test('Bundled Dark Reader recolors a light document and restores its original styling',async({page:p})=>{
- await p.goto('/native/');
- await p.setContent('<html><head><style>body{background:white;color:black}article{background:#eee;color:#222}</style></head><body><article>Readable text</article></body></html>');
- await p.addScriptTag({path:'public/vendor/darkreader/darkreader.js'});
- const before=await p.locator('body').evaluate(el=>getComputedStyle(el).backgroundColor);
- await p.evaluate(()=>{DarkReader.setFetchMethod(window.fetch.bind(window));DarkReader.enable({brightness:100,contrast:100,sepia:0},{disableStyleSheetsProxy:true,disableCustomElementRegistryProxy:true})});
- await expect.poll(()=>p.locator('body').evaluate(el=>getComputedStyle(el).backgroundColor)).not.toBe(before);
- const color=await p.locator('body').evaluate(el=>getComputedStyle(el).backgroundColor);
- expect(Math.max(...color.match(/\d+/g).slice(0,3).map(Number))).toBeLessThan(80);
- await p.evaluate(()=>DarkReader.disable());
- await expect(p.locator('body')).toHaveCSS('background-color',before);
+test('Bundled Dark Reader recolors a light document and restores its original styling', async ({
+  page: p,
+}) => {
+  await p.goto('/native/');
+  await p.setContent(
+    '<html><head><style>body{background:white;color:black}article{background:#eee;color:#222}</style></head><body><article>Readable text</article></body></html>'
+  );
+  await p.addScriptTag({ path: 'public/vendor/darkreader/darkreader.js' });
+  const before = await p.locator('body').evaluate(el => getComputedStyle(el).backgroundColor);
+  await p.evaluate(() => {
+    DarkReader.setFetchMethod(window.fetch.bind(window));
+    DarkReader.enable(
+      { brightness: 100, contrast: 100, sepia: 0 },
+      { disableStyleSheetsProxy: true, disableCustomElementRegistryProxy: true }
+    );
+  });
+  await expect
+    .poll(() => p.locator('body').evaluate(el => getComputedStyle(el).backgroundColor))
+    .not.toBe(before);
+  const color = await p.locator('body').evaluate(el => getComputedStyle(el).backgroundColor);
+  expect(Math.max(...color.match(/\d+/g).slice(0, 3).map(Number))).toBeLessThan(80);
+  await p.evaluate(() => DarkReader.disable());
+  await expect(p.locator('body')).toHaveCSS('background-color', before);
 });
 
-test('Embedded navigation updates the originating desktop tab without replaying loading or duplicate states',async({page:p})=>{
- const actions=[];
- await p.route('**/api/browser/snapshot',r=>r.fulfill({json:data()}));
- await p.route('**/api/browser/action',r=>{actions.push(r.request().postDataJSON());return r.fulfill({json:{ok:true}})});
- await p.addInitScript(()=>{window.webkit={messageHandlers:{browserDevice:{postMessage:async q=>q.action==='capabilities'?{embedded:true}:{}}}}});
- const state=detail=>p.evaluate(detail=>window.dispatchEvent(new CustomEvent('host-browser-state',{detail})),detail);
- await p.goto('/native/');await p.getByText('browser',{exact:true}).first().click();
- await p.getByRole('link',{name:'Open Example Domain on phone'}).click();
- await state({url:'https://example.com/',loading:false});await p.waitForTimeout(400);expect(actions).toEqual([]);
- await state({url:'https://example.com/redirect',loading:true});
- await state({url:'https://example.com/next',loading:false});
- await expect.poll(()=>actions.length).toBe(1);expect(actions[0]).toEqual({instance_id:'one',tab_id:10,action:'navigate',url:'https://example.com/next'});
- await state({url:'https://example.com/next',loading:false});await p.waitForTimeout(400);expect(actions.length).toBe(1);
- await p.getByRole('textbox',{name:'Page address'}).fill('example.net');await p.getByRole('textbox',{name:'Page address'}).press('Enter');
- await state({url:'https://example.net/',loading:true});await state({url:'https://example.net/',loading:false});
- await expect.poll(()=>actions.length).toBe(2);expect(actions[1].url).toBe('https://example.net/');
- await state({url:'https://example.net/',loading:false});
- await p.getByRole('button',{name:'Desktop tabs',exact:true}).click();await p.getByRole('link',{name:'Open Other tab on phone'}).click();
- await state({url:'https://example.net/',loading:false});await p.waitForTimeout(400);expect(actions.length).toBe(2);
- await state({url:'https://example.org/article',loading:false});
- await expect.poll(()=>actions.length).toBe(3);expect(actions[2]).toEqual({instance_id:'two',tab_id:12,action:'navigate',url:'https://example.org/article'});
- await state({url:'https://example.org/failed',loading:false,error:'Network offline'});await p.waitForTimeout(400);expect(actions.length).toBe(3);
- await p.route('**/api/browser/action',r=>r.fulfill({status:400,json:{error:'Tab is no longer open'}}));
- await state({url:'https://example.org/missing',loading:false});await expect(p.locator('.browser-page')).toContainText('Desktop tab was not updated: Tab is no longer open');
+test('Embedded navigation updates the originating desktop tab without replaying loading or duplicate states', async ({
+  page: p,
+}) => {
+  const actions = [];
+  await p.route('**/api/browser/snapshot', r => r.fulfill({ json: data() }));
+  await p.route('**/api/browser/action', r => {
+    actions.push(r.request().postDataJSON());
+    return r.fulfill({ json: { ok: true } });
+  });
+  await p.addInitScript(() => {
+    window.webkit = {
+      messageHandlers: {
+        browserDevice: {
+          postMessage: async q => (q.action === 'capabilities' ? { embedded: true } : {}),
+        },
+      },
+    };
+  });
+  const state = detail =>
+    p.evaluate(
+      detail => window.dispatchEvent(new CustomEvent('host-browser-state', { detail })),
+      detail
+    );
+  await p.goto('/native/');
+  await p.getByText('browser', { exact: true }).first().click();
+  await p.getByRole('link', { name: 'Open Example Domain on phone' }).click();
+  await state({ url: 'https://example.com/', loading: false });
+  await p.waitForTimeout(400);
+  expect(actions).toEqual([]);
+  await state({ url: 'https://example.com/redirect', loading: true });
+  await state({ url: 'https://example.com/next', loading: false });
+  await expect.poll(() => actions.length).toBe(1);
+  expect(actions[0]).toEqual({
+    instance_id: 'one',
+    tab_id: 10,
+    action: 'navigate',
+    url: 'https://example.com/next',
+  });
+  await state({ url: 'https://example.com/next', loading: false });
+  await p.waitForTimeout(400);
+  expect(actions.length).toBe(1);
+  await p.getByRole('textbox', { name: 'Page address' }).fill('example.net');
+  await p.getByRole('textbox', { name: 'Page address' }).press('Enter');
+  await state({ url: 'https://example.net/', loading: true });
+  await state({ url: 'https://example.net/', loading: false });
+  await expect.poll(() => actions.length).toBe(2);
+  expect(actions[1].url).toBe('https://example.net/');
+  await state({ url: 'https://example.net/', loading: false });
+  await p.getByRole('button', { name: 'Desktop tabs', exact: true }).click();
+  await p.getByRole('link', { name: 'Open Other tab on phone' }).click();
+  await state({ url: 'https://example.net/', loading: false });
+  await p.waitForTimeout(400);
+  expect(actions.length).toBe(2);
+  await state({ url: 'https://example.org/article', loading: false });
+  await expect.poll(() => actions.length).toBe(3);
+  expect(actions[2]).toEqual({
+    instance_id: 'two',
+    tab_id: 12,
+    action: 'navigate',
+    url: 'https://example.org/article',
+  });
+  await state({ url: 'https://example.org/failed', loading: false, error: 'Network offline' });
+  await p.waitForTimeout(400);
+  expect(actions.length).toBe(3);
+  await p.route('**/api/browser/action', r =>
+    r.fulfill({ status: 400, json: { error: 'Tab is no longer open' } })
+  );
+  await state({ url: 'https://example.org/missing', loading: false });
+  await expect(p.locator('.browser-page')).toContainText(
+    'Desktop tab was not updated: Tab is no longer open'
+  );
 });

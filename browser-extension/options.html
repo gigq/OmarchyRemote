@@ -1,4 +1,51 @@
-<!doctype html><meta charset="utf-8"><title>Omarchy Remote Browser</title>
-<style>body{font:14px system-ui;background:#181622;color:#ddd8ed;margin:24px;min-width:280px;max-width:480px}label{display:block;margin:18px 0 6px}input,button{box-sizing:border-box;width:100%;padding:10px;color:inherit;border:1px solid #494557;border-radius:8px;background:#222030}button{margin-top:18px;background:#397d96}p{line-height:1.5;color:#aaa5be}</style>
-<h2>Omarchy Remote Browser</h2><p>Connects this Vivaldi profile to Browser on your phone through the local Omarchy backend. Tab changes apply to the desktop. Cookies and page contents stay in Vivaldi.</p>
-<form><label for="label">Browser name</label><input id="label" placeholder="Vivaldi · Personal"><label for="folder">Profile folder</label><input id="folder" placeholder="Default"><p>Use Default unless this is another profile. The folder appears under Profile Path in vivaldi://version. This supplies workspace names.</p><button>Save</button><p id="status" role="status"></p></form><script src="options.js"></script>
+<!doctype html><meta charset="utf-8" /><title>Omarchy Remote Browser</title>
+<style>
+  body {
+    font: 14px system-ui;
+    background: #181622;
+    color: #ddd8ed;
+    margin: 24px;
+    min-width: 280px;
+    max-width: 480px;
+  }
+  label {
+    display: block;
+    margin: 18px 0 6px;
+  }
+  input,
+  button {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 10px;
+    color: inherit;
+    border: 1px solid #494557;
+    border-radius: 8px;
+    background: #222030;
+  }
+  button {
+    margin-top: 18px;
+    background: #397d96;
+  }
+  p {
+    line-height: 1.5;
+    color: #aaa5be;
+  }
+</style>
+<h2>Omarchy Remote Browser</h2>
+<p>
+  Connects this Vivaldi profile to Browser on your phone through the local Omarchy backend. Tab
+  changes apply to the desktop. Cookies and page contents stay in Vivaldi.
+</p>
+<form>
+  <label for="label">Browser name</label><input id="label" placeholder="Vivaldi · Personal" /><label
+    for="folder"
+    >Profile folder</label
+  ><input id="folder" placeholder="Default" />
+  <p>
+    Use Default unless this is another profile. The folder appears under Profile Path in
+    vivaldi://version. This supplies workspace names.
+  </p>
+  <button>Save</button>
+  <p id="status" role="status"></p>
+</form>
+<script src="options.js"></script>

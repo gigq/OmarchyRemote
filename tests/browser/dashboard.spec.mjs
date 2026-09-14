@@ -1,25 +1,146 @@
-import {test,expect} from './fixtures.mjs';
-import {captureTerminals} from './terminal-helper.mjs';
-async function launcher(page){const cdp=await page.context().newCDPSession(page);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:200,y:30}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:200,y:180}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();await expect(page.getByRole('searchbox',{name:'Search apps, panes and files'})).toBeFocused()}
-test('native launcher opens an app and a pane from Home',async({page})=>{
- const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('/native/');await launcher(page);const input=page.getByRole('searchbox',{name:'Search apps, panes and files'});await input.fill('files');await page.locator('.launcher-result').filter({has:page.getByText('files',{exact:true})}).first().click();await expect(page.locator('#remote-files-app .files-heading')).toBeVisible();
- await launcher(page);await input.fill('@');await expect(page.locator('.launcher-result').first()).toBeVisible();await page.locator('.launcher-result').first().click();await expect(page.locator('.herdr-detail')).toBeVisible();expect(errors).toEqual([]);
+import { test, expect } from './fixtures.mjs';
+import { captureTerminals } from './terminal-helper.mjs';
+async function launcher(page) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: 200, y: 30 }],
+  });
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchMove',
+    touchPoints: [{ x: 200, y: 180 }],
+  });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+  await expect(page.getByRole('searchbox', { name: 'Search apps, panes and files' })).toBeFocused();
+}
+test('native launcher opens an app and a pane from Home', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/native/');
+  await launcher(page);
+  const input = page.getByRole('searchbox', { name: 'Search apps, panes and files' });
+  await input.fill('files');
+  await page
+    .locator('.launcher-result')
+    .filter({ has: page.getByText('files', { exact: true }) })
+    .first()
+    .click();
+  await expect(page.locator('#remote-files-app .files-heading')).toBeVisible();
+  await launcher(page);
+  await input.fill('@');
+  await expect(page.locator('.launcher-result').first()).toBeVisible();
+  await page.locator('.launcher-result').first().click();
+  await expect(page.locator('.herdr-detail')).toBeVisible();
+  expect(errors).toEqual([]);
 });
-test('terminal tabs isolate sessions and close the selected shell',async({page})=>{
- await captureTerminals(page);await page.goto('/native/');await page.getByText('terminal',{exact:true}).first().click();await expect(page.locator('.terminal-tab:visible')).toContainText('· connected');const first=await page.evaluate(()=>localStorage.getItem('omarchy-terminal-id'));
- await page.getByRole('button',{name:'New terminal tab'}).click();await expect(page.locator('.terminal-tab:visible')).toContainText('· connected');const second=await page.evaluate(()=>localStorage.getItem(localStorage.getItem('omarchy-terminal-active')));expect(first).not.toBe(second);
- await page.getByRole('button',{name:'1 shell',exact:true}).click();expect(await page.evaluate(()=>localStorage.getItem('omarchy-terminal-active'))).toBe('omarchy-terminal-id');await page.getByRole('button',{name:'2 shell',exact:true}).click();await page.getByRole('button',{name:'Close terminal tab'}).click();await page.getByRole('button',{name:'Close shell',exact:true}).click();await expect(page.locator('.terminal-tab')).toHaveCount(1);
- const response=await page.request.post('/api/terminal/'+first+'/close',{headers:{'X-Hyprland-Client':'1'},data:{}});expect(response.ok()).toBeTruthy();
+test('terminal tabs isolate sessions and close the selected shell', async ({ page }) => {
+  await captureTerminals(page);
+  await page.goto('/native/');
+  await page.getByText('terminal', { exact: true }).first().click();
+  await expect(page.locator('.terminal-tab:visible')).toContainText('· connected');
+  const first = await page.evaluate(() => localStorage.getItem('omarchy-terminal-id'));
+  await page.getByRole('button', { name: 'New terminal tab' }).click();
+  await expect(page.locator('.terminal-tab:visible')).toContainText('· connected');
+  const second = await page.evaluate(() =>
+    localStorage.getItem(localStorage.getItem('omarchy-terminal-active'))
+  );
+  expect(first).not.toBe(second);
+  await page.getByRole('button', { name: '1 shell', exact: true }).click();
+  expect(await page.evaluate(() => localStorage.getItem('omarchy-terminal-active'))).toBe(
+    'omarchy-terminal-id'
+  );
+  await page.getByRole('button', { name: '2 shell', exact: true }).click();
+  await page.getByRole('button', { name: 'Close terminal tab' }).click();
+  await page.getByRole('button', { name: 'Close shell', exact: true }).click();
+  await expect(page.locator('.terminal-tab')).toHaveCount(1);
+  const response = await page.request.post('/api/terminal/' + first + '/close', {
+    headers: { 'X-Hyprland-Client': '1' },
+    data: {},
+  });
+  expect(response.ok()).toBeTruthy();
 });
-test('snippet is a reviewable draft and does not execute',async({page})=>{
- await captureTerminals(page);await page.goto('/native/');await launcher(page);await page.getByRole('searchbox',{name:'Search apps, panes and files'}).fill('>uptime');await page.getByRole('button',{name:'uptime Review and send'}).click();await expect(page.getByRole('textbox',{name:'Message to host'})).toHaveValue('uptime');await expect(page.locator('.terminal-tab:visible')).toContainText('· connected');const id=await page.evaluate(()=>localStorage.getItem('omarchy-terminal-id'));await page.request.post('/api/terminal/'+id+'/close',{headers:{'X-Hyprland-Client':'1'},data:{}});
+test('snippet is a reviewable draft and does not execute', async ({ page }) => {
+  await captureTerminals(page);
+  await page.goto('/native/');
+  await launcher(page);
+  await page.getByRole('searchbox', { name: 'Search apps, panes and files' }).fill('>uptime');
+  await page.getByRole('button', { name: 'uptime Review and send' }).click();
+  await expect(page.getByRole('textbox', { name: 'Message to host' })).toHaveValue('uptime');
+  await expect(page.locator('.terminal-tab:visible')).toContainText('· connected');
+  const id = await page.evaluate(() => localStorage.getItem('omarchy-terminal-id'));
+  await page.request.post('/api/terminal/' + id + '/close', {
+    headers: { 'X-Hyprland-Client': '1' },
+    data: {},
+  });
 });
-test('Herd filters and search preserve a single row of chips',async({page})=>{
- await page.goto('/native/');await page.getByText('herdr',{exact:true}).first().click();await expect(page.locator('.herdr-pane').first()).toBeVisible();const bounds=await page.locator('.herdr-filters button').evaluateAll(ns=>ns.map(n=>n.getBoundingClientRect().top));expect(new Set(bounds).size).toBe(1);await page.getByRole('button',{name:/needs you ·/}).click();await expect(page.locator('.herdr-state:not([data-state="blocked"])')).toHaveCount(0);await page.getByRole('button',{name:'all',exact:true}).click();await page.getByRole('searchbox',{name:'Search panes'}).fill('no-such-pane-8811');await expect(page.locator('.herdr-list')).toContainText('No matching panes.');
+test('Herd filters and search preserve a single row of chips', async ({ page }) => {
+  await page.goto('/native/');
+  await page.getByText('herdr', { exact: true }).first().click();
+  await expect(page.locator('.herdr-pane').first()).toBeVisible();
+  const bounds = await page
+    .locator('.herdr-filters button')
+    .evaluateAll(ns => ns.map(n => n.getBoundingClientRect().top));
+  expect(new Set(bounds).size).toBe(1);
+  await page.getByRole('button', { name: /needs you ·/ }).click();
+  await expect(page.locator('.herdr-state:not([data-state="blocked"])')).toHaveCount(0);
+  await page.getByRole('button', { name: 'all', exact: true }).click();
+  await page.getByRole('searchbox', { name: 'Search panes' }).fill('no-such-pane-8811');
+  await expect(page.locator('.herdr-list')).toContainText('No matching panes.');
 });
-test('Home pins persist without removing apps from the launcher',async({page})=>{
- await page.goto('/native/');await page.getByRole('button',{name:'Manage pinned apps'}).click();const dialog=page.getByRole('dialog',{name:'Pinned apps'});await dialog.getByRole('button',{name:'lnav',exact:true}).click();await dialog.getByRole('button',{name:'Done',exact:true}).click();await expect(page.locator('.home-app-grid').getByText('lnav',{exact:true})).toHaveCount(0);await page.reload();await expect(page.locator('.home-app-grid').getByText('lnav',{exact:true})).toHaveCount(0);await launcher(page);await page.getByRole('searchbox',{name:'Search apps, panes and files'}).fill('lnav');await expect(page.locator('.launcher-result').getByText('lnav',{exact:true})).toBeVisible();
+test('Home pins persist without removing apps from the launcher', async ({ page }) => {
+  await page.goto('/native/');
+  await page.getByRole('button', { name: 'Manage pinned apps' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Pinned apps' });
+  await dialog.getByRole('button', { name: 'lnav', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page.locator('.home-app-grid').getByText('lnav', { exact: true })).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator('.home-app-grid').getByText('lnav', { exact: true })).toHaveCount(0);
+  await launcher(page);
+  await page.getByRole('searchbox', { name: 'Search apps, panes and files' }).fill('lnav');
+  await expect(page.locator('.launcher-result').getByText('lnav', { exact: true })).toBeVisible();
 });
-test('attention inbox dismisses an event but shows a new request for the same pane',async({page})=>{
- let seq=1;await page.route('**/api/herdr/snapshot',route=>route.fulfill({json:{workspaces:[{workspace_id:'qa',label:'QA'}],tabs:[{tab_id:'qa',label:'QA'}],panes:[{pane_id:'qa',workspace_id:'qa',tab_id:'qa',agent:'codex',agent_status:'blocked',attention_kind:'permission',state_change_seq:seq,terminal_title_stripped:'QA approval'}]}}));await page.goto('/native/');await expect(page.locator('#home-attention')).toContainText('QA approval');const cdp=await page.context().newCDPSession(page);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:70,y:30}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:70,y:180}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();await expect(page.locator('.attention-card')).toBeVisible();await page.getByRole('button',{name:'dismiss',exact:true}).click();await expect(page.locator('.attention-card')).toHaveCount(0);seq=2;await expect(page.locator('.attention-card')).toBeVisible({timeout:8000});
+test('attention inbox dismisses an event but shows a new request for the same pane', async ({
+  page,
+}) => {
+  let seq = 1;
+  await page.route('**/api/herdr/snapshot', route =>
+    route.fulfill({
+      json: {
+        workspaces: [{ workspace_id: 'qa', label: 'QA' }],
+        tabs: [{ tab_id: 'qa', label: 'QA' }],
+        panes: [
+          {
+            pane_id: 'qa',
+            workspace_id: 'qa',
+            tab_id: 'qa',
+            agent: 'codex',
+            agent_status: 'blocked',
+            attention_kind: 'permission',
+            state_change_seq: seq,
+            terminal_title_stripped: 'QA approval',
+          },
+        ],
+      },
+    })
+  );
+  await page.goto('/native/');
+  await expect(page.locator('#home-attention')).toContainText('QA approval');
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: 70, y: 30 }],
+  });
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchMove',
+    touchPoints: [{ x: 70, y: 180 }],
+  });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+  await expect(page.locator('.attention-card')).toBeVisible();
+  await page.getByRole('button', { name: 'dismiss', exact: true }).click();
+  await expect(page.locator('.attention-card')).toHaveCount(0);
+  seq = 2;
+  await expect(page.locator('.attention-card')).toBeVisible({ timeout: 8000 });
 });

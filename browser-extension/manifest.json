@@ -4,12 +4,7 @@
   "version": "0.1.0",
   "description": "Mirror Vivaldi windows, workspaces and tabs to your private Omarchy Remote app.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAufapX7lXbhkqUtlSGdwC1VWxnzRvdwguxUE640ktH1H4l2b1pt3SfCKrb27FCmKYXlVhSAPJRiAZlAaWDTgPCbKhNKFMlmd0jvqFv5ZI8yxSo1Ztcc4NuVmnX5nkvvDxFo78yFlAGhmrvVJkIfwAHu6yL+iOcsLJh99XpascQ51OoL8wdr9eFD61Mg+eX+vyp4WvP+jHGRovvEonc4pdNqLWvYi/mdmkc9zz1L4Nx1eeEpJln0+9ogFG/y3z8AkcYmObaZ27Dz8RMFsPfoltEvun9M0nEKTcRioi3j7Bp0PVKa8zV5E0w0C4vVqE6LOMxJjw2MoXoeT3BREUTvwsFQIDAQAB",
-  "permissions": [
-    "tabs",
-    "nativeMessaging",
-    "storage",
-    "alarms"
-  ],
+  "permissions": ["tabs", "nativeMessaging", "storage", "alarms"],
   "background": {
     "service_worker": "background.js"
   },

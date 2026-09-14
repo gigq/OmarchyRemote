@@ -6,17 +6,17 @@ Everything runs on the host you already own. There is no cloud relay: a Rust bac
 
 ## Layout
 
-| Path | What it is |
-| --- | --- |
-| `public/` | The web shell. `index.html` holds the shell template and component (a Claude Design export kept on its `x-dc` runtime); each app is its own `public/<app>.js` module registered through `public/apps.js`. |
-| `backend/` | Rust (axum) host backend on `127.0.0.1:4188`: PTYs, Herdr, files, browser bridge, widgets, uploads. See [backend/README.md](backend/README.md). |
-| `scripts/serve.mjs` | Development server on `127.0.0.1:4187`: static files, live reload, and the `/api/` proxy to the backend. |
-| `scripts/build.mjs` | Builds a standalone PWA (Cloudflare Worker plus static client) in `dist/`. |
-| `ios/` | Native iPhone/iPad wrapper (UIKit + WKWebView) that loads the live shell and bundles an offline copy. |
-| `browser-extension/` | Vivaldi/Chromium extension that exposes windows, workspaces, and tabs to the Browser app. |
-| `deploy/` | systemd user unit templates and `install.sh`. |
-| `docs/` | [Feature reference](docs/features.md) and design handoff notes. |
-| `tests/`, `scripts/*.test.mjs` | Playwright and Node tests. |
+| Path                           | What it is                                                                                                                                                                                                |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `public/`                      | The web shell. `index.html` holds the shell template and component (a Claude Design export kept on its `x-dc` runtime); each app is its own `public/<app>.js` module registered through `public/apps.js`. |
+| `backend/`                     | Rust (axum) host backend on `127.0.0.1:4188`: PTYs, Herdr, files, browser bridge, widgets, uploads. See [backend/README.md](backend/README.md).                                                           |
+| `scripts/serve.mjs`            | Development server on `127.0.0.1:4187`: static files, live reload, and the `/api/` proxy to the backend.                                                                                                  |
+| `scripts/build.mjs`            | Builds a standalone PWA (Cloudflare Worker plus static client) in `dist/`.                                                                                                                                |
+| `ios/`                         | Native iPhone/iPad wrapper (UIKit + WKWebView) that loads the live shell and bundles an offline copy.                                                                                                     |
+| `browser-extension/`           | Vivaldi/Chromium extension that exposes windows, workspaces, and tabs to the Browser app.                                                                                                                 |
+| `deploy/`                      | systemd user unit templates and `install.sh`.                                                                                                                                                             |
+| `docs/`                        | [Feature reference](docs/features.md) and design handoff notes.                                                                                                                                           |
+| `tests/`, `scripts/*.test.mjs` | Playwright and Node tests.                                                                                                                                                                                |
 
 ## Requirements
 
@@ -73,18 +73,18 @@ Everything runs on the host you already own. There is no cloud relay: a Rust bac
 
 **iPad, Mac, and desktop windows.** When both edges of the viewport are at least 600 px, the shell switches to desk mode: a 1:1 layout that fills the window, Home with the clock, app grid, and all widgets at once, and workspaces that tile windows with Hyprland's dwindle split (up to four per workspace). Hardware keyboards use ⌘ on Apple devices (Omarchy's SUPER) and Ctrl+Alt elsewhere. Press ⌘/ or tap the shortcut button in the top bar for the same table.
 
-| Keys | Action |
-| --- | --- |
-| ⌘1…9 / ⌘0, ⌘[ / ⌘] | Switch workspace, previous / next workspace |
-| ⌘E | Expo overview |
-| ⌘⌥1…9 / ⌘⌥0, ⌘⇧[ / ⌘⇧] | Move the focused window to a workspace |
-| ⌘← ↑ ↓ →, ⌘⇧arrows | Focus / swap window in a direction |
-| ⌘J / ⌘⇧J | Next / previous window in the workspace |
-| ⌘F | Toggle fullscreen for the focused window |
-| ⌘W | Close the focused window |
+| Keys                               | Action                                                |
+| ---------------------------------- | ----------------------------------------------------- |
+| ⌘1…9 / ⌘0, ⌘[ / ⌘]                 | Switch workspace, previous / next workspace           |
+| ⌘E                                 | Expo overview                                         |
+| ⌘⌥1…9 / ⌘⌥0, ⌘⇧[ / ⌘⇧]             | Move the focused window to a workspace                |
+| ⌘← ↑ ↓ →, ⌘⇧arrows                 | Focus / swap window in a direction                    |
+| ⌘J / ⌘⇧J                           | Next / previous window in the workspace               |
+| ⌘F                                 | Toggle fullscreen for the focused window              |
+| ⌘W                                 | Close the focused window                              |
 | ⌘⏎ (or ⌘T), ⌘⇧B, ⌘⇧F, ⌘⇧A, ⌘⇧D, ⌘, | Terminal, browser, files, Herdr, lazydocker, settings |
-| ⌘K | Launcher |
-| ⌘/ | Shortcut sheet; Esc closes sheets, Expo, and shades |
+| ⌘K                                 | Launcher                                              |
+| ⌘/                                 | Shortcut sheet; Esc closes sheets, Expo, and shades   |
 
 0 selects workspace 10. Window cycling requires multiple windows in the current workspace and follows the focused window in fullscreen. Text fields keep the standard editing shortcuts, including ⌘arrows and ⌘⌫; use ⌘J to cycle while editing. ⌘Space and ⌘backtick are left to the operating system. The native app registers shell commands with UIKit; web browsers can intercept shortcuts before the shell receives them. Numbered moves use Option on iPad because Shift-Command-3/4 are screenshot shortcuts; the browser version retains Shift. ⌘Enter opens Terminal (⌘T remains an alternate). Shift-Return for Browser and Delete for closing windows remain browser-only aliases.
 
@@ -110,22 +110,22 @@ Browser reopens the last viewed HTTP(S) tab on this device if it is still in the
 
 When Browser is active, its keyboard commands take precedence over conflicting shell commands. The `⌘ /` shortcut list includes Browser commands. Clipboard and website text editing stay native. Find uses WebKit’s native search panel, keeping the query and match navigation in the website’s own view.
 
-| Keys | Action |
-| --- | --- |
-| ⌘ L | Select address; in the manager, search tabs |
-| ⌘ ⇧ L or F2 | Open and search the tab manager |
-| ⌘ T / ⌘ N | Create a desktop tab / window (enter its URL) |
-| ⌘ W | Close the current desktop tab and select the next available tab |
-| ⌘ ⇧ T | Reopen a tab closed here, restoring its URL |
-| Ctrl Tab / Ctrl ⇧ Tab, Ctrl PageDown / PageUp | Next / previous openable tab across profiles and windows |
-| ⌘ ⌥ → / ← | Next / previous openable tab |
-| ⌘ 1–8 / ⌘ 9 | Numbered tab / last openable tab in the current desktop window |
-| ⌘ [ / ] | Page back / forward |
-| ⌘ R / ⌘ ⇧ R, F5 / ⇧ F5 | Reload / reload bypassing cache |
-| ⌘ F, ⌘ G / ⌘ ⇧ G, F3 / ⇧ F3 | Find in page, next / previous match |
-| ⌘ + / − / 0 | Page zoom in / out / reset |
-| Escape | Dismiss dialog/find/options, otherwise stop loading |
-| ⌘ ⇧ W / ⌘ ⇧ F | Close Browser's shell window / toggle its fullscreen layout |
+| Keys                                          | Action                                                          |
+| --------------------------------------------- | --------------------------------------------------------------- |
+| ⌘ L                                           | Select address; in the manager, search tabs                     |
+| ⌘ ⇧ L or F2                                   | Open and search the tab manager                                 |
+| ⌘ T / ⌘ N                                     | Create a desktop tab / window (enter its URL)                   |
+| ⌘ W                                           | Close the current desktop tab and select the next available tab |
+| ⌘ ⇧ T                                         | Reopen a tab closed here, restoring its URL                     |
+| Ctrl Tab / Ctrl ⇧ Tab, Ctrl PageDown / PageUp | Next / previous openable tab across profiles and windows        |
+| ⌘ ⌥ → / ←                                     | Next / previous openable tab                                    |
+| ⌘ 1–8 / ⌘ 9                                   | Numbered tab / last openable tab in the current desktop window  |
+| ⌘ [ / ]                                       | Page back / forward                                             |
+| ⌘ R / ⌘ ⇧ R, F5 / ⇧ F5                        | Reload / reload bypassing cache                                 |
+| ⌘ F, ⌘ G / ⌘ ⇧ G, F3 / ⇧ F3                   | Find in page, next / previous match                             |
+| ⌘ + / − / 0                                   | Page zoom in / out / reset                                      |
+| Escape                                        | Dismiss dialog/find/options, otherwise stop loading             |
+| ⌘ ⇧ W / ⌘ ⇧ F                                 | Close Browser's shell window / toggle its fullscreen layout     |
 
 Use ⌘ E for Expo, ⌘ J / ⇧ J for adjacent shell panes, and ⌘ Return for Terminal while Browser owns the usual tab keys. Native shortcut interception and find/zoom require build 27 or later. These commands operate the embedded WebKit page or the desktop tab adapter; they do not reproduce Vivaldi-only features such as panels, bookmarks, command chains, or DevTools. Reopening a tab restores its URL, not its old page history or form state. The last tab and the last 20 tabs closed here are stored locally and included in the native local preferences mirror, not the shared installed-app catalog.
 

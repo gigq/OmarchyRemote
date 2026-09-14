@@ -2,10 +2,20 @@ import { readdir, readFile, mkdir, writeFile, cp, rm } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 
-const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2', '.png': 'image/png', '.webp': 'image/webp' };
+const types = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.webmanifest': 'application/manifest+json',
+  '.woff2': 'font/woff2',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+};
 async function walk(dir) {
   const entries = await readdir(dir, { withFileTypes: true });
-  const nested = await Promise.all(entries.map(e => e.isDirectory() ? walk(path.join(dir, e.name)) : path.join(dir, e.name)));
+  const nested = await Promise.all(
+    entries.map(e => (e.isDirectory() ? walk(path.join(dir, e.name)) : path.join(dir, e.name)))
+  );
   return nested.flat().sort();
 }
 const files = await walk('public');
@@ -14,7 +24,10 @@ const hash = createHash('sha256');
 for (const file of files) {
   const bytes = await readFile(file);
   hash.update(file).update(bytes);
-  assets['/' + path.relative('public', file)] = { body: bytes.toString('base64'), type: types[path.extname(file)] || 'application/octet-stream' };
+  assets['/' + path.relative('public', file)] = {
+    body: bytes.toString('base64'),
+    type: types[path.extname(file)] || 'application/octet-stream',
+  };
 }
 const version = hash.digest('hex').slice(0, 16);
 const sw = `const CACHE = 'hyprland-touch-${version}';

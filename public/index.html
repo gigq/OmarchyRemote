@@ -450,107 +450,555 @@
 <script type="text/x-dc" data-dc-script="">
 class Component extends DCLogic {
   APPS = window.HyprlandApps.catalog; // see public/apps.js
-  T = {bg:'var(--theme-background)',sf:'var(--theme-surface)',sf2:'var(--theme-surface-raised)',bd:'var(--theme-border)',fg:'var(--theme-foreground)',mu:'var(--theme-secondary)',dim:'var(--theme-dim)',love:'var(--theme-red)',gold:'var(--theme-yellow)',rose:'var(--theme-rose)',foam:'var(--theme-green)',iris:'var(--theme-magenta)'};
-  state = { ws:0, open:['home'], desk:!!window.HyprlandDesk?.isDesk(), deskW:window.innerWidth, deskH:window.innerHeight, tiles:{}, focus:null, full:[], ov:false, kb:false, sup:false, term:false, ctl:false, shade:null, launch:false, query:'', shift:false };
-  async componentDidMount(){ await window.HyprlandPreferences?.ready; await window.HyprlandWebApps?.ready; window.HyprlandPreferences?.bind(this); window.HyprlandWebApps?.bind(this); this.hostChanged=()=>this.set({});document.addEventListener('hyprland-host',this.hostChanged);window.addEventListener('online',this.hostChanged);window.addEventListener('offline',this.hostChanged); this.cards=window.HyprlandCards?.attach(this); this.remote=window.HyprlandRemote?.attach(this); window.HyprlandThemes.attach(); this.expo=window.HyprlandExpo.attach(this); this.widgets=window.HyprlandWidgets.attach(this); this.dashboard=window.HyprlandDashboard.attach(this); this.desk=window.HyprlandDesk?.attach(this); window.updateDeviceBattery?.() }
-  componentDidUpdate(){ window.HyprlandPreferences?.update(this); this.cards?.update(); this.remote?.update(); this.expo?.update(); this.widgets?.update(); this.dashboard?.update(); this.desk?.update(); window.updateDeviceBattery?.() }
-  componentWillUnmount(){ document.removeEventListener('hyprland-host',this.hostChanged);window.removeEventListener('online',this.hostChanged);window.removeEventListener('offline',this.hostChanged);this.keyEnd();this.desk?.dispose();this.cards?.dispose();this.dashboard?.dispose();this.widgets?.dispose();this.expo?.dispose();this.remote?.dispose() }
-  ptr = null; wx = null;
-  cancel=()=>{ this.ptr=null };
-  set(p){ this.setState(p) }
-  cur(){ const s=this.state; return s.desk&&window.HyprlandDesk?window.HyprlandDesk.cur(s):s.open[s.ws] }
-  reset(){ return {ov:false,kb:false,sup:false,ctl:false,launch:false,shade:null,query:''} }
-  // Desk mode: workspaces hold several windows; `jump` and `focusApp` address a window by app key.
-  jump(key){ const s=this.state; if(s.desk&&window.HyprlandDesk){ const D=window.HyprlandDesk; this.set({...D.go(s,D.deskOf(s,key)),focus:key,...this.reset()}) } else this.go(s.open.indexOf(key)) }
-  focusApp(key){ const s=this.state; if(!s.desk||!window.HyprlandDesk||!s.open.includes(key)) return this.openApp(key); this.set({ws:window.HyprlandDesk.deskOf(s,key),focus:key}) }
-  openLauncher(){const show=()=>this.set({launch:true,kb:true,sup:false,ov:false,shade:null});if(window.ReactDOM?.flushSync)window.ReactDOM.flushSync(show);else show();this.dashboard?.field.focus()}
-  go(i,open){ open=open||this.state.open; const s=this.state; if(s.desk&&window.HyprlandDesk){ this.set({open,...window.HyprlandDesk.go({...s,open},i),...this.reset()}); return } const n=open.length; this.set({open,ws:Math.max(0,Math.min(n-1,i)),...this.reset()}) }
-  openApp(key){ if(!this.APPS[key])return; const s=this.state; const i=s.open.indexOf(key); if(s.desk&&window.HyprlandDesk){ if(i<0&&s.open.length>=10){this.expo?.error('Maximum 10 windows. Close one in Expo to open another.');return} this.set({...window.HyprlandDesk.open(s,key),...this.reset()}); return } if(i>=0) return this.go(i); if(s.open.length>=10){this.expo?.error('Maximum 10 workspaces. Close an app in Expo to open another.');return} const open=[...s.open,key]; this.go(open.length-1,open) }
-  async closeApp(k,expo=false){ if(k==='home'||!this.state.open.includes(k)||this.closing)return; this.closing=true; try{ await this.remote?.closeApp(k); const s=this.state; if(s.desk&&window.HyprlandDesk){ this.set({...window.HyprlandDesk.close(s,k),ov:expo,kb:false,sup:false,ctl:false}) } else { const current=this.cur(),open=s.open.filter(x=>x!==k),ws=current===k?Math.max(0,s.ws-1):open.indexOf(current); this.set({open,ws,ov:expo,kb:false,sup:false,ctl:false}) } }catch(e){ this.expo?.error('Could not close app. Check the host connection and try again.');this.set({}) }finally{this.closing=false} }
-  closeWs(){ this.closeApp(this.cur()) }
-  down=e=>{ const r=e.currentTarget.getBoundingClientRect(); this.ptr={x:e.clientX-r.left,y:e.clientY-r.top,cx:e.clientX,cy:e.clientY,w:r.width,h:r.height} }
-  up=e=>{ const p=this.ptr; if(!p) return; this.ptr=null; const dx=e.clientX-p.cx, dy=e.clientY-p.cy, s=this.state, E=Math.max(24,p.w*.08), T=40, third=p.w/3;
-    if(s.shade && dy<-T) return this.set({shade:null});
-    if(s.launch && dy<-T) return this.set({launch:false,kb:false,query:''});
-    if(p.y>p.h-E && dy<-T){ const corner=p.w*.15; if(p.x<corner) return this.set({kb:true,sup:false,ov:false,launch:false}); if(p.x>p.w-corner) return this.set({kb:true,sup:true,ov:false,launch:false}); return this.set({ov:!s.ov,kb:false,launch:false}) }
-    if(p.y<70 && dy>T){ if(p.x<third) return this.set({shade:'notif',kb:false,ov:false,launch:false}); if(p.x>2*third) return this.set({shade:'qs',kb:false,ov:false,launch:false}); return this.openLauncher() }
-    if(s.ov && dy>T && Math.abs(dx)<T) return this.set({ov:false});
-    if(p.x<E && dx>T) return this.go(s.ws-1);
-    if(p.x>p.w-E && dx<-T) return this.go(s.ws+1);
+  T = {
+    bg: 'var(--theme-background)',
+    sf: 'var(--theme-surface)',
+    sf2: 'var(--theme-surface-raised)',
+    bd: 'var(--theme-border)',
+    fg: 'var(--theme-foreground)',
+    mu: 'var(--theme-secondary)',
+    dim: 'var(--theme-dim)',
+    love: 'var(--theme-red)',
+    gold: 'var(--theme-yellow)',
+    rose: 'var(--theme-rose)',
+    foam: 'var(--theme-green)',
+    iris: 'var(--theme-magenta)',
+  };
+  state = {
+    ws: 0,
+    open: ['home'],
+    desk: !!window.HyprlandDesk?.isDesk(),
+    deskW: window.innerWidth,
+    deskH: window.innerHeight,
+    tiles: {},
+    focus: null,
+    full: [],
+    ov: false,
+    kb: false,
+    sup: false,
+    term: false,
+    ctl: false,
+    shade: null,
+    launch: false,
+    query: '',
+    shift: false,
+  };
+  async componentDidMount() {
+    await window.HyprlandPreferences?.ready;
+    await window.HyprlandWebApps?.ready;
+    window.HyprlandPreferences?.bind(this);
+    window.HyprlandWebApps?.bind(this);
+    this.hostChanged = () => this.set({});
+    document.addEventListener('hyprland-host', this.hostChanged);
+    window.addEventListener('online', this.hostChanged);
+    window.addEventListener('offline', this.hostChanged);
+    this.cards = window.HyprlandCards?.attach(this);
+    this.remote = window.HyprlandRemote?.attach(this);
+    window.HyprlandThemes.attach();
+    this.expo = window.HyprlandExpo.attach(this);
+    this.widgets = window.HyprlandWidgets.attach(this);
+    this.dashboard = window.HyprlandDashboard.attach(this);
+    this.desk = window.HyprlandDesk?.attach(this);
+    window.updateDeviceBattery?.();
   }
-  showKey(e,label){
+  componentDidUpdate() {
+    window.HyprlandPreferences?.update(this);
+    this.cards?.update();
+    this.remote?.update();
+    this.expo?.update();
+    this.widgets?.update();
+    this.dashboard?.update();
+    this.desk?.update();
+    window.updateDeviceBattery?.();
+  }
+  componentWillUnmount() {
+    document.removeEventListener('hyprland-host', this.hostChanged);
+    window.removeEventListener('online', this.hostChanged);
+    window.removeEventListener('offline', this.hostChanged);
+    this.keyEnd();
+    this.desk?.dispose();
+    this.cards?.dispose();
+    this.dashboard?.dispose();
+    this.widgets?.dispose();
+    this.expo?.dispose();
+    this.remote?.dispose();
+  }
+  ptr = null;
+  wx = null;
+  cancel = () => {
+    this.ptr = null;
+  };
+  set(p) {
+    this.setState(p);
+  }
+  cur() {
+    const s = this.state;
+    return s.desk && window.HyprlandDesk ? window.HyprlandDesk.cur(s) : s.open[s.ws];
+  }
+  reset() {
+    return { ov: false, kb: false, sup: false, ctl: false, launch: false, shade: null, query: '' };
+  }
+  // Desk mode: workspaces hold several windows; `jump` and `focusApp` address a window by app key.
+  jump(key) {
+    const s = this.state;
+    if (s.desk && window.HyprlandDesk) {
+      const D = window.HyprlandDesk;
+      this.set({ ...D.go(s, D.deskOf(s, key)), focus: key, ...this.reset() });
+    } else this.go(s.open.indexOf(key));
+  }
+  focusApp(key) {
+    const s = this.state;
+    if (!s.desk || !window.HyprlandDesk || !s.open.includes(key)) return this.openApp(key);
+    this.set({ ws: window.HyprlandDesk.deskOf(s, key), focus: key });
+  }
+  openLauncher() {
+    const show = () => this.set({ launch: true, kb: true, sup: false, ov: false, shade: null });
+    if (window.ReactDOM?.flushSync) window.ReactDOM.flushSync(show);
+    else show();
+    this.dashboard?.field.focus();
+  }
+  go(i, open) {
+    open = open || this.state.open;
+    const s = this.state;
+    if (s.desk && window.HyprlandDesk) {
+      this.set({ open, ...window.HyprlandDesk.go({ ...s, open }, i), ...this.reset() });
+      return;
+    }
+    const n = open.length;
+    this.set({ open, ws: Math.max(0, Math.min(n - 1, i)), ...this.reset() });
+  }
+  openApp(key) {
+    if (!this.APPS[key]) return;
+    const s = this.state;
+    const i = s.open.indexOf(key);
+    if (s.desk && window.HyprlandDesk) {
+      if (i < 0 && s.open.length >= 10) {
+        this.expo?.error('Maximum 10 windows. Close one in Expo to open another.');
+        return;
+      }
+      this.set({ ...window.HyprlandDesk.open(s, key), ...this.reset() });
+      return;
+    }
+    if (i >= 0) return this.go(i);
+    if (s.open.length >= 10) {
+      this.expo?.error('Maximum 10 workspaces. Close an app in Expo to open another.');
+      return;
+    }
+    const open = [...s.open, key];
+    this.go(open.length - 1, open);
+  }
+  async closeApp(k, expo = false) {
+    if (k === 'home' || !this.state.open.includes(k) || this.closing) return;
+    this.closing = true;
+    try {
+      await this.remote?.closeApp(k);
+      const s = this.state;
+      if (s.desk && window.HyprlandDesk) {
+        this.set({
+          ...window.HyprlandDesk.close(s, k),
+          ov: expo,
+          kb: false,
+          sup: false,
+          ctl: false,
+        });
+      } else {
+        const current = this.cur(),
+          open = s.open.filter(x => x !== k),
+          ws = current === k ? Math.max(0, s.ws - 1) : open.indexOf(current);
+        this.set({ open, ws, ov: expo, kb: false, sup: false, ctl: false });
+      }
+    } catch (e) {
+      this.expo?.error('Could not close app. Check the host connection and try again.');
+      this.set({});
+    } finally {
+      this.closing = false;
+    }
+  }
+  closeWs() {
+    this.closeApp(this.cur());
+  }
+  down = e => {
+    const r = e.currentTarget.getBoundingClientRect();
+    this.ptr = {
+      x: e.clientX - r.left,
+      y: e.clientY - r.top,
+      cx: e.clientX,
+      cy: e.clientY,
+      w: r.width,
+      h: r.height,
+    };
+  };
+  up = e => {
+    const p = this.ptr;
+    if (!p) return;
+    this.ptr = null;
+    const dx = e.clientX - p.cx,
+      dy = e.clientY - p.cy,
+      s = this.state,
+      E = Math.max(24, p.w * 0.08),
+      T = 40,
+      third = p.w / 3;
+    if (s.shade && dy < -T) return this.set({ shade: null });
+    if (s.launch && dy < -T) return this.set({ launch: false, kb: false, query: '' });
+    if (p.y > p.h - E && dy < -T) {
+      const corner = p.w * 0.15;
+      if (p.x < corner) return this.set({ kb: true, sup: false, ov: false, launch: false });
+      if (p.x > p.w - corner) return this.set({ kb: true, sup: true, ov: false, launch: false });
+      return this.set({ ov: !s.ov, kb: false, launch: false });
+    }
+    if (p.y < 70 && dy > T) {
+      if (p.x < third) return this.set({ shade: 'notif', kb: false, ov: false, launch: false });
+      if (p.x > 2 * third) return this.set({ shade: 'qs', kb: false, ov: false, launch: false });
+      return this.openLauncher();
+    }
+    if (s.ov && dy > T && Math.abs(dx) < T) return this.set({ ov: false });
+    if (p.x < E && dx > T) return this.go(s.ws - 1);
+    if (p.x > p.w - E && dx < -T) return this.go(s.ws + 1);
+  };
+  showKey(e, label) {
     clearTimeout(this.previewTimer);
     this.previewKey?.classList.remove('key-pressed');
-    const el=e.currentTarget;
-    el.dataset.preview=label==='space'?'␣':label;
-    el.dataset.previewSize=Array.from(label).length>2?'word':'character';
-    el.classList.add('key-pressed'); this.previewKey=el;
+    const el = e.currentTarget;
+    el.dataset.preview = label === 'space' ? '␣' : label;
+    el.dataset.previewSize = Array.from(label).length > 2 ? 'word' : 'character';
+    el.classList.add('key-pressed');
+    this.previewKey = el;
   }
-  keyEnd=e=>{ if(e){ e.stopPropagation(); clearTimeout(this.previewTimer); const el=this.previewKey; this.previewTimer=setTimeout(()=>{el?.classList.remove('key-pressed');if(this.previewKey===el)this.previewKey=null},e.type==='pointercancel'?0:140) } clearTimeout(this.repeatDelay); clearInterval(this.repeatTimer); this.repeatDelay=null; this.repeatTimer=null };
-  pressKey(e,on,repeat){
-    if(e.button!==0) return;
-    e.preventDefault(); e.stopPropagation(); this.ptr=null; this.keyEnd();
-    e.currentTarget.setPointerCapture(e.pointerId); on();
-    if(repeat) this.repeatDelay=setTimeout(()=>{ this.repeatTimer=setInterval(()=>{ if(this.state.kb) on(); else this.keyEnd() },65) },400);
+  keyEnd = e => {
+    if (e) {
+      e.stopPropagation();
+      clearTimeout(this.previewTimer);
+      const el = this.previewKey;
+      this.previewTimer = setTimeout(
+        () => {
+          el?.classList.remove('key-pressed');
+          if (this.previewKey === el) this.previewKey = null;
+        },
+        e.type === 'pointercancel' ? 0 : 140
+      );
+    }
+    clearTimeout(this.repeatDelay);
+    clearInterval(this.repeatTimer);
+    this.repeatDelay = null;
+    this.repeatTimer = null;
+  };
+  pressKey(e, on, repeat) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    this.ptr = null;
+    this.keyEnd();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    on();
+    if (repeat)
+      this.repeatDelay = setTimeout(() => {
+        this.repeatTimer = setInterval(() => {
+          if (this.state.kb) on();
+          else this.keyEnd();
+        }, 65);
+      }, 400);
   }
-  shifted(l){ return ({'1':'!','2':'@','3':'#','4':'$','5':'%','6':'^','7':'&','8':'*','9':'(','0':')','-':'_','/':'?',':':';',';':':','(':'[',')':']','$':'~','&':'|','@':'`','"':"'",'.':','})[l]||l.toUpperCase() }
-  type(l){
-    const s=this.state;
-    if(l==='⇧') return this.set({shift:!s.shift});
-    if(!s.launch&&this.remote&&this.APPS[this.cur()]?.native){this.remote.key(l,{shift:s.shift,ctrl:s.ctl});if(Array.from(l).length===1)this.set({shift:false,ctl:false});return}
-    if(l==='esc') return this.set({kb:false,launch:false,sup:false,ctl:false});
-    if(s.launch){
-      if(l==='⌫') return this.set({query:Array.from(s.query).slice(0,-1).join('')});
-      if(l==='⏎'){ const m=this.matches(); if(m[0]) this.openApp(m[0]); return }
-      if(l==='space'||Array.from(l).length===1) this.set({query:s.query+(l==='space'?' ':s.shift?this.shifted(l):l),shift:false});
+  shifted(l) {
+    return (
+      {
+        1: '!',
+        2: '@',
+        3: '#',
+        4: '$',
+        5: '%',
+        6: '^',
+        7: '&',
+        8: '*',
+        9: '(',
+        0: ')',
+        '-': '_',
+        '/': '?',
+        ':': ';',
+        ';': ':',
+        '(': '[',
+        ')': ']',
+        $: '~',
+        '&': '|',
+        '@': '`',
+        '"': "'",
+        '.': ',',
+      }[l] || l.toUpperCase()
+    );
+  }
+  type(l) {
+    const s = this.state;
+    if (l === '⇧') return this.set({ shift: !s.shift });
+    if (!s.launch && this.remote && this.APPS[this.cur()]?.native) {
+      this.remote.key(l, { shift: s.shift, ctrl: s.ctl });
+      if (Array.from(l).length === 1) this.set({ shift: false, ctl: false });
+      return;
+    }
+    if (l === 'esc') return this.set({ kb: false, launch: false, sup: false, ctl: false });
+    if (s.launch) {
+      if (l === '⌫') return this.set({ query: Array.from(s.query).slice(0, -1).join('') });
+      if (l === '⏎') {
+        const m = this.matches();
+        if (m[0]) this.openApp(m[0]);
+        return;
+      }
+      if (l === 'space' || Array.from(l).length === 1)
+        this.set({
+          query: s.query + (l === 'space' ? ' ' : s.shift ? this.shifted(l) : l),
+          shift: false,
+        });
       return;
     }
   }
-  matches(){ const q=this.state.query.trim().toLowerCase(); return Object.keys(this.APPS).filter(k=>k!=='home' && (this.APPS[k].name.includes(q)||this.APPS[k].description.includes(q))) }
-  // Card geometry for every catalog app (public/cards.js paints it); the desk replaces it above 600 px.
-  layout(){
-    const s=this.state, A=this.APPS;
-    const dur='.5s', ease='cubic-bezier(.22,.9,.24,1)', tr=`transform ${dur} ${ease}, opacity ${dur} ${ease}, border-color .3s, border-radius ${dur} ${ease}`;
-    const n=s.open.length, cols=n<=4?2:3, sc=n<=4?.35:n>9?.19:.26, x0=n<=4?45:29, dx=n<=4?171:120, y0=n<=4?104:n>9?80:96, dy=n<=4?328:n>9?190:243;
-    const cards={};
-    Object.keys(A).forEach(k=>{ const i=s.open.indexOf(k), on=i>=0;
-      cards[k]={ tf: !on?'translate(440px,0px) scale(1)':(s.ov?`translate(${x0+(i%cols)*dx}px,${y0+Math.floor(i/cols)*dy}px) scale(${sc})`:`translate(${(i-s.ws)*440}px,0px) scale(1)`), bd:i===s.ws?'var(--theme-accent)':'var(--theme-window-inactive)', lab:s.ov?1:0, op:on?1:0, pe:on?'auto':'none', w:'100%', h:'100%' } });
-    const D=s.desk&&window.HyprlandDesk?window.HyprlandDesk.render(this,s,s.deskW,s.deskH):null; if(D)Object.assign(cards,D.cards);
-    return {cards,tr,rad:s.ov?'28px':'0px',D};
+  matches() {
+    const q = this.state.query.trim().toLowerCase();
+    return Object.keys(this.APPS).filter(
+      k => k !== 'home' && (this.APPS[k].name.includes(q) || this.APPS[k].description.includes(q))
+    );
   }
-  renderVals(){
-    const s=this.state, T=this.T, A=this.APPS, cur=this.cur();
-    const {tr,rad,D}=this.layout(), n=s.open.length;
-    const pills=D?D.pills:s.open.map((k,i)=>({i:i+1,col:T.mu,bg:i===s.ws?T.sf2:'transparent',c:i===s.ws?T.fg:T.mu,on:()=>{ if(i===this.state.ws) this.set({ov:!this.state.ov,kb:false}); else this.go(i) }}));
-    const online=typeof navigator==='undefined'||navigator.onLine!==false;
+  // Card geometry for every catalog app (public/cards.js paints it); the desk replaces it above 600 px.
+  layout() {
+    const s = this.state,
+      A = this.APPS;
+    const dur = '.5s',
+      ease = 'cubic-bezier(.22,.9,.24,1)',
+      tr = `transform ${dur} ${ease}, opacity ${dur} ${ease}, border-color .3s, border-radius ${dur} ${ease}`;
+    const n = s.open.length,
+      cols = n <= 4 ? 2 : 3,
+      sc = n <= 4 ? 0.35 : n > 9 ? 0.19 : 0.26,
+      x0 = n <= 4 ? 45 : 29,
+      dx = n <= 4 ? 171 : 120,
+      y0 = n <= 4 ? 104 : n > 9 ? 80 : 96,
+      dy = n <= 4 ? 328 : n > 9 ? 190 : 243;
+    const cards = {};
+    Object.keys(A).forEach(k => {
+      const i = s.open.indexOf(k),
+        on = i >= 0;
+      cards[k] = {
+        tf: !on
+          ? 'translate(440px,0px) scale(1)'
+          : s.ov
+            ? `translate(${x0 + (i % cols) * dx}px,${y0 + Math.floor(i / cols) * dy}px) scale(${sc})`
+            : `translate(${(i - s.ws) * 440}px,0px) scale(1)`,
+        bd: i === s.ws ? 'var(--theme-accent)' : 'var(--theme-window-inactive)',
+        lab: s.ov ? 1 : 0,
+        op: on ? 1 : 0,
+        pe: on ? 'auto' : 'none',
+        w: '100%',
+        h: '100%',
+      };
+    });
+    const D =
+      s.desk && window.HyprlandDesk ? window.HyprlandDesk.render(this, s, s.deskW, s.deskH) : null;
+    if (D) Object.assign(cards, D.cards);
+    return { cards, tr, rad: s.ov ? '28px' : '0px', D };
+  }
+  renderVals() {
+    const s = this.state,
+      T = this.T,
+      A = this.APPS,
+      cur = this.cur();
+    const { tr, rad, D } = this.layout(),
+      n = s.open.length;
+    const pills = D
+      ? D.pills
+      : s.open.map((k, i) => ({
+          i: i + 1,
+          col: T.mu,
+          bg: i === s.ws ? T.sf2 : 'transparent',
+          c: i === s.ws ? T.fg : T.mu,
+          on: () => {
+            if (i === this.state.ws) this.set({ ov: !this.state.ov, kb: false });
+            else this.go(i);
+          },
+        }));
+    const online = typeof navigator === 'undefined' || navigator.onLine !== false;
     // keyboard
-    const bind={q:'close',e:'files',s:'settings',a:'herdr',t:'term',h:'ws ←',l:'ws →',space:'launch','⏎':'term','←':'ws ←','→':'ws →','↑':'expo','↓':'home'};
-    const act={q:()=>this.closeWs(),e:()=>this.openApp('files'),s:()=>this.openApp('settings'),a:()=>this.openApp('herdr'),t:()=>this.openApp('terminal'),'⏎':()=>this.openApp('terminal'),h:()=>this.go(s.ws-1),l:()=>this.go(s.ws+1),'←':()=>this.go(s.ws-1),'→':()=>this.go(s.ws+1),'↑':()=>this.set({ov:true,kb:false,sup:false}),'↓':()=>this.go(0),space:()=>this.set({launch:true,sup:false})};
-    const R=(str,w)=>str.split(' ').map(l=>({l,w:w||1}));
-    const key=x=>{ if(x.l==='SUPER') return {l:'super',w:1.5,fs:'11px',bg:s.sup?T.rose:T.bd,c:s.sup?T.bg:T.fg,on:()=>this.set({sup:!this.state.sup})};
-      if(x.l==='LAYER') return {l:s.term?'abc':'123',w:1.5,fs:'11px',bg:T.bd,c:T.iris,on:()=>this.set({term:!this.state.term})};
-      if(x.l==='CTRL') return {l:'ctrl',w:1,fs:'10px',bg:s.ctl?T.iris:T.bg,c:s.ctl?T.bg:T.rose,on:()=>this.set({ctl:!this.state.ctl})};
-      if(x.l==='⌄') return {l:'⌄',w:1,fs:'13px',bg:T.sf2,c:T.fg,on:()=>this.set({kb:false,launch:false,sup:false,ctl:false,query:''})};
-      const bd=bind[x.l];
-      if(s.sup) return {l:bd||x.l,w:x.w||1,fs:bd?'10px':(x.fs||'13px'),bg:bd?T.bg:T.sf2,c:bd?T.rose:T.mu,on:()=>{ const f=act[x.l]; if(f){ f(); this.set({sup:false}) } else this.set({sup:false}) }};
-      if(s.ctl && /^[a-z]$/.test(x.l)) return {l:'^'+x.l,w:1,fs:'12px',bg:T.sf2,c:T.iris,on:()=>this.type(x.l)};
-      return {l:s.shift&&Array.from(x.l).length===1?this.shifted(x.l):x.l,w:x.w||1,fs:x.fs||'13px',bg:x.l==='⇧'&&s.shift?T.iris:x.mod?T.bg:T.sf2,c:x.mod?T.rose:T.fg,on:()=>this.type(x.l)} };
-    const termRows=[R('1 2 3 4 5 6 7 8 9 0'),R('- / : ; ( ) $ & @ "'),R('CTRL ← ↓ ↑ → ⇧ home end tab ⌫').map(x=>({...x,fs:'10px'}))];
-    const abcRows=[R('q w e r t y u i o p'),R('a s d f g h j k l'),[{l:'⇧',w:1.5},...R('z x c v b n m'),{l:'⌫',w:1.5}]];
-    const kbRows=[...(s.term?termRows:abcRows),[{l:'SUPER'},{l:'LAYER'},{l:'esc'},{l:'space',w:3},{l:'.'},{l:'⏎',w:1.5}]].map(r=>({keys:r.map(x=>{const k=key(x); return {...k,down:e=>{if(e.button===0)this.showKey(e,k.l);this.pressKey(e,k.on,!s.sup&&['⌫','←','→'].includes(x.l))},click:e=>{e.stopPropagation();if(e.detail===0){this.showKey(e,k.l);k.on();this.keyEnd(e)}}}})}));
-    const m=this.matches();
-    const homeKeys=s.homePins||window.HyprlandApps.DEFAULT_PINS;
+    const bind = {
+      q: 'close',
+      e: 'files',
+      s: 'settings',
+      a: 'herdr',
+      t: 'term',
+      h: 'ws ←',
+      l: 'ws →',
+      space: 'launch',
+      '⏎': 'term',
+      '←': 'ws ←',
+      '→': 'ws →',
+      '↑': 'expo',
+      '↓': 'home',
+    };
+    const act = {
+      q: () => this.closeWs(),
+      e: () => this.openApp('files'),
+      s: () => this.openApp('settings'),
+      a: () => this.openApp('herdr'),
+      t: () => this.openApp('terminal'),
+      '⏎': () => this.openApp('terminal'),
+      h: () => this.go(s.ws - 1),
+      l: () => this.go(s.ws + 1),
+      '←': () => this.go(s.ws - 1),
+      '→': () => this.go(s.ws + 1),
+      '↑': () => this.set({ ov: true, kb: false, sup: false }),
+      '↓': () => this.go(0),
+      space: () => this.set({ launch: true, sup: false }),
+    };
+    const R = (str, w) => str.split(' ').map(l => ({ l, w: w || 1 }));
+    const key = x => {
+      if (x.l === 'SUPER')
+        return {
+          l: 'super',
+          w: 1.5,
+          fs: '11px',
+          bg: s.sup ? T.rose : T.bd,
+          c: s.sup ? T.bg : T.fg,
+          on: () => this.set({ sup: !this.state.sup }),
+        };
+      if (x.l === 'LAYER')
+        return {
+          l: s.term ? 'abc' : '123',
+          w: 1.5,
+          fs: '11px',
+          bg: T.bd,
+          c: T.iris,
+          on: () => this.set({ term: !this.state.term }),
+        };
+      if (x.l === 'CTRL')
+        return {
+          l: 'ctrl',
+          w: 1,
+          fs: '10px',
+          bg: s.ctl ? T.iris : T.bg,
+          c: s.ctl ? T.bg : T.rose,
+          on: () => this.set({ ctl: !this.state.ctl }),
+        };
+      if (x.l === '⌄')
+        return {
+          l: '⌄',
+          w: 1,
+          fs: '13px',
+          bg: T.sf2,
+          c: T.fg,
+          on: () => this.set({ kb: false, launch: false, sup: false, ctl: false, query: '' }),
+        };
+      const bd = bind[x.l];
+      if (s.sup)
+        return {
+          l: bd || x.l,
+          w: x.w || 1,
+          fs: bd ? '10px' : x.fs || '13px',
+          bg: bd ? T.bg : T.sf2,
+          c: bd ? T.rose : T.mu,
+          on: () => {
+            const f = act[x.l];
+            if (f) {
+              f();
+              this.set({ sup: false });
+            } else this.set({ sup: false });
+          },
+        };
+      if (s.ctl && /^[a-z]$/.test(x.l))
+        return { l: '^' + x.l, w: 1, fs: '12px', bg: T.sf2, c: T.iris, on: () => this.type(x.l) };
+      return {
+        l: s.shift && Array.from(x.l).length === 1 ? this.shifted(x.l) : x.l,
+        w: x.w || 1,
+        fs: x.fs || '13px',
+        bg: x.l === '⇧' && s.shift ? T.iris : x.mod ? T.bg : T.sf2,
+        c: x.mod ? T.rose : T.fg,
+        on: () => this.type(x.l),
+      };
+    };
+    const termRows = [
+      R('1 2 3 4 5 6 7 8 9 0'),
+      R('- / : ; ( ) $ & @ "'),
+      R('CTRL ← ↓ ↑ → ⇧ home end tab ⌫').map(x => ({ ...x, fs: '10px' })),
+    ];
+    const abcRows = [
+      R('q w e r t y u i o p'),
+      R('a s d f g h j k l'),
+      [{ l: '⇧', w: 1.5 }, ...R('z x c v b n m'), { l: '⌫', w: 1.5 }],
+    ];
+    const kbRows = [
+      ...(s.term ? termRows : abcRows),
+      [
+        { l: 'SUPER' },
+        { l: 'LAYER' },
+        { l: 'esc' },
+        { l: 'space', w: 3 },
+        { l: '.' },
+        { l: '⏎', w: 1.5 },
+      ],
+    ].map(r => ({
+      keys: r.map(x => {
+        const k = key(x);
+        return {
+          ...k,
+          down: e => {
+            if (e.button === 0) this.showKey(e, k.l);
+            this.pressKey(e, k.on, !s.sup && ['⌫', '←', '→'].includes(x.l));
+          },
+          click: e => {
+            e.stopPropagation();
+            if (e.detail === 0) {
+              this.showKey(e, k.l);
+              k.on();
+              this.keyEnd(e);
+            }
+          },
+        };
+      }),
+    }));
+    const m = this.matches();
+    const homeKeys = s.homePins || window.HyprlandApps.DEFAULT_PINS;
     return {
-      swipeHintOpacity:s.ov||s.kb||s.launch||s.shade?0:1,
-      keyEnd:this.keyEnd, down:this.down, up:this.up, cancel:this.cancel, tr, rad, openCount:n,
-      pills, wsLabel:D?D.label:'', isWifi:online, isOff:!online,
-      managePins:()=>this.dashboard?.managePins(),homeApps:homeKeys.filter(k=>A[k]).map(k=>({g:A[k].glyph,n:A[k].name,c:A[k].color,op:1,badge:k==='herdr'?(s.herdAttention||0):'',badgeDisplay:k==='herdr'&&s.herdAttention?'block':'none',on:()=>this.openApp(k)})),
-      kbOn:()=>{if(!this.state.ov)this.set({kb:true,sup:false})}, kbOff:()=>this.set({kb:false,launch:false,sup:false,ctl:false,query:''}),
-      kbTf:s.kb?'translateY(0)':'translateY(105%)', kbRows, supC:s.sup?T.rose:(s.ctl?T.iris:T.mu), supMsg:s.sup?'SUPER · tap a key to run its binding':(s.ctl?'CTRL held · tap a letter':(s.launch?'typing into the launcher':(A[cur]?.native?window.HyprlandApps.host.name+' · '+(A[cur].typing||A[cur].name):'touch keyboard'))),
-      launchVisibility:s.launch?'visible':'hidden',shadeNVisibility:s.shade==='notif'?'visible':'hidden',shadeQVisibility:s.shade==='qs'?'visible':'hidden',
-      launchTf:s.launch?'translateY(0)':'translateY(-104%)', matchCount:m.length,
-      shadeNTf:s.shade==='notif'?'translateY(0)':'translateY(-104%)', shadeQTf:s.shade==='qs'?'translateY(0)':'translateY(-104%)',
-      openSettings:()=>this.openApp('settings')
+      swipeHintOpacity: s.ov || s.kb || s.launch || s.shade ? 0 : 1,
+      keyEnd: this.keyEnd,
+      down: this.down,
+      up: this.up,
+      cancel: this.cancel,
+      tr,
+      rad,
+      openCount: n,
+      pills,
+      wsLabel: D ? D.label : '',
+      isWifi: online,
+      isOff: !online,
+      managePins: () => this.dashboard?.managePins(),
+      homeApps: homeKeys
+        .filter(k => A[k])
+        .map(k => ({
+          g: A[k].glyph,
+          n: A[k].name,
+          c: A[k].color,
+          op: 1,
+          badge: k === 'herdr' ? s.herdAttention || 0 : '',
+          badgeDisplay: k === 'herdr' && s.herdAttention ? 'block' : 'none',
+          on: () => this.openApp(k),
+        })),
+      kbOn: () => {
+        if (!this.state.ov) this.set({ kb: true, sup: false });
+      },
+      kbOff: () => this.set({ kb: false, launch: false, sup: false, ctl: false, query: '' }),
+      kbTf: s.kb ? 'translateY(0)' : 'translateY(105%)',
+      kbRows,
+      supC: s.sup ? T.rose : s.ctl ? T.iris : T.mu,
+      supMsg: s.sup
+        ? 'SUPER · tap a key to run its binding'
+        : s.ctl
+          ? 'CTRL held · tap a letter'
+          : s.launch
+            ? 'typing into the launcher'
+            : A[cur]?.native
+              ? window.HyprlandApps.host.name + ' · ' + (A[cur].typing || A[cur].name)
+              : 'touch keyboard',
+      launchVisibility: s.launch ? 'visible' : 'hidden',
+      shadeNVisibility: s.shade === 'notif' ? 'visible' : 'hidden',
+      shadeQVisibility: s.shade === 'qs' ? 'visible' : 'hidden',
+      launchTf: s.launch ? 'translateY(0)' : 'translateY(-104%)',
+      matchCount: m.length,
+      shadeNTf: s.shade === 'notif' ? 'translateY(0)' : 'translateY(-104%)',
+      shadeQTf: s.shade === 'qs' ? 'translateY(0)' : 'translateY(-104%)',
+      openSettings: () => this.openApp('settings'),
     };
   }
 }

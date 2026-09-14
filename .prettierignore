@@ -1,0 +1,14 @@
+# Vendored or generated; never hand-edited.
+public/assets/
+public/vendor/
+public/themes-data.js
+ios/Generated/
+ios/**/*.xcassets/
+dist/
+artifacts/
+backend/target/
+node_modules/
+package-lock.json
+.openai/
+# Design-tool export; the inline component script is formatted by scripts/format-template.mjs.
+public/index.html
