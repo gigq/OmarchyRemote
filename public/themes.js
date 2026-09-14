@@ -49,7 +49,7 @@
   function attach(host){
     host=host||[...document.querySelectorAll('#theme-settings')].find(n=>!n.closest('x-dc'));
     if(!host||host.childElementCount)return;
-    host.innerHTML=`<header><div class="theme-eyebrow">settings / appearance</div><h1>Themes</h1><p>Make this space yours.</p><div class="theme-current">Current <strong data-theme-name></strong></div></header><div class="theme-grid" role="group" aria-label="Choose a theme"></div><p class="theme-note">${catalog.length-1} Omarchy palettes + the original prototype.<br>Saved on this device.</p>`;
+    host.innerHTML=`<header><div class="theme-current">Current <strong data-theme-name></strong></div></header><div class="theme-grid" role="group" aria-label="Choose a theme"></div>`;
     window.HyprlandWebApps?.settings(host);
     const grid=host.querySelector('.theme-grid');
     for(const t of catalog){

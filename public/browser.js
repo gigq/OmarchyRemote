@@ -4,10 +4,9 @@
  const webURL=raw=>{try{const u=new URL(raw);return ['https:','http:'].includes(u.protocol)?u:null}catch{return null}};
  class BrowserApp {
   constructor(root,host){this.host=host;this.root=root;this.instances=[];this.filter='';this.active=true;this.abort=new AbortController();root.classList.add('browser-app');
-   const header=node('div','browser-heading');header.append(node('h2','','browser'));this.summary=node('span','remote-status');header.append(this.summary);
    this.search=node('input','browser-search');this.search.type='search';this.search.placeholder='Find a tab…';this.search.setAttribute('aria-label','Find a tab');this.search.autocapitalize='none';this.search.setAttribute('autocorrect','off');this.search.oninput=()=>{this.filter=this.search.value.toLowerCase();this.draw()};
    this.status=node('div','remote-status');this.status.setAttribute('role','status');this.list=node('div','browser-list');const footer=node('div','browser-footer');footer.append(this.button('+ tab',()=>this.newTab(),'New desktop tab'),this.button('refresh',()=>this.refresh(),'Refresh tabs'));
-   this.manager=node('div','browser-manager');this.manager.append(header,this.search,this.status,this.list,footer);root.append(this.manager);
+   this.manager=node('div','browser-manager');this.manager.append(this.search,this.status,this.list,footer);root.append(this.manager);
    this.bridge=window.webkit?.messageHandlers?.browserDevice;
    this.capabilities=this.bridge?Promise.resolve().then(()=>this.bridge.postMessage({action:'capabilities'})).then(v=>{this.darkButton.hidden=!v?.darkMode;this.dark=!!v?.dark;this.darkButton.setAttribute('aria-pressed',String(this.dark));return this.embedded=v?.embedded===true}).catch(()=>false):Promise.resolve(false);
    this.pagePanel=node('div','browser-page');this.pagePanel.hidden=true;const nav=node('div','browser-navigation');
@@ -33,7 +32,7 @@
   }
   button(text,fn,label){const b=node('button','remote-button',text);b.type='button';if(label)b.setAttribute('aria-label',label);b.onclick=fn;return b}
   async api(path,data){const r=await fetch('/api/browser/'+path,{method:data===undefined?'GET':'POST',headers:{'X-Hyprland-Client':'1','Content-Type':'application/json'},body:data===undefined?undefined:JSON.stringify(data),signal:AbortSignal.any([this.abort.signal,AbortSignal.timeout(12000)])});const value=await r.json();if(!r.ok)throw Error(value.error||'Browser unavailable');return value}
-  async refresh(){if(this.loading||this.disposed)return;this.loading=true;try{const data=await this.api('snapshot');if(this.disposed)return;const key=JSON.stringify(data.instances);if(key!==this.last){this.instances=data.instances;this.last=key;this.draw()}this.summary.textContent=this.instances.length?`${this.instances.length} browser${this.instances.length===1?'':'s'} · ${this.instances.reduce((n,i)=>n+i.windows.reduce((n,w)=>n+w.tabs.length,0),0)} tabs`:'No browser connected';if(this.failed){this.failed=false;this.status.textContent=''}}catch(e){if(!this.disposed){this.failed=true;this.status.textContent=e.message}}finally{this.loading=false}}
+  async refresh(){if(this.loading||this.disposed)return;this.loading=true;try{const data=await this.api('snapshot');if(this.disposed)return;const key=JSON.stringify(data.instances);if(key!==this.last){this.instances=data.instances;this.last=key;this.draw()}if(this.failed){this.failed=false;this.status.textContent=''}}catch(e){if(!this.disposed){this.failed=true;this.status.textContent=e.message}}finally{this.loading=false}}
   draw(){const scroll=this.list.scrollTop;this.list.replaceChildren();
    if(!this.instances.length){this.list.append(node('h3','','Connect Vivaldi'),node('p','browser-empty','Load the Omarchy Remote Browser extension in Vivaldi on the host. Open windows and workspaces will appear here. Closing a tab here closes it on the desktop.'),node('p','browser-empty','Phone pages use their own login sessions.'));return}
    let count=0;

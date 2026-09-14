@@ -97,9 +97,15 @@
 .terminal-close-confirm button:last-child { color:var(--theme-red); }
 
 /* A healthy terminal needs no connection banner; controls reserve space only when visible. */
-#remote-terminal-app .terminal-tab > .remote-bar:not(:has(> :not([hidden]))) { display:none; }
+.remote-app .remote-bar:not(:has(> :not([hidden]))) { display:none; }
 .hardware-keyboard #remote-terminal-app [aria-label="New terminal tab"] { display:none; }
 .hardware-keyboard #remote-terminal-app .terminal-tab > .remote-bar:not(:has(> :not([hidden]):not([aria-label="New terminal tab"]))) { display:none; }
 .hardware-keyboard #remote-terminal-app .native-input-tools { display:none; }
 /* Keep the direct-key textarea focusable without taking space from the terminal. */
 .hardware-keyboard #remote-terminal-app .native-input-panel:has(.native-input[aria-label="Direct terminal keys"]) { position:absolute; width:1px; height:1px; overflow:hidden; padding:0; opacity:0; }
+
+#remote-herdr-app .herdr-connection:has([hidden]) { display:none; }
+#remote-herdr-app { top:64px; }
+#remote-herdr-app .herdr-metadata { display:none; }
+.files-heading:empty { display:none; }
+.browser-app:not(.browser-reading), .files-app { top:64px; }

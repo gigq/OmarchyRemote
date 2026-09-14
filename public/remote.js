@@ -112,7 +112,7 @@
     resume(){if(this.connecting||this.exited||this.disposed)return;const old=this.ws;this.ws=null;this.ready=false;old?.close();this.connect()}
     exit(){if(this.exited)return;this.exited=true;this.ready=false;this.ws?.close();this.status.textContent=this.app==='terminal'?'Shell exited':`${this.app} exited`;this.restart.hidden=false;this.onExit?.();}
     key(input){return this.input(input.data)}
-    setStatus(text){if(this.app==='terminal')this.status.hidden=text==='connected';this.statusText=text;this.status.textContent=`${HyprlandApps.host.name} · ${text}`}
+    setStatus(text){this.status.hidden=text==='connected';this.statusText=text;this.status.textContent=`${HyprlandApps.host.name} · ${text}`}
     hostChanged(){this.setStatus(this.statusText)}
     input(data){this.stopTouchScroll.cancel();if(this.ready&&this.ws?.readyState===1){this.ws.send(JSON.stringify({type:'input',data}));this.term.scrollToBottom();return true}else this.status.textContent=this.exited?'App exited · use Restart':'Disconnected · input was not sent';return false;}
     dispose(){this.disposed=true;clearTimeout(this.retry);this.ws?.close();this.resizeObserver.disconnect();this.stopTouchScroll();this.nativeInput.dispose();this.term.dispose()}
@@ -156,7 +156,7 @@
     constructor(root,bridge){
       this.root=root;this.bridge=bridge;this.snapshot=null;this.selected=storage.get('omarchy-herdr-pane');this.pending=new Set();
       this.status=node('div','remote-status','Herdr · connecting…');this.list=node('div','herdr-list');this.detail=node('div','herdr-detail');this.detail.hidden=true;
-      const bar=node('div','remote-bar');bar.append(node('strong','', 'herdr'),this.status);this.filters=node('div','herdr-filters');this.search=node('input','herdr-search');this.search.type='search';this.search.placeholder='jump to pane…';this.search.setAttribute('aria-label','Search panes');this.search.oninput=()=>{this.listSignature=null;this.renderList()};this.filter='all';root.append(bar,this.filters,this.search,this.list,this.detail);
+      const bar=node('div','remote-bar');bar.classList.add('herdr-connection');bar.append(this.status);this.filters=node('div','herdr-filters');this.search=node('input','herdr-search');this.search.type='search';this.search.placeholder='jump to pane…';this.search.setAttribute('aria-label','Search panes');this.search.oninput=()=>{this.listSignature=null;this.renderList()};this.filter='all';root.append(bar,this.filters,this.search,this.list,this.detail);
       this.detailBar=node('div','herdr-detail-bar');this.title=node('div','herdr-pane-title');
       this.fitOutput=storage.get('omarchy-herdr-fit')!=='false';
       this.fitButton=button('',()=>{this.stopTouchScroll.cancel();this.fitOutput=!this.fitOutput;storage.set('omarchy-herdr-fit',String(this.fitOutput));this.applyFit()});
@@ -182,7 +182,7 @@
     }
     connect(){
       if(this.disposed||this.ws?.readyState===0||this.ws?.readyState===1)return;clearTimeout(this.retry);
-      const ws=socket('herdr/ws');this.ws=ws;this.status.textContent='connecting…';
+      const ws=socket('herdr/ws');this.ws=ws;this.setStatus('connecting…');
       ws.onopen=()=>{if(this.selected)this.send({type:'select',pane_id:this.selected})};
       ws.onmessage=event=>{const m=JSON.parse(event.data);
         if(m.type==='snapshot'){this.online=true;this.snapshot=m.snapshot;this.setStatus(`${m.snapshot.panes.length} panes`);this.renderList();if(this.selected){const pane=this.snapshot.panes.find(p=>p.pane_id===this.selected);if(pane)this.showDetail(pane);else this.select(null)}}
@@ -190,9 +190,9 @@
         else if(m.type==='ack'){this.pending.delete(m.id);this.inputStatus.textContent=''}
         else if(m.type==='input_error'){this.pending.delete(m.id);this.inputStatus.textContent=m.message||'Input failed'}
         else if(m.type==='pane_error'){this.inputStatus.textContent='Pane unavailable · return to all panes';this.online=false}
-        else if(m.type==='error'){this.online=false;this.status.textContent='Herdr unavailable · retrying…'}
+        else if(m.type==='error'){this.online=false;this.setStatus('unavailable · retrying…')}
       };
-      ws.onclose=()=>{if(this.ws!==ws)return;this.online=false;if(this.pending.size)this.inputStatus.textContent='Connection lost · last input may not have arrived';this.pending.clear();if(!this.disposed){this.status.textContent='disconnected · reconnecting…';this.retry=setTimeout(()=>this.connect(),1500)}};
+      ws.onclose=()=>{if(this.ws!==ws)return;this.online=false;if(this.pending.size)this.inputStatus.textContent='Connection lost · last input may not have arrived';this.pending.clear();if(!this.disposed){this.setStatus('disconnected · reconnecting…');this.retry=setTimeout(()=>this.connect(),1500)}};
       ws.onerror=()=>ws.close();
     }
     resume(){if(this.disposed)return;const old=this.ws;this.ws=null;this.online=false;old?.close();if(this.pending.size)this.inputStatus.textContent='Connection interrupted · last input may not have arrived';this.pending.clear();this.connect()}
@@ -279,7 +279,7 @@
       }
     }
     key(input){return this.input(input)}
-    setStatus(text){this.statusText=text;this.status.textContent=`${HyprlandApps.host.name} · ${text}`}
+    setStatus(text){this.status.hidden=/^\d+ panes$/.test(text);this.statusText=text;this.status.textContent=`${HyprlandApps.host.name} · ${text}`}
     hostChanged(){this.setStatus(this.statusText)}
     input(input){
       if(!this.selected){this.status.textContent='Select a pane to type';return false}
