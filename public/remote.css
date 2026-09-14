@@ -113,3 +113,8 @@
   .herdr-composer .native-dismiss { order:5; }
   .herdr-composer > [role=status] { order:6; flex-basis:100%; margin:0; }
 }
+.herdr-project-divider { align-self:center; flex:none; width:1px; height:22px; margin:0 10px; background:var(--theme-border); }
+.herdr-pane-tabs .herdr-recent-project { flex:none; }
+@media (min-width:600px) and (min-height:600px) {
+  .hardware-keyboard .herdr-composer .native-dismiss { display:none; }
+}
