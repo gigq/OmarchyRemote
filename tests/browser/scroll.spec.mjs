@@ -23,7 +23,7 @@ async function herdr(method, params) {
     });
   });
 }
-import { captureTerminals, visibleText, exitShell } from './terminal-helper.mjs';
+import { captureTerminals, visibleText } from './terminal-helper.mjs';
 async function state(page) {
   return page.evaluate(() => {
     const t = window.qaTerms[0],
@@ -72,40 +72,35 @@ test('Terminal touch drags read history without opening the keyboard', async ({ 
   await page.goto('/native/');
   await page.getByText('terminal', { exact: true }).first().click();
   await expect(page.locator('#remote-terminal-app')).toContainText('· connected');
-  try {
-    await page.evaluate(() => qaTerms[0].input('seq 1 160\r'));
-    await expect.poll(async () => (await state(page)).bottom).toBeGreaterThan(90);
-    await drag(page, 300, 550);
-    await page.waitForTimeout(250);
-    const pixels = await page.locator('.remote-terminal .native-terminal-scroll').evaluate(el => {
-      const before = el.scrollTop;
-      el.scrollTop = before - 5;
-      return { before, after: el.scrollTop };
-    });
-    expect(pixels.before - pixels.after).toBeCloseTo(5, 0);
-    await expect
-      .poll(async () => {
-        const s = await state(page);
-        return s.bottom - s.top;
-      })
-      .toBeGreaterThan(10);
-    await expect(page.locator('#remote-terminal-app')).not.toHaveClass(/with-keyboard/);
-    await expect(page.getByRole('button', { name: '↓ Latest' })).toBeVisible();
-    const before = (await state(page)).top;
-    await drag(page, 650, 450);
-    await expect.poll(async () => (await state(page)).top).toBeGreaterThan(before);
-    await page.getByRole('button', { name: '↓ Latest' }).click();
-    await page.waitForTimeout(250);
-    await expect
-      .poll(async () => {
-        const s = await state(page);
-        return s.bottom - s.top;
-      })
-      .toBe(0);
-  } finally {
-    await exitShell(page);
-    await expect(page.locator('#remote-terminal-app')).toContainText('Shell exited');
-  }
+  await page.evaluate(() => qaTerms[0].input('seq 1 160\r'));
+  await expect.poll(async () => (await state(page)).bottom).toBeGreaterThan(90);
+  await drag(page, 300, 550);
+  await page.waitForTimeout(250);
+  const pixels = await page.locator('.remote-terminal .native-terminal-scroll').evaluate(el => {
+    const before = el.scrollTop;
+    el.scrollTop = before - 5;
+    return { before, after: el.scrollTop };
+  });
+  expect(pixels.before - pixels.after).toBeCloseTo(5, 0);
+  await expect
+    .poll(async () => {
+      const s = await state(page);
+      return s.bottom - s.top;
+    })
+    .toBeGreaterThan(10);
+  await expect(page.locator('#remote-terminal-app')).not.toHaveClass(/with-keyboard/);
+  await expect(page.getByRole('button', { name: '↓ Latest' })).toBeVisible();
+  const before = (await state(page)).top;
+  await drag(page, 650, 450);
+  await expect.poll(async () => (await state(page)).top).toBeGreaterThan(before);
+  await page.getByRole('button', { name: '↓ Latest' }).click();
+  await page.waitForTimeout(250);
+  await expect
+    .poll(async () => {
+      const s = await state(page);
+      return s.bottom - s.top;
+    })
+    .toBe(0);
 });
 
 test('Herdr touch history stays anchored during updates and typed text is visible', async ({

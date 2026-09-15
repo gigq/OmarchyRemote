@@ -68,11 +68,6 @@ test('snippet is a reviewable draft and does not execute', async ({ page }) => {
   await page.getByRole('button', { name: 'uptime Review and send' }).click();
   await expect(page.getByRole('textbox', { name: 'Message to host' })).toHaveValue('uptime');
   await expect(page.locator('.terminal-tab:visible')).toContainText('· connected');
-  const id = await page.evaluate(() => localStorage.getItem('omarchy-terminal-id'));
-  await page.request.post('/api/terminal/' + id + '/close', {
-    headers: { 'X-Hyprland-Client': '1' },
-    data: {},
-  });
 });
 test('Herd filters and search preserve a single row of chips', async ({ page }) => {
   await page.goto('/native/');

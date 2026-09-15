@@ -69,24 +69,13 @@ test('dismissing Terminal closes its session and reopening starts a fresh shell'
   await p.getByText('terminal', { exact: true }).first().click();
   await expect(p.locator('#remote-terminal-app')).toContainText('· connected');
   const first = await p.evaluate(() => localStorage.getItem('omarchy-terminal-id'));
-  try {
-    await expo(p);
-    const a = await center(card(p, 'terminal'));
-    await drag(p, a, { x: a.x, y: a.y - 120 });
-    await expect(card(p, 'terminal')).toHaveCSS('opacity', '0');
-    await expect
-      .poll(() => p.evaluate(() => localStorage.getItem('omarchy-terminal-id')))
-      .toBeNull();
-    await card(p, 'home').click();
-    await p.getByText('terminal', { exact: true }).first().click();
-    await expect(p.locator('#remote-terminal-app')).toContainText('· connected');
-    expect(await p.evaluate(() => localStorage.getItem('omarchy-terminal-id'))).not.toBe(first);
-  } finally {
-    const id = await p.evaluate(() => localStorage.getItem('omarchy-terminal-id'));
-    for (const key of new Set([first, id].filter(Boolean)))
-      await p.request.post(`/api/terminal/${key}/close`, {
-        headers: { 'X-Hyprland-Client': '1' },
-        data: {},
-      });
-  }
+  await expo(p);
+  const a = await center(card(p, 'terminal'));
+  await drag(p, a, { x: a.x, y: a.y - 120 });
+  await expect(card(p, 'terminal')).toHaveCSS('opacity', '0');
+  await expect.poll(() => p.evaluate(() => localStorage.getItem('omarchy-terminal-id'))).toBeNull();
+  await card(p, 'home').click();
+  await p.getByText('terminal', { exact: true }).first().click();
+  await expect(p.locator('#remote-terminal-app')).toContainText('· connected');
+  expect(await p.evaluate(() => localStorage.getItem('omarchy-terminal-id'))).not.toBe(first);
 });

@@ -102,7 +102,6 @@ test('selection patterns, rename, move and terminal here affect only chosen file
   page: p,
 }) => {
   const dir = await mkdtemp(process.env.HOME + '/omarchy-files-actions-');
-  let session;
   try {
     await mkdir(dir + '/dest');
     await writeFile(dir + '/a1.txt', 'chosen');
@@ -130,7 +129,7 @@ test('selection patterns, rename, move and terminal here affect only chosen file
     await menu(p, 'terminal here');
     const request = p.waitForResponse(r => r.url().endsWith('/api/terminal/session'));
     await p.getByRole('button', { name: 'Open shell', exact: true }).click();
-    session = (await (await request).json()).id;
+    await request;
     // Inspect the isolated PTY's process cwd without typing into any existing shell.
     const { execFileSync } = await import('node:child_process');
     const { readlink } = await import('node:fs/promises');
@@ -148,11 +147,6 @@ test('selection patterns, rename, move and terminal here affect only chosen file
       })
       .toContain(dir);
   } finally {
-    if (session)
-      await p.request.post('/api/terminal/' + session + '/close', {
-        headers: { 'X-Hyprland-Client': '1' },
-        data: {},
-      });
     await rm(dir, { recursive: true, force: true });
   }
 });
