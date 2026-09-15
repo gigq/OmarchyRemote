@@ -683,6 +683,27 @@
       this.zoom = Math.max(0.25, Math.min(5, value));
       this.command('zoom', { value: this.zoom });
     }
+    // Listed in the desk shortcut sheet while the browser is in front; shortcut() below takes
+    // the matching keydown events before the shell bindings.
+    static shortcuts = [
+      ['⌘L', 'Focus the address bar (⇧ opens the tab manager)'],
+      ['⌘T', 'New tab (⇧ reopens the last closed tab)'],
+      ['⌘N', 'New window'],
+      ['⌘W', 'Close tab (⇧ closes the shell window)'],
+      ['⌘R / F5', 'Reload (⇧ bypasses the cache)'],
+      ['⌘F / F3', 'Find in page'],
+      ['⌘G / ⇧⌘G', 'Next / previous match'],
+      ['⌘[ / ⌘]', 'Back / forward'],
+      ['⌘1 … ⌘9', 'Switch to a numbered tab'],
+      ['⌘⌥← / →', 'Previous / next tab (also Ctrl+Tab, Ctrl+PageUp/Down)'],
+      ['⌘+ / ⌘− / ⌘0', 'Zoom in / out / reset'],
+      ['F2', 'Tab manager'],
+      ['Esc', 'Close the dialog, options, or page view'],
+    ];
+    // Only the embedded (native) browser takes these keys, so the sheet lists them only then.
+    get shortcuts() {
+      return this.embedded ? BrowserApp.shortcuts : [];
+    }
     shortcut(e) {
       if (!this.embedded || !this.active || this.covered || e.repeat) return false;
       const cmd = e.metaKey && !e.ctrlKey,

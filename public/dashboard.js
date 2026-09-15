@@ -167,8 +167,9 @@
         )
       );
       this.home.append(head);
-      if (this.logic.state.herdAttention !== waiting.length)
-        this.logic.set({ herdAttention: waiting.length });
+      const badges = this.logic.state.badges || {};
+      if ((badges.herdr || 0) !== waiting.length)
+        this.logic.set({ badges: { ...badges, herdr: waiting.length } });
       for (const p of waiting.slice(0, 2))
         this.home.append(
           this.button('● ' + title(p) + ' · needs you', () => this.openPane(p), 'attention-preview')

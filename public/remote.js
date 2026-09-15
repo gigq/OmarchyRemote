@@ -531,6 +531,10 @@
       if (activate) this.activate(this.tabs.length - 1);
       this.save();
     }
+    // The terminal's own desk binding adds a tab when the terminal is already in front.
+    reopen() {
+      this.add();
+    }
     shellExited(tab) {
       if (this.disposed || this.closingTab === tab || !this.tabs.includes(tab)) return;
       if (this.tabs.length === 1) {

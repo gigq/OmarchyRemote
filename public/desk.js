@@ -219,6 +219,24 @@
 
   // ---- keyboard bindings ------------------------------------------------------------------------
   // Apple keyboards use ⌘ (SUPER on Omarchy); elsewhere Ctrl+Alt stays clear of terminal and browser keys.
+  // App bindings come from the catalog (`deskKeys` in public/apps.js) so a new app needs no
+  // shell change; they sit between the window and shell groups.
+  const appBindings = () =>
+    Object.values(window.HyprlandApps?.catalog || {}).flatMap(app =>
+      (app.deskKeys || []).map(b => ({
+        group: 'Apps',
+        ...b,
+        run: d => {
+          const front = d.logic.cur() === app.key && d.logic.remote?.app(app.key);
+          if (front?.reopen) front.reopen();
+          else d.logic.openApp(app.key);
+        },
+      }))
+    );
+  const bindings = () => {
+    const shell = BINDINGS.findIndex(b => b.group === 'Shell');
+    return [...BINDINGS.slice(0, shell), ...appBindings(), ...BINDINGS.slice(shell)];
+  };
   const BINDINGS = [
     {
       group: 'Workspaces',
@@ -318,71 +336,6 @@
       run: d => d.logic.closeWs(),
     },
     {
-      group: 'Apps',
-      keys: 'T',
-      code: /^KeyT$/,
-      label: 'Terminal / new terminal tab',
-      run: d => {
-        if (d.logic.cur() === 'terminal') d.logic.remote?.app('terminal')?.add();
-        else d.logic.openApp('terminal');
-      },
-    },
-    {
-      group: 'Apps',
-      keys: '↩',
-      code: /^(Enter|NumpadEnter)$/,
-      label: 'Terminal',
-      run: d => d.logic.openApp('terminal'),
-    },
-    {
-      group: 'Apps',
-      browserOnly: true,
-      keys: '⇧ ↩',
-      shift: true,
-      code: /^(Enter|NumpadEnter)$/,
-      label: 'Browser',
-      run: d => d.logic.openApp('browser'),
-    },
-    {
-      group: 'Apps',
-      keys: '⇧ B',
-      shift: true,
-      code: /^KeyB$/,
-      label: 'Browser',
-      run: d => d.logic.openApp('browser'),
-    },
-    {
-      group: 'Apps',
-      keys: '⇧ F',
-      shift: true,
-      code: /^KeyF$/,
-      label: 'Files',
-      run: d => d.logic.openApp('files'),
-    },
-    {
-      group: 'Apps',
-      keys: '⇧ A',
-      shift: true,
-      code: /^KeyA$/,
-      label: 'Herd agents',
-      run: d => d.logic.openApp('herdr'),
-    },
-    {
-      group: 'Apps',
-      keys: '⇧ D',
-      shift: true,
-      code: /^KeyD$/,
-      label: 'lazydocker',
-      run: d => d.logic.openApp('lazydocker'),
-    },
-    {
-      group: 'Apps',
-      keys: ',',
-      code: /^Comma$/,
-      label: 'Settings',
-      run: d => d.logic.openApp('settings'),
-    },
-    {
       group: 'Shell',
       keys: 'K',
       code: /^KeyK$/,
@@ -459,8 +412,7 @@
         !s.ov &&
         !s.shade &&
         !s.launch &&
-        logic.cur() === 'browser' &&
-        logic.remote?.app('browser')?.shortcut?.(e)
+        logic.remote?.app(logic.cur())?.shortcut?.(e)
       )
         return;
       if (e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.altKey) {
@@ -490,7 +442,7 @@
           : !/^(Arrow|Enter|Backspace|Escape)/.test(e.code))
       )
         return;
-      const binding = BINDINGS.find(
+      const binding = bindings().find(
         b =>
           b.code.test(e.code) &&
           !!b.shift === e.shiftKey &&
@@ -572,10 +524,11 @@
       );
       sheet.append(head);
       const grid = node('div', 'desk-sheet-grid');
-      for (const group of [...new Set(BINDINGS.map(b => b.group))]) {
+      const all = bindings();
+      for (const group of [...new Set(all.map(b => b.group))]) {
         const section = node('section', 'desk-sheet-group');
         section.append(node('h3', '', group));
-        for (const b of BINDINGS.filter(
+        for (const b of all.filter(
           b =>
             b.group === group && (!b.desk || this.logic.state.desk) && (!b.browserOnly || !NATIVE)
         )) {
@@ -585,10 +538,18 @@
         }
         grid.append(section);
       }
-      if (this.logic.cur() === 'browser') {
+      const front = this.logic.remote?.app(this.logic.cur()),
+        frontName = window.HyprlandApps?.get(this.logic.cur())?.name || '';
+      if (front?.shortcuts?.length) {
         const section = node('section', 'desk-sheet-group');
-        section.append(node('h3', '', 'Browser (overrides shell keys)'));
-        for (const [keys, text] of window.HostBrowserApp?.shortcuts || []) {
+        section.append(
+          node(
+            'h3',
+            '',
+            `${frontName[0].toUpperCase()}${frontName.slice(1)} (overrides shell keys)`
+          )
+        );
+        for (const [keys, text] of front.shortcuts) {
           const row = node('div', 'desk-sheet-row');
           row.append(node('kbd', '', keys), node('span', '', text));
           section.append(row);
@@ -659,7 +620,9 @@
     swap,
     layout,
     render,
-    BINDINGS,
+    get BINDINGS() {
+      return bindings();
+    },
     MOD,
     CHROME,
   };

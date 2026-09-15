@@ -9,6 +9,9 @@
   // native: the touch keyboard and hardware keys are sent to the app (its instance implements key()).
   // offline: the app works without the host backend, so no "connect to the host" placeholder.
   // typing: keyboard status label while the app has focus (defaults to the app name).
+  // superKeys: phone SUPER-keyboard keys that open the app; superLabel is the key caption.
+  // deskKeys: desk-mode bindings ({keys, code, label, shift?, alt?, browserOnly?}) that open the
+  //   app, or call the instance's reopen() when the app is already in front.
   const define = (key, spec) => {
     catalog[key] = {
       key,
@@ -18,6 +21,9 @@
       native: false,
       offline: false,
       typing: null,
+      superKeys: [],
+      superLabel: null,
+      deskKeys: [],
       provider: null,
       ...spec,
     };
@@ -37,18 +43,36 @@
     description: 'live host shell',
     surface: 'terminal',
     native: true,
+    superKeys: ['t', '⏎'],
+    superLabel: 'term',
+    deskKeys: [
+      { keys: 'T', code: /^KeyT$/, label: 'Terminal / new terminal tab' },
+      { keys: '↩', code: /^(Enter|NumpadEnter)$/, label: 'Terminal' },
+    ],
   });
   define('files', {
     name: 'files',
     color: 'var(--theme-red)',
     glyph: 'fm',
     description: 'files on the host',
+    superKeys: ['e'],
+    deskKeys: [{ keys: '⇧ F', shift: true, code: /^KeyF$/, label: 'Files' }],
   });
   define('browser', {
     name: 'browser',
     color: 'var(--theme-blue)',
     glyph: 'br',
     description: 'desktop browser tabs',
+    deskKeys: [
+      {
+        browserOnly: true,
+        keys: '⇧ ↩',
+        shift: true,
+        code: /^(Enter|NumpadEnter)$/,
+        label: 'Browser',
+      },
+      { keys: '⇧ B', shift: true, code: /^KeyB$/, label: 'Browser' },
+    ],
   });
   define('herdr', {
     name: 'herdr',
@@ -57,6 +81,8 @@
     description: 'agents · herdr',
     native: true,
     typing: 'selected Herdr pane',
+    superKeys: ['a'],
+    deskKeys: [{ keys: '⇧ A', shift: true, code: /^KeyA$/, label: 'Herd agents' }],
   });
   define('btop', {
     name: 'btop',
@@ -81,6 +107,7 @@
     description: 'containers · docker',
     surface: 'terminal',
     native: true,
+    deskKeys: [{ keys: '⇧ D', shift: true, code: /^KeyD$/, label: 'lazydocker' }],
   });
   define('dua', {
     name: 'dua',
@@ -106,10 +133,14 @@
     mount: 'theme-settings',
     mountClass: 'theme-settings',
     offline: true,
+    superKeys: ['s'],
+    deskKeys: [{ keys: ',', code: /^Comma$/, label: 'Settings' }],
   });
   // A provider is {create(root, bridge) → instance, close?(instance|null, bridge)}. Instances may
   // implement connect, resume, resize, show(visible), blur, key(input), nativeInput, stopTouchScroll,
-  // placeLatest and dispose; the bridge calls whichever exist.
+  // placeLatest and dispose; the bridge calls whichever exist. In desk mode the front app's
+  // shortcut(event) sees hardware keys before the shell bindings, its shortcuts ([keys, text] pairs)
+  // fill the shortcut sheet, and reopen() runs when its own binding fires while it is in front.
   const provide = (key, provider) => {
     const app = catalog[key];
     if (!app) throw Error('Unknown app: ' + key);

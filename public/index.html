@@ -815,14 +815,9 @@ class Component extends DCLogic {
     // keyboard
     const bind = {
       q: 'close',
-      e: 'files',
-      s: 'settings',
-      a: 'herdr',
-      t: 'term',
       h: 'ws ←',
       l: 'ws →',
       space: 'launch',
-      '⏎': 'term',
       '←': 'ws ←',
       '→': 'ws →',
       '↑': 'expo',
@@ -830,11 +825,6 @@ class Component extends DCLogic {
     };
     const act = {
       q: () => this.closeWs(),
-      e: () => this.openApp('files'),
-      s: () => this.openApp('settings'),
-      a: () => this.openApp('herdr'),
-      t: () => this.openApp('terminal'),
-      '⏎': () => this.openApp('terminal'),
       h: () => this.go(s.ws - 1),
       l: () => this.go(s.ws + 1),
       '←': () => this.go(s.ws - 1),
@@ -843,6 +833,12 @@ class Component extends DCLogic {
       '↓': () => this.go(0),
       space: () => this.set({ launch: true, sup: false }),
     };
+    // App keys come from the catalog (`superKeys` in public/apps.js).
+    for (const app of Object.values(A))
+      for (const k of app.superKeys || []) {
+        bind[k] = app.superLabel || app.name;
+        act[k] = () => this.openApp(app.key);
+      }
     const R = (str, w) => str.split(' ').map(l => ({ l, w: w || 1 }));
     const key = x => {
       if (x.l === 'SUPER')
@@ -971,8 +967,8 @@ class Component extends DCLogic {
           n: A[k].name,
           c: A[k].color,
           op: 1,
-          badge: k === 'herdr' ? s.herdAttention || 0 : '',
-          badgeDisplay: k === 'herdr' && s.herdAttention ? 'block' : 'none',
+          badge: s.badges?.[k] || '',
+          badgeDisplay: s.badges?.[k] ? 'block' : 'none',
           on: () => this.openApp(k),
         })),
       kbOn: () => {

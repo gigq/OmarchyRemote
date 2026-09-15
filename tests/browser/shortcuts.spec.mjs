@@ -8,6 +8,7 @@ test.beforeEach(async ({ page: p }) => {
     '<div id="phone-viewport" style="width:1194px;height:834px"><div id="touch-shell"><textarea aria-label="Draft"></textarea></div></div>'
   );
   await p.addScriptTag({ url: '/util.js' });
+  await p.addScriptTag({ url: '/apps.js' }); // app bindings come from the catalog
   await p.addScriptTag({ url: '/desk.js' });
   await p.evaluate(() => {
     const D = HyprlandDesk;
