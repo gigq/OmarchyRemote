@@ -21,14 +21,17 @@ test('fit wraps words and wide glyphs without changing source columns or losing 
   }, prose);
   const scroller = page.locator('.native-terminal-scroll');
   await expect.poll(() => scroller.evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThan(2);
-  const segments = await page.evaluate(() => {
-    const v = qaTerms[0].nativeView,
-      b = qaTerms[0].buffer.active;
-    return v.layout
-      .filter(r => r.source === 0)
-      .map(r => b.getLine(0).translateToString(false, r.start, r.end));
-  });
-  expect(segments.length).toBeGreaterThan(1);
+  const readSegments = () =>
+    page.evaluate(() => {
+      const v = qaTerms[0].nativeView,
+        b = qaTerms[0].buffer.active;
+      return v.layout
+        .filter(r => r.source === 0)
+        .map(r => b.getLine(0).translateToString(false, r.start, r.end));
+    });
+  // xterm publishes the resized cell width a frame later, so the first fitted layout can be unwrapped.
+  await expect.poll(async () => (await readSegments()).length).toBeGreaterThan(1);
+  const segments = await readSegments();
   expect(segments.join('')).toBe(prose);
   for (const segment of segments.slice(0, -1)) expect(segment.endsWith(' ')).toBe(true);
   expect(await page.evaluate(() => qaTerms[0].cols)).toBe(180);
