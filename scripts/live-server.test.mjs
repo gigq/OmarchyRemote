@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, writeFile, unlink } from 'node:fs/promises';
+import { readFile, writeFile, unlink, rename } from 'node:fs/promises';
 import vm from 'node:vm';
 
 const base = process.env.HYPRLAND_TEST_URL || 'http://127.0.0.1:4187';
@@ -63,13 +63,21 @@ test(
         await (await fetch(base + '/native/' + file.slice('public/'.length))).text(),
         'live reload probe'
       );
+      await writeFile(file + '.replacement', 'replaced reload probe');
+      await rename(file + '.replacement', file);
+      while (
+        (await (await fetch(base + '/native/' + file.slice('public/'.length))).text()) !==
+        'replaced reload probe'
+      )
+        await nextVersion();
       await unlink(file);
       created = false;
-      await nextVersion();
-      assert.equal((await fetch(base + '/native/' + file.slice('public/'.length))).status, 404);
+      while ((await fetch(base + '/native/' + file.slice('public/'.length))).status !== 404)
+        await nextVersion();
     } finally {
       controller.abort();
       if (created) await unlink(file);
+      await unlink(file + '.replacement').catch(() => {});
     }
   }
 );

@@ -1,5 +1,6 @@
 import http from 'node:http';
-import { watch, readFileSync, existsSync } from 'node:fs';
+import { watchSources } from './source-watch.mjs';
+import { readFileSync, existsSync } from 'node:fs';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
@@ -80,13 +81,14 @@ function changed() {
       console.log(`Reload ${version}: ${clients.size} connected preview(s)`);
     } catch (error) {
       console.error('Native preparation failed; preserving current previews:', error.message);
+      changed();
     }
   }, 180);
 }
-const watchers = [publicRoot, path.join(root, 'ios/WebOverrides')].map(dir =>
-  watch(dir, { recursive: true }, changed)
+const sourceWatcher = watchSources(
+  [publicRoot, path.join(root, 'ios/WebOverrides'), path.join(root, 'scripts/prepare-native.py')],
+  changed
 );
-watchers.push(watch(path.join(root, 'scripts/prepare-native.py'), changed));
 const liveScript = readFileSync(path.join(root, 'scripts/live-reload.js'), 'utf8');
 
 const server = http.createServer(async (req, res) => {
@@ -228,7 +230,7 @@ server.listen(port, '127.0.0.1', () =>
   console.log(`Hyprland live preview: http://127.0.0.1:${port}/native/`)
 );
 function shutdown() {
-  for (const watcher of watchers) watcher.close();
+  sourceWatcher.close();
   clearTimeout(refreshTimer);
   for (const client of clients) client.end();
   server.close();
