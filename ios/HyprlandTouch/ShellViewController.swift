@@ -15,7 +15,7 @@ enum ShellSource {
         return url
     }()
     static var hostLabel: String { liveURL?.host ?? "the host" }
-    static func trusts(_ origin: WKSecurityOrigin) -> Bool {
+    @MainActor static func trusts(_ origin: WKSecurityOrigin) -> Bool {
         guard let live = liveURL, let scheme = live.scheme, let host = live.host else { return false }
         let port = live.port ?? (scheme == "https" ? 443 : 80)
         return origin.protocol == scheme && origin.host == host && origin.port == port
@@ -67,7 +67,9 @@ private final class ShellKeyboardStateBridge: NSObject, WKScriptMessageHandler {
 }
 
 @MainActor
-private final class WeatherDeviceBridge: NSObject, WKScriptMessageHandlerWithReply, CLLocationManagerDelegate {
+private final class WeatherDeviceBridge: NSObject, WKScriptMessageHandlerWithReply,
+    @preconcurrency CLLocationManagerDelegate
+{
     private lazy var manager: CLLocationManager = {
         let manager = CLLocationManager()
         manager.delegate = self
@@ -485,7 +487,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
     }
     func webView(
         _ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
-        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
         let scheme = navigationAction.request.url?.scheme?.lowercased() ?? ""
         let isWebLink = ["http", "https"].contains(scheme)
