@@ -97,6 +97,8 @@
             this.schedule();
             return;
           }
+          // A programmatic scroll is pending; the next render positions the scroller.
+          if (this.target !== undefined) return;
           this.follow =
             this.scroller.scrollTop >= this.scroller.scrollHeight - this.scroller.clientHeight - 1;
           this.busy = true;
