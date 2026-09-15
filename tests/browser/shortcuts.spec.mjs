@@ -301,3 +301,19 @@ test('native list restores Return and omits the browser-only Delete alias', asyn
   await expect(p.locator('.desk-sheet')).toContainText('↩');
   await expect(p.locator('.desk-sheet')).not.toContainText('⌫');
 });
+
+test('Return focuses Terminal while T explicitly adds a terminal tab', async ({ page: p }) => {
+  await p.evaluate(() => {
+    logic.remote = { app: () => ({ reopen: () => logic.calls.push(['new-tab']) }) };
+  });
+  await p.keyboard.press('Meta+Enter');
+  await p.keyboard.press('Meta+NumpadEnter');
+  await expect
+    .poll(() => p.evaluate(() => logic.calls))
+    .toEqual([
+      ['open', 'terminal'],
+      ['open', 'terminal'],
+    ]);
+  await p.keyboard.press('Meta+t');
+  await expect.poll(() => p.evaluate(() => logic.calls.at(-1))).toEqual(['new-tab']);
+});

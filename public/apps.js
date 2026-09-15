@@ -11,7 +11,7 @@
   // typing: keyboard status label while the app has focus (defaults to the app name).
   // superKeys: phone SUPER-keyboard keys that open the app; superLabel is the key caption.
   // deskKeys: desk-mode bindings ({keys, code, label, shift?, alt?, browserOnly?}) that open the
-  //   app, or call the instance's reopen() when the app is already in front.
+  //   app, or call the instance's reopen() when reopen: true and the app is already in front.
   const define = (key, spec) => {
     catalog[key] = {
       key,
@@ -46,7 +46,7 @@
     superKeys: ['t', '⏎'],
     superLabel: 'term',
     deskKeys: [
-      { keys: 'T', code: /^KeyT$/, label: 'Terminal / new terminal tab' },
+      { keys: 'T', code: /^KeyT$/, label: 'Terminal / new terminal tab', reopen: true },
       { keys: '↩', code: /^(Enter|NumpadEnter)$/, label: 'Terminal' },
     ],
   });
@@ -140,7 +140,7 @@
   // implement connect, resume, resize, show(visible), blur, key(input), nativeInput, stopTouchScroll,
   // placeLatest and dispose; the bridge calls whichever exist. In desk mode the front app's
   // shortcut(event) sees hardware keys before the shell bindings, its shortcuts ([keys, text] pairs)
-  // fill the shortcut sheet, and reopen() runs when its own binding fires while it is in front.
+  // fill the shortcut sheet, and reopen() runs for bindings marked reopen: true while it is in front.
   const provide = (key, provider) => {
     const app = catalog[key];
     if (!app) throw Error('Unknown app: ' + key);

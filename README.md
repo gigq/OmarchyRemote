@@ -104,6 +104,8 @@ The native shell uses persistent website storage plus a native preferences mirro
 
 The Rust backend stores the catalog and per-device backups in `settings.sqlite3` under its application data directory (`$XDG_DATA_HOME/omarchy-remote`, or the standard user data directory). Include this database in host backups; use SQLite’s backup API for a consistent copy while the service is running. The schema is versioned, updates use revision checks, and deleted web-app records prevent stale devices from reinstalling removed apps during migration. Browser tests isolate these APIs so they do not create records in the live catalog.
 
+⌘Return opens or focuses Terminal without creating another tab. ⌘T adds a tab when Terminal is already active.
+
 ## Browser navigation and keyboard
 
 Browser reopens the last viewed HTTP(S) tab on this device if it is still in the desktop snapshot. The saved selection uses the extension's stable profile ID across bridge reconnections. A closed or internal tab falls back to the tab manager; a disconnected profile keeps its selection for reconnection. The back chevron in Browser opens the tab manager explicitly. In its search field, Return opens the first matching web tab. Website navigation still updates the selected desktop tab's URL.

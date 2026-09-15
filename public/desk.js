@@ -228,7 +228,7 @@
         ...b,
         run: d => {
           const front = d.logic.cur() === app.key && d.logic.remote?.app(app.key);
-          if (front?.reopen) front.reopen();
+          if (b.reopen && front?.reopen) front.reopen();
           else d.logic.openApp(app.key);
         },
       }))
