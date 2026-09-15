@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures.mjs';
-import { captureTerminals, visibleText, exitShell } from './terminal-helper.mjs';
+import { captureTerminals, visibleText } from './terminal-helper.mjs';
 test.beforeEach(async ({ page }) => captureTerminals(page));
 async function key(page, label) {
   const field = page.locator('.native-input:visible');
@@ -10,43 +10,34 @@ async function key(page, label) {
 test('custom keyboard drives the real shell and resumes after page reload', async ({ page }) => {
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
+  const app = page.locator('#remote-terminal-app');
   await page.goto('/native/');
   await page.getByText('terminal', { exact: true }).first().click();
-  await expect(page.locator('#remote-terminal-app')).toContainText('· connected');
-  try {
-    await page.locator('.remote-terminal').click();
-    for (const k of ['e', 'c', 'h', 'o', 'space', 'h', 'e', 'l', 'l', 'o', '⏎']) await key(page, k);
-    await expect.poll(() => visibleText(page)).toContain('hello');
-    await page.screenshot({ path: 'artifacts/browser/terminal-live.png' });
-    const id = await page.evaluate(() => localStorage.getItem('omarchy-terminal-id'));
-    await page.reload();
-    await page.getByText('terminal', { exact: true }).first().click();
-    await expect(page.locator('#remote-terminal-app')).toContainText('· connected');
-    expect(await page.evaluate(() => localStorage.getItem('omarchy-terminal-id'))).toBe(id);
-    await expect.poll(() => visibleText(page)).toContain('hello');
-    await page.locator('.remote-terminal').click();
-    for (const k of ['e', 'x', 'i', 't', '⏎']) await key(page, k);
-    await expect(page.locator('#remote-terminal-app')).toContainText('Shell exited');
-    await page.reload();
-    await page.getByText('terminal', { exact: true }).first().click();
-    await expect(page.locator('#remote-terminal-app')).toContainText('Shell exited');
-    await page.getByRole('button', { name: 'New shell', exact: true }).click();
-    await expect(page.locator('#remote-terminal-app')).toContainText('· connected');
-    await page.locator('.remote-terminal').click();
-    for (const k of ['e', 'x', 'i', 't', '⏎']) await key(page, k);
-    await expect(page.locator('#remote-terminal-app')).toContainText('Shell exited');
-    expect(errors).toEqual([]);
-  } finally {
-    if (
-      !(await page
-        .locator('#remote-terminal-app')
-        .textContent()
-        .then(t => t.includes('Shell exited')))
-    ) {
-      await exitShell(page);
-      await expect(page.locator('#remote-terminal-app')).toContainText('Shell exited');
-    }
-  }
+  await expect(app).toContainText('· connected');
+  await page.locator('.remote-terminal').click();
+  for (const k of ['e', 'c', 'h', 'o', 'space', 'h', 'e', 'l', 'l', 'o', '⏎']) await key(page, k);
+  await expect.poll(() => visibleText(page)).toContain('hello');
+  await page.screenshot({ path: 'artifacts/browser/terminal-live.png' });
+  const id = await page.evaluate(() => localStorage.getItem('omarchy-terminal-id'));
+  // Reload restores the open workspace and reconnects the same host session.
+  await page.reload();
+  await expect(app).toContainText('· connected');
+  expect(await page.evaluate(() => localStorage.getItem('omarchy-terminal-id'))).toBe(id);
+  await expect.poll(() => visibleText(page)).toContain('hello');
+  await page.locator('.remote-terminal').click();
+  for (const k of ['e', 'x', 'i', 't', '⏎']) await key(page, k);
+  // Exiting the only shell closes the terminal window instead of leaving a dead tab.
+  await expect(app).toBeEmpty();
+  await page.reload();
+  await expect(page.getByText('terminal', { exact: true }).first()).toBeVisible();
+  await expect(app).toBeEmpty();
+  await page.getByText('terminal', { exact: true }).first().click();
+  await expect(app).toContainText('· connected');
+  expect(await page.evaluate(() => localStorage.getItem('omarchy-terminal-id'))).not.toBe(id);
+  await page.locator('.remote-terminal').click();
+  for (const k of ['e', 'x', 'i', 't', '⏎']) await key(page, k);
+  await expect(app).toBeEmpty();
+  expect(errors).toEqual([]);
 });
 
 test('Herdr lists real workspaces and opens output without sending input', async ({ page }) => {

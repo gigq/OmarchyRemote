@@ -26,7 +26,7 @@ test('native launcher opens an app and a pane from Home', async ({ page }) => {
     .filter({ has: page.getByText('files', { exact: true }) })
     .first()
     .click();
-  await expect(page.locator('#remote-files-app .files-heading')).toBeVisible();
+  await expect(page.locator('#remote-files-app .files-path')).toBeVisible();
   await launcher(page);
   await input.fill('@');
   await expect(page.locator('.launcher-result').first()).toBeVisible();
