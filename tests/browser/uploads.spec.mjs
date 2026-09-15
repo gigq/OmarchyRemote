@@ -49,10 +49,32 @@ test('image picker preserves pane drafts, blocks premature send, and Latest shar
         };
       })
   );
+  // Chromium drops a tap that lands while the output is still being repositioned
+  // (the composer transition resizes it), so wait for the scroller to go quiet.
+  async function openPane(name) {
+    await page.locator('.herdr-pane').filter({ hasText: name }).click();
+    await expect(page.locator('.herdr-output')).toContainText('Line 99');
+    await page.locator('.herdr-output .native-terminal-scroll').evaluate(
+      el =>
+        new Promise(resolve => {
+          let timer;
+          const done = () => {
+            el.removeEventListener('scroll', bump);
+            resolve();
+          };
+          const bump = () => {
+            clearTimeout(timer);
+            timer = setTimeout(done, 300);
+          };
+          el.addEventListener('scroll', bump);
+          bump();
+        })
+    );
+    await page.locator('.herdr-output').tap();
+  }
   await page.goto('/native/');
   await page.getByText('herdr', { exact: true }).first().click();
-  await page.locator('.herdr-pane').filter({ hasText: 'one' }).click();
-  await page.locator('.herdr-output').tap();
+  await openPane('one');
   const field = page.locator('#remote-herdr-app .native-input');
   await field.fill('First draft');
   const picker = page.waitForEvent('filechooser');
@@ -61,16 +83,14 @@ test('image picker preserves pane drafts, blocks premature send, and Latest shar
   await expect.poll(() => !!finishUpload).toBe(true);
   await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'All panes' }).click();
-  await page.locator('.herdr-pane').filter({ hasText: 'two' }).click();
-  await page.locator('.herdr-output').tap();
+  await openPane('two');
   await field.fill('Second draft');
   await finishUpload();
   await expect(page.getByRole('button', { name: 'Attach images', exact: true })).toBeEnabled();
   await expect(field).toHaveValue('Second draft');
   expect(sent).toEqual([]);
   await page.getByRole('button', { name: 'All panes' }).click();
-  await page.locator('.herdr-pane').filter({ hasText: 'one' }).click();
-  await page.locator('.herdr-output').tap();
+  await openPane('one');
   await expect(field).toHaveValue('First draft\nImage: /tmp/upload-test.png\n');
   await expect(page.locator('.herdr-output')).toContainText('Line 99');
   await page.waitForTimeout(250);
@@ -80,7 +100,8 @@ test('image picker preserves pane drafts, blocks premature send, and Latest shar
   await expect(page.locator('.native-input-header')).toContainText('Latest');
   const a = await latest.boundingBox(),
     b = await page.getByRole('button', { name: 'Switch typing mode' }).boundingBox();
-  expect(Math.abs(a.y - b.y)).toBeLessThan(2);
+  // Same header row: the buttons differ in height, so compare vertical centres.
+  expect(Math.abs(a.y + a.height / 2 - (b.y + b.height / 2))).toBeLessThan(2);
   await latest.click();
   await expect(latest).toBeHidden();
   await page.getByRole('button', { name: 'Send', exact: true }).click();
