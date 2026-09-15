@@ -689,7 +689,7 @@
       ['⌘L', 'Focus the address bar (⇧ opens the tab manager)'],
       ['⌘T', 'New tab (⇧ reopens the last closed tab)'],
       ['⌘N', 'New window'],
-      ['⌘W', 'Close tab (⇧ closes the shell window)'],
+      ['⌘⇧W', 'Close browser tab (⌘W closes the window)'],
       ['⌘R / F5', 'Reload (⇧ bypasses the cache)'],
       ['⌘F / F3', 'Find in page'],
       ['⌘G / ⇧⌘G', 'Next / previous match'],
@@ -741,7 +741,7 @@
             this.showManager();
             this.newTab(t?.instance, null, true);
           };
-        else if (c === 'KeyW') run = () => (shift ? this.host.logic.closeWs() : this.closeTab());
+        else if (c === 'KeyW' && shift) run = () => this.closeTab();
         else if (c === 'KeyF' && this.nativeFind)
           run = () => (shift ? this.host.logic.desk?.toggleFull?.() : this.openFind());
         else if (c === 'KeyR')

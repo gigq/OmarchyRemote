@@ -45,7 +45,7 @@ final class HardwareShortcutTests: XCTestCase {
         app.typeKey("t", modifierFlags: .command)
         XCTAssertTrue(app.staticTexts["New desktop tab"].waitForExistence(timeout: 5))
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
-        app.typeKey("w", modifierFlags: [.command, .shift])
+        app.typeKey("w", modifierFlags: .command)
         expectWorkspace("home")
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Browser native shortcuts complete"

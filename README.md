@@ -108,14 +108,14 @@ The Rust backend stores the catalog and per-device backups in `settings.sqlite3`
 
 Browser reopens the last viewed HTTP(S) tab on this device if it is still in the desktop snapshot. The saved selection uses the extension's stable profile ID across bridge reconnections. A closed or internal tab falls back to the tab manager; a disconnected profile keeps its selection for reconnection. The back chevron in Browser opens the tab manager explicitly. In its search field, Return opens the first matching web tab. Website navigation still updates the selected desktop tab's URL.
 
-When Browser is active, its keyboard commands take precedence over conflicting shell commands. The `⌘ /` shortcut list includes Browser commands. Clipboard and website text editing stay native. Find uses WebKit’s native search panel, keeping the query and match navigation in the website’s own view.
+When Browser is active, its keyboard commands handle tab and page actions. ⌘W always closes the focused shell window; ⌘⇧W closes only the current browser tab. The `⌘ /` shortcut list includes Browser commands. Clipboard and website text editing stay native. Find uses WebKit’s native search panel, keeping the query and match navigation in the website’s own view.
 
 | Keys                                          | Action                                                          |
 | --------------------------------------------- | --------------------------------------------------------------- |
 | ⌘ L                                           | Select address; in the manager, search tabs                     |
 | ⌘ ⇧ L or F2                                   | Open and search the tab manager                                 |
 | ⌘ T / ⌘ N                                     | Create a desktop tab / window (enter its URL)                   |
-| ⌘ W                                           | Close the current desktop tab and select the next available tab |
+| ⌘ ⇧ W                                         | Close the current desktop tab and select the next available tab |
 | ⌘ ⇧ T                                         | Reopen a tab closed here, restoring its URL                     |
 | Ctrl Tab / Ctrl ⇧ Tab, Ctrl PageDown / PageUp | Next / previous openable tab across profiles and windows        |
 | ⌘ ⌥ → / ←                                     | Next / previous openable tab                                    |
@@ -125,7 +125,7 @@ When Browser is active, its keyboard commands take precedence over conflicting s
 | ⌘ F, ⌘ G / ⌘ ⇧ G, F3 / ⇧ F3                   | Find in page, next / previous match                             |
 | ⌘ + / − / 0                                   | Page zoom in / out / reset                                      |
 | Escape                                        | Dismiss dialog/find/options, otherwise stop loading             |
-| ⌘ ⇧ W / ⌘ ⇧ F                                 | Close Browser's shell window / toggle its fullscreen layout     |
+| ⌘ W / ⌘ ⇧ F                                   | Close Browser's shell window / toggle its fullscreen layout     |
 
 Use ⌘ E for Expo, ⌘ J / ⇧ J for adjacent shell panes, and ⌘ Return for Terminal while Browser owns the usual tab keys. Native shortcut interception and find/zoom require build 27 or later. These commands operate the embedded WebKit page or the desktop tab adapter; they do not reproduce Vivaldi-only features such as panels, bookmarks, command chains, or DevTools. Reopening a tab restores its URL, not its old page history or form state. The last tab and the last 20 tabs closed here are stored locally and included in the native local preferences mirror, not the shared installed-app catalog.
 

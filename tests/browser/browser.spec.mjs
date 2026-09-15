@@ -284,7 +284,7 @@ test('Embedded iPad page follows tiling, fullscreen, rotation and app disposal',
   expect(portrait.rect[0] + portrait.rect[2]).toBeLessThanOrEqual(834);
   expect(portrait.rect[1] + portrait.rect[3]).toBeLessThan(1194);
   await p.keyboard.press('Meta+ArrowUp');
-  await p.keyboard.press('Meta+Shift+w');
+  await p.keyboard.press('Meta+w');
   await expect
     .poll(() => p.evaluate(() => window.browserCommands.some(q => q.action === 'close')))
     .toBe(true);

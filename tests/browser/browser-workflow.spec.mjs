@@ -138,10 +138,10 @@ test('a disconnected saved profile retries but explicit tab manager interaction 
   await p.waitForTimeout(2200);
   await expect(p.getByRole('searchbox', { name: 'Find a tab' })).toBeVisible();
 });
-test('browser shortcuts route before shell keys, including native page focus and dialogs', async ({
+test('browser page shortcuts preserve shell window closing, including focus and dialogs', async ({
   page: p,
 }) => {
-  await setup(p, { profile_id: 'profile-one', tab_id: 10 });
+  const state = await setup(p, { profile_id: 'profile-one', tab_id: 10 });
   await expect.poll(() => opened(p)).toHaveLength(1);
   await expect
     .poll(() =>
@@ -198,10 +198,11 @@ test('browser shortcuts route before shell keys, including native page focus and
   await expect(p.getByRole('dialog', { name: 'New desktop tab' })).toHaveCount(0);
   await key(p, 'KeyL', { shift: true });
   await expect(p.getByRole('searchbox', { name: 'Find a tab' })).toBeFocused();
-  await key(p, 'KeyW', { shift: true });
+  await key(p, 'KeyW');
   await expect
     .poll(() => p.evaluate(() => window.browserCommands.some(q => q.action === 'close')))
     .toBe(true);
+  expect(state.actions.filter(q => q.action === 'close')).toEqual([]);
   await p.keyboard.press('Meta+Enter');
   await expect(p.locator('.desk-ws-label:visible')).toHaveText('terminal');
 });
@@ -210,7 +211,7 @@ test('close, reopen and new tab shortcuts update the exact desktop tab and open 
 }) => {
   const state = await setup(p, { profile_id: 'profile-one', tab_id: 10 });
   await expect.poll(() => opened(p)).toHaveLength(1);
-  await key(p, 'KeyW');
+  await key(p, 'KeyW', { shift: true });
   await expect
     .poll(() => state.actions.filter(q => q.action === 'close'))
     .toEqual([{ instance_id: 'connection-new', action: 'close', tab_id: 10 }]);
@@ -266,7 +267,7 @@ test('closing the last openable tab returns to the manager and keeps new-tab sho
   await p.keyboard.press('Meta+Shift+l');
   await p.getByRole('button', { name: 'Refresh tabs' }).click();
   await p.getByRole('button', { name: 'Return to page' }).click();
-  await key(p, 'KeyW');
+  await key(p, 'KeyW', { shift: true });
   await expect(p.getByRole('searchbox', { name: 'Find a tab' })).toBeVisible();
   await expect
     .poll(() =>
