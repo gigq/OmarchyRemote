@@ -9,6 +9,8 @@
   // native: the touch keyboard and hardware keys are sent to the app (its instance implements key()).
   // offline: the app works without the host backend, so no "connect to the host" placeholder.
   // typing: keyboard status label while the app has focus (defaults to the app name).
+  // glyph: two-letter fallback shown where the Nerd Font is unavailable; icon: the Nerd Font
+  //   codepoint (public/assets/nerd-symbols.woff2 is a subset; add glyphs there when adding one).
   // superKeys: phone SUPER-keyboard keys that open the app; superLabel is the key caption.
   // deskKeys: desk-mode bindings ({keys, code, label, shift?, alt?, browserOnly?}) that open the
   //   app, or call the instance's reopen() when reopen: true and the app is already in front.
@@ -18,6 +20,7 @@
       mount: 'remote-' + key + '-app',
       mountClass: 'remote-app',
       surface: 'page',
+      icon: '',
       native: false,
       offline: false,
       typing: null,
@@ -33,6 +36,7 @@
     name: 'home',
     color: 'var(--theme-rose)',
     glyph: 'hm',
+    icon: '\uf015',
     description: 'launcher',
     offline: true,
   });
@@ -40,6 +44,7 @@
     name: 'terminal',
     color: 'var(--theme-green)',
     glyph: '>_',
+    icon: '\uf120',
     description: 'live host shell',
     surface: 'terminal',
     native: true,
@@ -54,6 +59,7 @@
     name: 'files',
     color: 'var(--theme-red)',
     glyph: 'fm',
+    icon: '\uf07b',
     description: 'files on the host',
     superKeys: ['e'],
     deskKeys: [{ keys: '⇧ F', shift: true, code: /^KeyF$/, label: 'Files' }],
@@ -62,6 +68,7 @@
     name: 'browser',
     color: 'var(--theme-blue)',
     glyph: 'br',
+    icon: '\uf0ac',
     description: 'desktop browser tabs',
     deskKeys: [
       {
@@ -78,6 +85,7 @@
     name: 'herdr',
     color: 'var(--theme-cyan)',
     glyph: 'hd',
+    icon: '\u{f06a9}',
     description: 'agents · herdr',
     native: true,
     typing: 'selected Herdr pane',
@@ -88,6 +96,7 @@
     name: 'btop',
     color: 'var(--theme-green)',
     glyph: 'bt',
+    icon: '\uf080',
     description: 'host system monitor',
     surface: 'terminal',
     native: true,
@@ -96,6 +105,7 @@
     name: 'services',
     color: 'var(--theme-yellow)',
     glyph: 'sv',
+    icon: '\uf085',
     description: 'systemd services · logs',
     surface: 'terminal',
     native: true,
@@ -104,6 +114,7 @@
     name: 'lazydocker',
     color: 'var(--theme-blue)',
     glyph: 'dk',
+    icon: '\uf308',
     description: 'containers · docker',
     surface: 'terminal',
     native: true,
@@ -113,6 +124,7 @@
     name: 'dua',
     color: 'var(--theme-yellow)',
     glyph: 'du',
+    icon: '\uf0a0',
     description: 'disk usage · cleanup',
     surface: 'terminal',
     native: true,
@@ -121,6 +133,7 @@
     name: 'lnav',
     color: 'var(--theme-cyan)',
     glyph: 'lg',
+    icon: '\uf15c',
     description: 'host logs · search',
     surface: 'terminal',
     native: true,
@@ -129,6 +142,7 @@
     name: 'settings',
     color: 'var(--theme-accent)',
     glyph: 'st',
+    icon: '\uf013',
     description: 'appearance · themes · web apps',
     mount: 'theme-settings',
     mountClass: 'theme-settings',
@@ -151,6 +165,7 @@
     define(app.id, {
       name: app.name,
       glyph: app.name.slice(0, 2).toLowerCase(),
+      icon: '\uf0ac',
       color: 'var(--theme-accent)',
       description: new URL(app.url).hostname,
       offline: true,

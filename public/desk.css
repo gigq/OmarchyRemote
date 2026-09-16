@@ -330,8 +330,8 @@ html.desk-mode {
 .desk-sheet-head h2 {
   margin: 0;
   font:
-    500 24px 'Space Grotesk',
-    sans-serif;
+    500 20px 'JetBrains Mono',
+    monospace;
 }
 .desk-sheet-grid {
   display: grid;

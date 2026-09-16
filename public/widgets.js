@@ -168,19 +168,21 @@
         this.renderCodexbar(data.codexbar);
         this.deck.refresh();
       } catch {
-        for (const k of ['metrics', 'tailscale', 'codexbar'])
-          this.roots[k].replaceChildren(
-            node('strong', '', k === 'metrics' ? 'Host metrics' : 'Tailscale'),
+        for (const k of ['metrics', 'tailscale', 'codexbar']) {
+          this.header(this.roots[k], k === 'metrics' ? 'btop' : k, '');
+          this.roots[k].append(
             node('p', 'widget-muted', HyprlandApps.host.name + ' unavailable · reconnecting…')
           );
+        }
       } finally {
         this.busy = false;
       }
       if (this.location && Date.now() > (this.nextWeather || 0)) this.loadWeather();
     }
+    // Legend header: the title sits on the panel border, the detail (or a control) at the right.
     header(root, title, detail) {
       root.replaceChildren();
-      const h = node('div', 'widget-line');
+      const h = node('div', 'widget-line widget-legend');
       h.append(node('strong', '', title), node('span', 'widget-muted widget-truncate', detail));
       root.append(h);
     }
@@ -211,10 +213,24 @@
           minutes = Math.max(0, Math.ceil((reset - Date.now()) / 60000));
         const used = w.used_percent;
         const line = node('div', 'widget-line');
-        line.append(
-          node('span', 'widget-truncate', w.label.replace(/^Codex /, '')),
-          node('strong', '', percent(used) + ' used')
+        const usage = node('span', 'codexbar-usage');
+        usage.append(
+          node('strong', '', percent(used)),
+          node(
+            'span',
+            'widget-muted codexbar-reset',
+            ' used · ' +
+              (Number.isFinite(reset)
+                ? 'resets ' +
+                  (minutes >= 1440
+                    ? Math.floor(minutes / 1440) + 'd ' + Math.floor((minutes % 1440) / 60) + 'h'
+                    : minutes >= 60
+                      ? Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm'
+                      : minutes + 'm')
+                : 'reset —')
+          )
         );
+        line.append(node('span', 'widget-truncate', w.label.replace(/^Codex /, '')), usage);
         const track = node('div', 'metric-track'),
           bar = node('i');
         bar.style.width = Math.max(0, Math.min(100, used)) + '%';
@@ -225,20 +241,6 @@
               ? 'var(--theme-yellow)'
               : 'var(--theme-accent)';
         track.append(bar);
-        line.append(
-          node(
-            'span',
-            'widget-muted codexbar-reset',
-            Number.isFinite(reset)
-              ? 'Resets ' +
-                  (minutes >= 1440
-                    ? Math.floor(minutes / 1440) + 'd ' + Math.floor((minutes % 1440) / 60) + 'h'
-                    : minutes >= 60
-                      ? Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm'
-                      : minutes + 'm')
-              : 'Reset —'
-          )
-        );
         row.append(line, track);
         list.append(row);
       }

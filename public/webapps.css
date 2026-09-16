@@ -5,8 +5,8 @@
 }
 .webapps-settings h2 {
   font:
-    500 22px 'Space Grotesk',
-    sans-serif;
+    500 15px 'JetBrains Mono',
+    monospace;
   margin: 0 0 8px;
 }
 .webapps-install {

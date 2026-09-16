@@ -1,0 +1,391 @@
+/* Shared chrome for the touch shell: the Nerd Font glyph face and the primitives every app
+   composes (legend panels, keycaps, prompt fields, segmented rails, kbd chips, tags, meters).
+   Colors are Omarchy theme tokens only; geometry follows docs/design (Claude Design turns 1–5). */
+@font-face {
+  font-family: 'Nerd Symbols';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('/assets/nerd-symbols.woff2') format('woff2');
+}
+:root {
+  --chrome-glyph: 'Nerd Symbols', 'JetBrains Mono', ui-monospace, monospace;
+  --chrome-ground: var(--theme-background);
+}
+.nf {
+  font-family: var(--chrome-glyph);
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1;
+  display: inline-block;
+}
+/* Legend panel: a bordered box whose title (and optional meta) sits on the border line. */
+.legend {
+  position: relative;
+  border: 1px solid var(--theme-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--theme-surface) 25%, transparent);
+  box-sizing: border-box;
+}
+.legend-title,
+.legend-meta {
+  position: absolute;
+  top: -7px;
+  background: var(--chrome-ground);
+  padding: 0 6px;
+  font-size: 10px;
+  line-height: 13px;
+  white-space: nowrap;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.legend-title {
+  left: 12px;
+  letter-spacing: 0.08em;
+  color: var(--theme-accent);
+  font-weight: 500;
+}
+.legend-meta {
+  right: 12px;
+  color: var(--theme-dim);
+}
+.legend.accent {
+  border-color: var(--theme-accent);
+}
+.legend.danger {
+  border-color: var(--theme-red);
+}
+.legend.danger .legend-title {
+  color: var(--theme-red);
+}
+/* Keycap: the flat button. */
+.keycap {
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  box-sizing: border-box;
+  font:
+    11px 'JetBrains Mono',
+    ui-monospace,
+    monospace;
+  color: var(--theme-foreground);
+  background: var(--theme-surface-raised);
+  border: 1px solid var(--theme-border);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.keycap:active,
+.keycap[aria-pressed='true'] {
+  background: var(--theme-surface);
+}
+.keycap.small {
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 7px;
+  font-size: 10px;
+  color: var(--theme-secondary);
+}
+.keycap.medium {
+  height: 32px;
+  border-radius: 9px;
+}
+.keycap.square {
+  width: 44px;
+  padding: 0;
+  font-size: 13px;
+  flex: none;
+}
+.keycap.icon {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 8px;
+  font-size: 13px;
+  flex: none;
+}
+.keycap.accent {
+  background: var(--theme-accent);
+  border-color: var(--theme-accent);
+  color: var(--theme-background);
+  font-weight: 500;
+}
+.keycap.rose {
+  color: var(--theme-red);
+}
+.keycap.rose.filled {
+  background: var(--theme-red);
+  border-color: var(--theme-red);
+  color: var(--theme-background);
+  font-weight: 500;
+}
+.keycap.accent:active {
+  background: color-mix(in srgb, var(--theme-accent) 85%, var(--theme-background));
+}
+.keycap > .nf {
+  font-size: 12px;
+  color: var(--theme-secondary);
+}
+.keycap.accent > .nf {
+  color: inherit;
+}
+.keycap-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.keycap-row > .keycap {
+  flex: 1;
+  min-width: 0;
+}
+.keycap-row > .keycap.square {
+  flex: none;
+}
+/* kbd chip: a shortcut hint. tag: a small type/provider label. */
+.kbd {
+  font-size: 9px;
+  padding: 1px 5px;
+  border: 1px solid var(--theme-border);
+  border-radius: 4px;
+  color: var(--theme-dim);
+  background: var(--theme-surface-raised);
+  line-height: 14px;
+  white-space: nowrap;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+.kbd.super {
+  font-size: 8px;
+  padding: 0 4px;
+  line-height: 12px;
+  background: transparent;
+}
+.tag {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--theme-surface-raised);
+  color: var(--theme-secondary);
+  border: 1px solid var(--theme-border);
+  line-height: 14px;
+  white-space: nowrap;
+  flex: none;
+}
+.tag.wide {
+  width: 30px;
+  height: 20px;
+  padding: 0;
+  border-radius: 5px;
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+}
+/* Prompt field: terminal-dark input with a prefix glyph and an optional trailing kbd hint. */
+.prompt-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 42px;
+  padding: 0 12px;
+  box-sizing: border-box;
+  background: var(--theme-terminal);
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  min-width: 0;
+}
+.prompt-field:focus-within {
+  border-color: var(--theme-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-accent) 15%, transparent);
+}
+.prompt-prefix {
+  color: var(--theme-accent);
+  font-size: 13px;
+  flex: none;
+}
+.prompt-label {
+  color: var(--theme-dim);
+  font-size: 11px;
+  width: 36px;
+  flex: none;
+}
+.prompt-field > input,
+.prompt-field > textarea {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  color: var(--theme-foreground);
+  font:
+    13px 'JetBrains Mono',
+    ui-monospace,
+    monospace;
+  user-select: text;
+  -webkit-user-select: text;
+  touch-action: auto;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.prompt-field > input::-webkit-search-cancel-button,
+.prompt-field > input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  display: none;
+}
+.prompt-field > input::placeholder {
+  color: var(--theme-dim);
+}
+/* Segmented rail: one track of tabs/filters; the pressed segment gets the raised fill. */
+.rail {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--theme-surface-raised);
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  box-sizing: border-box;
+  min-width: 0;
+}
+.rail > button {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font:
+    11px 'JetBrains Mono',
+    ui-monospace,
+    monospace;
+  color: var(--theme-secondary);
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rail > button[aria-pressed='true'] {
+  color: var(--theme-foreground);
+  background: var(--theme-surface);
+}
+.rail > button > .count {
+  color: var(--theme-dim);
+}
+.rail > button > .count[data-tone='accent'] {
+  color: var(--theme-accent);
+  font-weight: 500;
+}
+.rail > button > .count[data-tone='yellow'] {
+  color: var(--theme-yellow);
+  font-weight: 500;
+}
+.rail-divider {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  align-self: center;
+  background: var(--theme-border);
+}
+/* State dot: pane/agent state; glows while working. */
+.state-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  display: inline-block;
+  background: var(--theme-dim);
+}
+.state-dot[data-state='running'] {
+  background: var(--theme-accent);
+  box-shadow: 0 0 6px var(--theme-accent);
+}
+.state-dot[data-state='attention'] {
+  background: var(--theme-yellow);
+  box-shadow: 0 0 6px var(--theme-yellow);
+}
+.state-dot[data-state='done'] {
+  background: var(--theme-magenta);
+}
+/* Meter: a 3px track with a colored fill. */
+.meter {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--theme-terminal);
+  overflow: hidden;
+}
+.meter > i {
+  display: block;
+  height: 100%;
+  background: var(--theme-green);
+}
+.meter > i[data-tone='yellow'] {
+  background: var(--theme-yellow);
+}
+.meter > i[data-tone='red'] {
+  background: var(--theme-red);
+}
+/* Rows inside legend panels. */
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--theme-border);
+  font-size: 12px;
+}
+.legend-row:last-child {
+  border-bottom: 0;
+}
+/* Sheet: a panel that rises over the current screen. */
+.chrome-sheet {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 42px;
+  z-index: 30;
+  border: 2px solid var(--theme-accent);
+  border-radius: 24px;
+  background: var(--theme-background);
+  box-sizing: border-box;
+  padding: 16px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 -20px 60px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--theme-foreground);
+}
+.chrome-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  flex: none;
+}
+.chrome-sheet-head > h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+}
+.chrome-sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-top: 6px;
+}

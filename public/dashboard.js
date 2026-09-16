@@ -17,13 +17,17 @@
       this.launch = mount('dashboard-launcher');
       this.inbox = mount('dashboard-notifications');
       this.buildLauncher();
-      const host = el('div', 'home-host', HyprlandApps.host.name + ' · connecting…');
+      const host = el('div', 'home-host');
       this.host = host;
+      this.hostLine(HyprlandApps.host.name + ' · connecting…');
       this.home.parentElement.insertBefore(
         host,
         this.home.parentElement.querySelector('[data-live-date]')
       );
-      this.home.append(el('p', 'dashboard-muted', 'Connecting to Herd…'));
+      this.home.classList.add('legend');
+      this.metrics.classList.add('legend');
+      this.metrics.append(el('span', 'legend-title', 'host'));
+      this.drawHome();
       this.drawInbox();
       const pins = read('omarchy-home-pins', null);
       if (Array.isArray(pins))
@@ -34,6 +38,12 @@
         if (!document.hidden) this.poll();
       };
       document.addEventListener('visibilitychange', this.visibility);
+    }
+    hostLine(text, uptime) {
+      const name = el('span');
+      name.append(el('i', 'state-dot'), document.createTextNode(text));
+      this.host.replaceChildren(name);
+      if (uptime) this.host.append(el('span', '', uptime));
     }
     managePins() {
       if (this.pinPanel) return;
@@ -115,26 +125,50 @@
           const m = widgets.value.metrics;
           if (m && !m.error) {
             const hours = Math.floor(m.uptime / 3600);
-            this.host.replaceChildren(
-              el('span', '', '● ' + HyprlandApps.host.name),
-              el('span', '', 'up ' + Math.floor(hours / 24) + 'd ' + (hours % 24) + 'h')
+            this.hostLine(
+              HyprlandApps.host.name,
+              'up ' + Math.floor(hours / 24) + 'd ' + (hours % 24) + 'h'
             );
-            const pct = n => (Number.isFinite(n) ? Math.round(n) + '%' : '—');
-            this.metrics.replaceChildren(
-              ...[
-                ['cpu', pct(m.cpu_percent)],
-                ['mem', pct((m.memory_used / m.memory_total) * 100)],
-                ['disk', pct((m.disk_used / m.disk_total) * 100)],
-                ['', Number.isFinite(m.temperature) ? Math.round(m.temperature) + '°C' : ''],
-              ].map(([label, value]) => el('span', '', label + ' ' + value))
-            );
-          } else this.host.textContent = HyprlandApps.host.name + ' · metrics unavailable';
+            this.drawMetrics([
+              ['cpu', m.cpu_percent, '%'],
+              ['mem', (m.memory_used / m.memory_total) * 100, '%'],
+              ['disk', (m.disk_used / m.disk_total) * 100, '%'],
+              ['temp', m.temperature, '°C'],
+            ]);
+          } else {
+            this.hostLine(HyprlandApps.host.name + ' · metrics unavailable');
+            this.drawMetrics(null, 'Host metrics unavailable');
+          }
         } else {
-          this.host.textContent = HyprlandApps.host.name + ' · disconnected';
-          this.metrics.textContent = 'Host metrics unavailable';
+          this.hostLine(HyprlandApps.host.name + ' · disconnected');
+          this.drawMetrics(null, 'Host metrics unavailable');
         }
       } finally {
         this.busy = false;
+      }
+    }
+    // Four label/value cells with a 3px meter each; disk turns yellow past 80%.
+    drawMetrics(cells, message) {
+      this.metrics.replaceChildren(el('span', 'legend-title', 'host'));
+      if (!cells) {
+        this.metrics.append(el('p', 'dashboard-muted', message));
+        return;
+      }
+      for (const [label, raw, unit] of cells) {
+        const ok = Number.isFinite(raw),
+          value = ok ? Math.round(raw) : null;
+        const cell = el('div', 'home-metric');
+        const line = el('div', 'home-metric-line');
+        line.append(el('span', '', label), el('span', '', ok ? value + unit : '—'));
+        const tone = label === 'disk' && ok && value > 80 ? 'yellow' : '';
+        if (tone) line.dataset.tone = tone;
+        const meter = el('div', 'meter'),
+          fill = el('i');
+        fill.style.width = (ok ? Math.max(0, Math.min(100, value)) : 0) + '%';
+        if (tone) fill.dataset.tone = tone;
+        meter.append(fill);
+        cell.append(line, meter);
+        this.metrics.append(cell);
       }
     }
     panes() {
@@ -155,18 +189,17 @@
       this.home.replaceChildren();
       const panes = this.panes(),
         waiting = panes.filter(p => group(p) === 'attention');
-      const head = el('div', 'dashboard-line');
-      head.append(
-        this.button('herdr', () => this.logic.openApp('herdr')),
-        el(
-          'span',
-          'dashboard-muted',
-          this.online
-            ? `${panes.length} panes · ${panes.filter(p => group(p) === 'running').length} running`
-            : 'Disconnected'
-        )
+      const meta = el('span', 'legend-meta');
+      if (this.online) {
+        meta.append(
+          document.createTextNode(panes.length + ' panes · '),
+          el('em', '', panes.filter(p => group(p) === 'running').length + ' running')
+        );
+      } else meta.textContent = this.snapshot ? 'Disconnected' : 'Connecting…';
+      this.home.append(
+        this.button('herdr', () => this.logic.openApp('herdr'), 'legend-title'),
+        meta
       );
-      this.home.append(head);
       const badges = this.logic.state.badges || {};
       if ((badges.herdr || 0) !== waiting.length)
         this.logic.set({ badges: { ...badges, herdr: waiting.length } });
@@ -179,7 +212,11 @@
           el(
             'div',
             'dashboard-muted',
-            this.online ? 'No agents need your attention.' : 'Reconnect to see agent status.'
+            this.online
+              ? 'No agents need your attention.'
+              : this.snapshot
+                ? 'Reconnect to see agent status.'
+                : 'Connecting to Herd…'
           )
         );
     }

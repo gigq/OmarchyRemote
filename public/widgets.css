@@ -1,17 +1,55 @@
+/* Widgets are legend panels: the title floats on the border, the detail or control at right. */
 .home-widget {
   flex: 1;
   min-width: 0;
+  position: relative;
   border-radius: 14px;
-  background: var(--theme-surface);
+  background: color-mix(in srgb, var(--theme-surface) 28%, transparent);
   border: 1px solid var(--theme-border);
-  padding: 12px 14px;
+  padding: 16px 14px 12px;
+  margin-top: 8px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   gap: 6px;
   box-sizing: border-box;
-  height: 100%;
+  height: calc(100% - 8px);
   font-size: 11px;
+}
+.widget-legend {
+  position: absolute;
+  top: -7px;
+  left: 12px;
+  right: 10px;
+  pointer-events: none;
+  z-index: 1;
+}
+.widget-legend > * {
+  pointer-events: auto;
+  background: var(--chrome-ground, var(--theme-background));
+  padding: 0 6px;
+  font-size: 10px;
+  line-height: 13px;
+}
+.widget-legend > strong {
+  color: var(--theme-accent);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+.widget-legend > .widget-muted {
+  color: var(--theme-secondary);
+  max-width: 60%;
+}
+.widget-legend > .widget-button {
+  margin-top: -4px;
+  height: 22px;
+  min-height: 0;
+  padding: 0 9px;
+  border-radius: 7px;
+  border: 1px solid var(--theme-border);
+  background: var(--theme-surface-raised);
+  font-size: 10px;
+  line-height: 20px;
 }
 .widget-line {
   display: flex;
@@ -42,8 +80,8 @@
 .metric-track {
   flex: 1;
   background: var(--theme-surface-raised);
-  border-radius: 4px;
-  height: 6px;
+  border-radius: 3px;
+  height: 5px;
   overflow: hidden;
 }
 .metric-track i {
@@ -88,8 +126,8 @@
 }
 .weather-temperature {
   font:
-    500 30px 'Space Grotesk',
-    sans-serif;
+    500 30px 'JetBrains Mono',
+    monospace;
 }
 .weather-hours {
   display: flex;
@@ -142,7 +180,7 @@
   min-height: 44px;
 }
 .widget-weather {
-  padding: 10px 14px;
+  padding: 14px 14px 10px;
   gap: 4px;
 }
 .widget-weather .weather-temperature {
@@ -155,7 +193,7 @@
 
 /* Original compact forecast composition, now populated from live observations. */
 .widget-weather {
-  padding: 14px 16px;
+  padding: 16px 16px 12px;
   gap: 8px;
 }
 .weather-top {
@@ -339,8 +377,8 @@
 }
 .widget-overview h1 {
   font:
-    500 26px 'Space Grotesk',
-    sans-serif;
+    500 20px 'JetBrains Mono',
+    monospace;
   margin: 0;
 }
 .widget-overview-grid {
@@ -451,7 +489,7 @@
 }
 
 .widget-codexbar {
-  padding: 10px 14px;
+  padding: 16px 14px 10px;
   gap: 4px;
 }
 .codexbar-window {
@@ -468,4 +506,11 @@
 .codexbar-window strong {
   white-space: nowrap;
   font-weight: 500;
+}
+.codexbar-usage {
+  white-space: nowrap;
+  flex: none;
+}
+.codexbar-window .widget-truncate {
+  color: var(--theme-foreground);
 }

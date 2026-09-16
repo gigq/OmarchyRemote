@@ -33,8 +33,8 @@
 }
 .theme-settings h1 {
   font:
-    500 32px 'Space Grotesk',
-    sans-serif;
+    500 20px 'JetBrains Mono',
+    monospace;
   letter-spacing: -1px;
   margin: 14px 0 6px;
 }
@@ -150,8 +150,8 @@
 }
 .background-picker h2 {
   font:
-    500 22px 'Space Grotesk',
-    sans-serif;
+    500 15px 'JetBrains Mono',
+    monospace;
   margin: 0 0 8px;
 }
 .background-grid {
