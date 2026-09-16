@@ -159,7 +159,14 @@
       this.pinDraw = draw;
       for (const type of ['pointerdown', 'pointerup', 'touchstart', 'touchmove', 'touchend'])
         panel.addEventListener(type, e => e.stopPropagation(), { passive: true });
-      mount('touch-shell').append(panel);
+      // Desk mode frames Home as a grid panel; while Home is showing, the sheet fills that panel
+      // instead of the shell. On other desks it stays a shell overlay so the desk keeps its tiles.
+      const onHome =
+        document.documentElement.classList.contains('desk-mode') && this.logic.state.ws === 0;
+      const home = onHome
+        ? [...document.querySelectorAll('[data-workspace="home"]')].find(n => !n.closest('x-dc'))
+        : null;
+      (home || mount('touch-shell')).append(panel);
       draw();
     }
     closeSheet() {

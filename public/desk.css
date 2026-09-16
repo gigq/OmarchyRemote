@@ -433,6 +433,41 @@ html.desk-mode {
   top: 8px !important;
 }
 
+/* Wider tiles: sheets stay phone-width and long lists flow into columns. */
+.desk-mode #touch-shell > .home-sheet {
+  inset: 60px auto 42px 50%;
+  width: min(100% - 24px, 520px);
+  transform: translateX(-50%);
+}
+.desk-mode [data-workspace='home'] > .home-sheet {
+  position: relative;
+  inset: auto;
+  min-height: 0;
+  grid-column: panel;
+  grid-row: panel;
+  z-index: 30;
+  border-radius: var(--workspace-frame-radius);
+}
+.desk-mode .files-dialog {
+  width: min(100%, 520px);
+  margin: 0 auto;
+}
+.desk-mode .files-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  column-gap: 28px;
+  align-content: start;
+}
+.desk-mode .herdr-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  column-gap: 28px;
+  align-content: start;
+}
+.desk-mode .herdr-group > .herdr-pane {
+  border-top: 0;
+}
+
 /* Native visionOS windows resize independently; the system owns their grab/resize affordance. */
 html.desk-mode.vision-mode {
   --workspace-frame-radius: 34px;

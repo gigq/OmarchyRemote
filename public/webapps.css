@@ -130,6 +130,10 @@
   gap: 14px;
   font-size: 12px;
 }
+.home-sheet > .webapps-confirm {
+  inset: auto -2px -2px;
+  border-radius: 24px;
+}
 .webapps-confirm > .legend-title {
   left: 16px;
   color: var(--theme-red);

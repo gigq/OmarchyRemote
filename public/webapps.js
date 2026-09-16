@@ -328,7 +328,11 @@
     panel.append(line, copy, actions);
     for (const type of ['pointerdown', 'pointerup', 'touchstart', 'touchmove', 'touchend'])
       panel.addEventListener(type, e => e.stopPropagation(), { passive: true });
-    (document.getElementById('touch-shell') || document.body).append(panel);
+    (
+      document.querySelector('.home-sheet') ||
+      document.getElementById('touch-shell') ||
+      document.body
+    ).append(panel);
   }
   function settings(root) {
     const host = HyprlandApps.host.name;
