@@ -75,7 +75,7 @@ test('Files redesign supports search, editing, selections, ZIP and destination a
     await p.getByRole('button', { name: 'beta.txt', exact: true }).click();
     await expect(p.locator('.files-heading')).toContainText('2 selected');
     await p.screenshot({ path: 'artifacts/files-handoff/after-selection.png' });
-    await p.getByRole('button', { name: '↓ get', exact: true }).click();
+    await p.getByRole('button', { name: 'Get selected' }).click();
     await p
       .getByRole('dialog', { name: 'ZIP ready' })
       .getByRole('button', { name: 'Save…', exact: true })

@@ -41,7 +41,32 @@
           md: 'magenta',
           conf: 'rose',
           toml: 'rose',
+          sh: 'green',
+          bash: 'green',
+          zsh: 'green',
+          fish: 'green',
+          png: 'cyan',
+          jpg: 'cyan',
+          jpeg: 'cyan',
+          gif: 'cyan',
+          webp: 'cyan',
         }[ext(e)] || 'secondary';
+  const glyph = {
+    folder: '\uf07b',
+    open: '\uf07c',
+    upload: '\uf093',
+    plus: '\uf067',
+    download: '\uf019',
+    terminal: '\uf120',
+    refresh: '\uf021',
+    eye: '\uf06e',
+    search: '\uf002',
+    copy: '\uf0c5',
+    file: '\uf15c',
+    wrap: '\uf0c9',
+    pencil: '\uf040',
+    trash: '\uf1f8',
+  };
   class FilesApp {
     constructor(root, openTerminal) {
       this.root = root;
@@ -66,8 +91,8 @@
       this.heading = node('div', 'files-heading');
       this.location = node('nav', 'files-path');
       this.location.setAttribute('aria-label', 'Folder path');
-      this.searchBox = node('div', 'files-search');
-      this.prefix = node('span', 'files-search-prefix', '/');
+      this.searchBox = node('div', 'files-search prompt-field');
+      this.prefix = node('span', 'prompt-prefix files-search-prefix', '/');
       this.searchField = node('input');
       this.searchField.type = 'search';
       this.searchField.placeholder = 'search this folder…';
@@ -79,7 +104,7 @@
       this.searchBox.append(
         this.prefix,
         this.searchField,
-        this.button('esc', () => this.clearSearch(), 'Clear search')
+        this.button('esc', () => this.clearSearch(), 'Clear search', 'kbd files-search-esc')
       );
       this.searchField.oninput = () => {
         ++this.sequence;
@@ -182,11 +207,23 @@
         root.addEventListener(type, e => e.stopPropagation());
       this.browse(this.path, true);
     }
-    button(label, fn, aria) {
-      const b = node('button', 'remote-button', label);
+    button(label, fn, aria, cls = 'remote-button') {
+      const b = node('button', cls, label);
       b.type = 'button';
       if (aria) b.setAttribute('aria-label', aria);
       b.onclick = fn;
+      return b;
+    }
+    /* Toolbar keycap: an optional Nerd Font glyph (or plain marker) in front of the label. */
+    key(label, fn, aria, icon, tone, variant = '') {
+      const b = this.button('', fn, aria || (icon ? label : ''), 'remote-button keycap ' + variant);
+      if (icon) {
+        const nerd = icon.charCodeAt(0) >= 0xe000;
+        const i = node('span', nerd ? 'nf' : 'keycap-mark', icon);
+        if (tone) i.style.color = `var(--theme-${tone})`;
+        b.append(i);
+      }
+      b.append(node('span', 'keycap-label', label));
       return b;
     }
     async request(path, options = {}) {
@@ -292,6 +329,18 @@
           this.button(segment, () => this.browse(target))
         );
       }
+      const current = this.location.lastElementChild;
+      current.classList.add('files-crumb-current');
+      current.prepend(node('span', 'nf files-crumb-glyph', glyph.open));
+      const dirs = this.entries.filter(e => e.directory).length;
+      const files = this.entries.length - dirs;
+      this.location.append(
+        node(
+          'span',
+          'files-path-count',
+          `${dirs} ${dirs === 1 ? 'dir' : 'dirs'} · ${files} ${files === 1 ? 'file' : 'files'}`
+        )
+      );
       requestAnimationFrame(() => {
         this.location.scrollLeft = this.location.scrollWidth;
       });
@@ -305,10 +354,13 @@
       this.footer.replaceChildren();
       if (this.previewing) {
         this.heading.append(
-          this.button(
-            '‹ ' + (this.path.split('/').pop() || 'home'),
+          this.key(
+            this.path.split('/').pop() || 'home',
             () => this.back(),
-            'Parent folder'
+            'Parent folder',
+            '‹',
+            null,
+            'medium files-back'
           ),
           node('span', 'files-heading-path', this.short(this.path))
         );
@@ -318,7 +370,7 @@
       if (this.selecting) {
         this.heading.append(
           node('h2', '', this.selected.size + ' selected'),
-          this.button(
+          this.key(
             'done',
             () => {
               this.selecting = false;
@@ -326,7 +378,10 @@
               this.drawChrome();
               this.drawList();
             },
-            'Done selecting'
+            'Done selecting',
+            null,
+            null,
+            'medium'
           )
         );
         this.scopes.replaceChildren(
@@ -348,16 +403,16 @@
           )
         );
         const actions = node('div', 'files-actions');
-        for (const [label, action] of [
-          ['↓ get', () => this.getSelected()],
+        for (const [label, action, icon, tone, aria] of [
+          ['get', () => this.getSelected(), glyph.download, null, 'Get selected'],
           ['move', () => this.operation('move')],
           ['copy', () => this.operation('copy')],
           ['rename', () => this.operation('rename')],
-          ['trash', () => this.operation('trash')],
+          ['trash', () => this.operation('trash'), glyph.trash, 'red'],
         ]) {
-          const b = this.button(label, action);
+          const b = this.key(label, action, aria, icon, tone);
           b.disabled = !chosen.length || (label === 'rename' && chosen.length !== 1);
-          if (label === 'trash') b.classList.add('danger');
+          if (label === 'trash') b.classList.add('danger', 'rose');
           actions.append(b);
         }
         this.footer.append(actions);
@@ -367,7 +422,7 @@
           ['--hidden', 'hidden'],
           ['regex', 'regex'],
         ]) {
-          const b = this.button(label, () => {
+          const b = this.key(label, () => {
             this[key] = !this[key];
             this.drawChrome();
             this.search();
@@ -376,7 +431,7 @@
           this.footer.append(b);
         }
         this.footer.append(
-          this.button(this.glob || '-g glob', () =>
+          this.key(this.glob || '-g glob', () =>
             this.form(
               'File pattern',
               [['glob', 'Glob pattern', this.glob]],
@@ -395,16 +450,16 @@
           ['~/git', 'git'],
           ['.config', '.config'],
         ])
-          this.footer.append(this.button(label, () => this.browse(path)));
+          this.footer.append(this.key(label, () => this.browse(path)));
         this.footer.append(
-          this.button('↑ upload', () => this.chooseUpload(), 'Upload files'),
-          this.button('⋯', () => this.menu(), 'Files menu')
+          this.key('upload', () => this.chooseUpload(), 'Upload files', glyph.upload),
+          this.key('⋯', () => this.menu(), 'Files menu', null, null, 'square')
         );
       } else
         this.footer.append(
-          this.button('↑ upload', () => this.chooseUpload(), 'Upload files'),
-          this.button('+ new', () => this.newMenu(), 'New item'),
-          this.button(
+          this.key('upload', () => this.chooseUpload(), 'Upload files', glyph.upload),
+          this.key('new', () => this.newMenu(), 'New item', glyph.plus),
+          this.key(
             'select',
             () => {
               this.selecting = true;
@@ -413,7 +468,7 @@
             },
             'Select files'
           ),
-          this.button('⋯', () => this.menu(), 'Files menu')
+          this.key('⋯', () => this.menu(), 'Files menu', null, null, 'square')
         );
     }
     searchChrome() {
@@ -452,9 +507,10 @@
       }
       for (const directory of [true, false]) {
         const rows = this.entries.filter(e => e.directory === directory);
-        if (rows.length && !this.selecting)
-          this.body.append(node('div', 'files-section', directory ? 'DIRECTORIES' : 'FILES'));
-        for (const e of rows) this.body.append(this.entry(e));
+        if (!rows.length) continue;
+        const group = this.group(directory ? 'DIRECTORIES' : 'FILES');
+        for (const e of rows) group.append(this.entry(e));
+        this.body.append(group);
       }
       if (!this.entries.length)
         this.body.append(node('p', 'remote-empty', 'This folder is empty.'));
@@ -472,11 +528,11 @@
         (e.directory ? ' directory' : '') +
         (this.selected.has(e.path) ? ' selected' : '');
       row.setAttribute('aria-label', e.name + (e.directory ? ' folder' : ''));
-      const icon = node(
-        'span',
-        this.selecting ? 'files-check' : 'files-icon',
-        this.selecting ? (this.selected.has(e.path) ? '✓' : '') : badge(e)
-      );
+      const icon = this.selecting
+        ? node('span', 'files-check', this.selected.has(e.path) ? '✓' : '')
+        : e.directory
+          ? node('span', 'nf files-icon files-folder', glyph.folder)
+          : node('span', 'tag wide files-icon', badge(e));
       icon.style.color = `var(--theme-${tone(e)})`;
       const name = node('span', 'files-name');
       this.highlight(name, e.name + (e.directory ? '/' : ''));
@@ -654,13 +710,20 @@
         }
       }
     }
+    /* Entries sit inside legend panels titled like the Home cards. */
+    group(title) {
+      const panel = node('section', 'files-group legend');
+      panel.append(node('span', 'legend-title', title));
+      return panel;
+    }
     drawRecents() {
-      this.body.append(node('div', 'files-section', 'RECENT'));
-      for (const e of this.recents) this.body.append(this.entry(e, true));
+      const group = this.group('RECENT');
+      for (const e of this.recents) group.append(this.entry(e, true));
+      this.body.append(group);
       if (!this.recents.length)
         this.body.append(node('p', 'remote-empty', 'Open a file or folder to add it here.'));
     }
-    async preview(entry, line = 1) {
+    async preview(entry, line = 0) {
       const seq = ++this.sequence;
       clearTimeout(this.debounce);
       this.clearPreview();
@@ -689,7 +752,11 @@
         this.body.replaceChildren();
         this.status.textContent = '';
         this.remember(entry);
-        this.body.append(node('h2', 'files-preview-title', entry.name));
+        const title = node('h2', 'files-preview-title');
+        const kind = node('span', 'tag wide files-title-tag', badge(entry));
+        kind.style.color = `var(--theme-${tone(entry)})`;
+        title.append(kind, node('span', 'files-title-name', entry.name));
+        this.body.append(title);
         this.details = node('div', 'files-details', size(data.byteLength));
         this.body.append(this.details);
         if (mime) {
@@ -705,7 +772,10 @@
             this.version = text.version;
             this.details.textContent = `${size(data.byteLength)} · ${text.mode} · uid ${text.uid} · ${new Date(text.modified * 1000).toLocaleDateString()} · utf-8`;
             this.code = node('div', 'files-text');
-            this.body.append(this.code);
+            this.codeTools = node('div', 'files-code-tools');
+            const panel = node('div', 'files-code-panel');
+            panel.append(this.code, this.codeTools);
+            this.body.append(panel);
             this.limit = Math.max(1000, line + 100);
             this.drawCode(line);
           } catch (e) {
@@ -744,7 +814,27 @@
             'Show more lines'
           )
         );
-      this.status.textContent = `${Math.min(lines.length, this.limit)} of ${lines.length} lines · wrap ${this.wrap ? 'on' : 'off'}`;
+      const wrap = this.key(
+        'wrap',
+        () => {
+          this.wrap = !this.wrap;
+          this.drawCode();
+        },
+        'Wrap lines',
+        null,
+        null,
+        'small'
+      );
+      wrap.setAttribute('aria-pressed', String(!!this.wrap));
+      this.codeTools.replaceChildren(
+        wrap,
+        node(
+          'span',
+          'keycap small files-code-count',
+          `${Math.min(lines.length, this.limit)} / ${lines.length}`
+        )
+      );
+      this.status.textContent = '';
       if (line > 1)
         requestAnimationFrame(() =>
           this.code.querySelector(`[data-line="${line}"]`)?.scrollIntoView({ block: 'center' })
@@ -773,18 +863,20 @@
     previewFooter() {
       this.footer.replaceChildren();
       if (!this.file) return;
-      const save = this.button(
-        window.__HYPRLAND_NATIVE__ ? '↓ save…' : '↓ download',
+      const save = this.key(
+        window.__HYPRLAND_NATIVE__ ? 'save…' : 'download',
         () => this.saveFile(this.file),
-        window.__HYPRLAND_NATIVE__ ? 'Save…' : 'Download'
+        window.__HYPRLAND_NATIVE__ ? 'Save…' : 'Download',
+        glyph.download,
+        null,
+        'accent primary'
       );
-      save.classList.add('primary');
       this.footer.append(save);
       if (this.text != null)
-        this.footer.append(this.button('edit', () => this.edit(), 'Edit file'));
+        this.footer.append(this.key('edit', () => this.edit(), 'Edit file', glyph.pencil));
       this.footer.append(
-        this.button('>_ here', () => this.terminalHere(), 'Terminal here'),
-        this.button('⋯', () => this.previewMenu(), 'File menu')
+        this.key('here', () => this.terminalHere(), 'Terminal here', glyph.terminal, 'green'),
+        this.key('⋯', () => this.previewMenu(), 'File menu', null, null, 'square')
       );
     }
     async saveFile(file) {
@@ -923,6 +1015,7 @@
               },
               'Create'
             ),
+          { icon: glyph.folder, tone: 'accent' },
         ],
         [
           'file',
@@ -939,53 +1032,74 @@
               },
               'Create'
             ),
+          { icon: glyph.file },
         ],
       ]);
     }
     menu() {
-      this.menuSheet('Files', [
-        ['refresh', () => this.browse(this.path)],
+      this.menuSheet(
+        'Files',
         [
-          this.hidden ? 'hide dotfiles' : 'show dotfiles',
-          () => {
-            this.hidden = !this.hidden;
-            this.browse(this.path);
-          },
+          ['refresh', () => this.browse(this.path), { icon: glyph.refresh }],
+          [
+            'show dotfiles',
+            () => {
+              this.hidden = !this.hidden;
+              this.browse(this.path);
+            },
+            { icon: glyph.eye, toggle: this.hidden },
+          ],
+          [
+            this.mode === 'fuzzy' ? 'folder browser' : 'fuzzy finder',
+            () => this.setMode(this.mode === 'fuzzy' ? 'browse' : 'fuzzy'),
+            { icon: this.mode === 'fuzzy' ? glyph.folder : glyph.search },
+          ],
+          [
+            'go to path',
+            () =>
+              this.form(
+                'Go to folder',
+                [['path', 'Folder path', this.path]],
+                async ({ path }) => this.browse(path),
+                'Open'
+              ),
+            { icon: glyph.open },
+          ],
+          [
+            'copy path',
+            () => this.copyPath(this.path),
+            { icon: glyph.copy, value: this.short(this.path) },
+          ],
+          ['terminal here', () => this.terminalHere(), { icon: glyph.terminal, tone: 'green' }],
         ],
-        [
-          this.mode === 'fuzzy' ? 'folder browser' : 'fuzzy finder',
-          () => this.setMode(this.mode === 'fuzzy' ? 'browse' : 'fuzzy'),
-        ],
-        [
-          'go to path',
-          () =>
-            this.form(
-              'Go to folder',
-              [['path', 'Folder path', this.path]],
-              async ({ path }) => this.browse(path),
-              'Open'
-            ),
-        ],
-        ['copy path', () => this.copyPath(this.path)],
-        ['terminal here', () => this.terminalHere()],
-      ]);
+        'files · ' + this.short(this.path)
+      );
     }
     previewMenu() {
       this.menuSheet(this.entryData.name, [
         ...(this.text != null
           ? [
               [
-                this.wrap ? 'wrap off' : 'wrap on',
+                'wrap lines',
                 () => {
                   this.wrap = !this.wrap;
                   this.drawCode();
                 },
+                { icon: glyph.wrap, toggle: !!this.wrap },
               ],
             ]
           : []),
-        ['copy path', () => this.copyPath(this.entryData.path)],
-        ['rename', () => this.operation('rename', [this.entryData.path])],
-        ['trash', () => this.operation('trash', [this.entryData.path])],
+        [
+          'copy path',
+          () => this.copyPath(this.entryData.path),
+          { icon: glyph.copy, value: this.short(this.entryData.path) },
+        ],
+        ['rename', () => this.operation('rename', [this.entryData.path]), { icon: glyph.pencil }],
+        [
+          'trash',
+          () => this.operation('trash', [this.entryData.path]),
+          { icon: glyph.trash, tone: 'red', danger: true },
+        ],
       ]);
     }
     async copyPath(path) {
@@ -1063,29 +1177,57 @@
       this.dialog?.remove();
       this.dialog = null;
     }
-    menuSheet(title, items) {
+    /* Sheets are legend panels: the title sits on the accent border like the Home cards. */
+    sheet(tag, title, heading = title, tone = 'accent') {
       this.closeDialog();
-      const panel = node('div', 'files-dialog');
+      const panel = node(tag, 'files-dialog legend ' + tone);
       panel.setAttribute('role', 'dialog');
       panel.setAttribute('aria-label', title);
-      panel.append(node('h3', '', title));
-      for (const [label, fn] of items)
-        panel.append(
-          this.button(label, () => {
-            this.closeDialog();
-            fn();
-          })
-        );
-      panel.append(this.button('cancel', () => this.closeDialog(), 'Cancel'));
+      panel.append(node('span', 'legend-title', heading));
       this.root.append(panel);
       this.dialog = panel;
+      return panel;
+    }
+    cancelKey() {
+      return this.key(
+        'cancel',
+        () => this.closeDialog(),
+        'Cancel',
+        null,
+        null,
+        'files-dialog-cancel'
+      );
+    }
+    menuSheet(title, items, heading = title) {
+      const panel = this.sheet('div', title, heading);
+      for (const [label, fn, extra = {}] of items) {
+        const row = this.button(
+          '',
+          () => {
+            this.closeDialog();
+            fn();
+          },
+          null,
+          'remote-button files-menu-item' + (extra.danger ? ' danger' : '')
+        );
+        row.setAttribute('aria-label', label);
+        if (extra.icon) {
+          const icon = node('span', 'nf files-menu-glyph', extra.icon);
+          if (extra.tone) icon.style.color = `var(--theme-${extra.tone})`;
+          row.append(icon);
+        }
+        row.append(node('span', 'files-menu-label', label));
+        if (extra.value) row.append(node('span', 'files-menu-value', extra.value));
+        if ('toggle' in extra) {
+          row.setAttribute('aria-pressed', String(extra.toggle));
+          row.append(node('span', 'files-menu-toggle'));
+        }
+        panel.append(row);
+      }
+      panel.append(this.cancelKey());
     }
     form(title, fields, submit, label) {
-      this.closeDialog();
-      const form = node('form', 'files-dialog');
-      form.setAttribute('role', 'dialog');
-      form.setAttribute('aria-label', title);
-      form.append(node('h3', '', title));
+      const form = this.sheet('form', title);
       const inputs = {};
       for (const [key, aria, value] of fields) {
         const field = node('input');
@@ -1096,15 +1238,16 @@
         field.autocomplete = 'off';
         field.spellcheck = false;
         field.setAttribute('autocorrect', 'off');
-        form.append(field);
+        const wrap = node('label', 'prompt-field files-field');
+        wrap.append(node('span', 'prompt-label', key), field);
+        form.append(wrap);
         inputs[key] = field;
       }
-      const save = this.button(label, () => {});
+      const save = this.key(label, () => {}, null, null, null, 'accent');
       save.type = 'submit';
-      form.append(
-        save,
-        this.button('cancel', () => this.closeDialog(), 'Cancel')
-      );
+      const actions = node('div', 'files-dialog-actions');
+      actions.append(this.cancelKey(), save);
+      form.append(actions);
       form.onsubmit = async e => {
         e.preventDefault();
         save.disabled = true;
@@ -1117,32 +1260,32 @@
           save.disabled = false;
         }
       };
-      this.root.append(form);
-      this.dialog = form;
       Object.values(inputs)[0]?.focus();
     }
     confirm(title, message, action, label) {
-      this.closeDialog();
-      const panel = node('div', 'files-dialog');
-      panel.setAttribute('role', 'dialog');
-      panel.setAttribute('aria-label', title);
-      panel.append(node('h3', '', title), node('p', '', message));
-      const accept = this.button(label, async () => {
-        accept.disabled = true;
-        try {
-          await action();
-          this.closeDialog();
-        } catch (e) {
-          this.status.textContent = e.message;
-          accept.disabled = false;
-        }
-      });
-      panel.append(
-        accept,
-        this.button('cancel', () => this.closeDialog(), 'Cancel')
+      const destructive = label === 'Trash' || label === 'Discard';
+      const panel = this.sheet('div', title, title, destructive ? 'danger' : 'accent');
+      panel.append(node('p', '', message));
+      const accept = this.key(
+        label,
+        async () => {
+          accept.disabled = true;
+          try {
+            await action();
+            this.closeDialog();
+          } catch (e) {
+            this.status.textContent = e.message;
+            accept.disabled = false;
+          }
+        },
+        null,
+        null,
+        null,
+        destructive ? 'rose filled' : 'accent'
       );
-      this.root.append(panel);
-      this.dialog = panel;
+      const actions = node('div', 'files-dialog-actions');
+      actions.append(this.cancelKey(), accept);
+      panel.append(actions);
     }
     dispose() {
       this.disposed = true;
