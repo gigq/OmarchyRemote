@@ -77,7 +77,7 @@ test('Herd filters and search preserve a single row of chips', async ({ page }) 
     .locator('.herdr-filters button')
     .evaluateAll(ns => ns.map(n => n.getBoundingClientRect().top));
   expect(new Set(bounds).size).toBe(1);
-  await page.getByRole('button', { name: /needs you ·/ }).click();
+  await page.getByRole('button', { name: /needs you/ }).click();
   await expect(page.locator('.herdr-state:not([data-state="blocked"])')).toHaveCount(0);
   await page.getByRole('button', { name: 'all', exact: true }).click();
   await page.getByRole('searchbox', { name: 'Search panes' }).fill('no-such-pane-8811');

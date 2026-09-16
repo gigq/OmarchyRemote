@@ -79,7 +79,7 @@
         this.onHide();
       });
       this.hideButton.setAttribute('aria-label', 'Hide keyboard');
-      const row = document.createElement('div');
+      const row = (this.row = document.createElement('div'));
       row.className = 'native-input-row';
       this.field = document.createElement('textarea');
       this.field.rows = 2;

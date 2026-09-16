@@ -685,17 +685,21 @@
       const bar = node('div', 'remote-bar');
       bar.classList.add('herdr-connection');
       bar.append(this.status);
-      this.filters = node('div', 'herdr-filters');
+      this.filters = node('div', 'herdr-filters rail');
+      // Search sits in a prompt field: the ❯ prefix at the left, a `/` hint at the right.
+      this.searchField = node('div', 'prompt-field herdr-search-field');
       this.search = node('input', 'herdr-search');
       this.search.type = 'search';
-      this.search.placeholder = 'jump to pane…';
       this.search.setAttribute('aria-label', 'Search panes');
       this.search.oninput = () => {
         this.listSignature = null;
         this.renderList();
       };
+      const searchKey = node('span', 'kbd', '/');
+      searchKey.setAttribute('aria-hidden', 'true');
+      this.searchField.append(node('span', 'prompt-prefix', '❯'), this.search, searchKey);
       this.filter = 'all';
-      root.append(bar, this.filters, this.search, this.list, this.detail);
+      root.append(bar, this.filters, this.searchField, this.list, this.detail);
       this.detailBar = node('div', 'herdr-detail-bar');
       this.title = node('div', 'herdr-pane-title');
       this.fitOutput = storage.get('omarchy-herdr-fit') !== 'false';
@@ -715,7 +719,7 @@
         this.nativeInput.field.blur();
         this.filePicker.click();
       });
-      this.attachButton.classList.add('herdr-attach');
+      this.attachButton.classList.add('herdr-attach', 'keycap');
       this.attachButton.setAttribute('aria-label', 'Attach files');
       this.attachButton.title = 'Attach files';
       this.attachButton.innerHTML =
@@ -728,35 +732,43 @@
       this.uploadAbort = new AbortController();
       this.backButton = button('‹', () => this.select(null));
       this.backButton.setAttribute('aria-label', 'All panes');
-      this.backButton.classList.add('herdr-back');
+      this.backButton.classList.add('herdr-back', 'keycap');
       this.paneTabs = node('div', 'herdr-pane-tabs');
       const center = node('div', 'herdr-detail-center');
       center.append(this.title, this.paneTabs);
-      this.detailBar.append(
-        this.backButton,
-        center,
-        this.fitButton,
-        this.attachButton,
-        this.filePicker
-      );
+      this.detailBar.append(this.backButton, center, this.filePicker);
       this.output = node('div', 'herdr-output');
       this.canvas = node('div', 'herdr-canvas');
-      this.output.append(this.canvas);
+      // Fit and ↓ Latest float inside the output panel's bottom-right corner.
+      this.outputTools = node('div', 'herdr-output-tools');
+      this.fitButton.classList.add('keycap', 'small');
+      this.outputTools.append(this.fitButton);
+      this.output.append(this.canvas, this.outputTools);
       this.followOutput = true;
       this.latest = button('↓ Latest', () => {
         this.showLatest();
         if (!this.nativeInput.element.hidden) this.nativeInput.focus();
       });
       this.latest.hidden = true;
-      this.latest.classList.add('herdr-latest');
+      this.latest.classList.add('herdr-latest', 'keycap', 'small');
       this.latest.onpointerdown = e => e.preventDefault();
-      this.output.append(this.latest);
+      this.outputTools.append(this.latest);
       this.inputStatus = node('span', 'remote-status', '');
       this.inputStatus.setAttribute('role', 'status');
       const inputBar = node('div', 'herdr-input-bar');
       inputBar.append(this.inputStatus);
       this.metadata = node('div', 'herdr-metadata');
-      this.detail.append(this.detailBar, this.metadata, this.output, inputBar);
+      // With the keyboard down, a tap-to-type prompt row stands in for the composer.
+      this.promptRow = node('div', 'herdr-prompt-row');
+      this.promptField = button('', () => {
+        this.showLatest();
+        bridge.keyboard();
+      });
+      this.promptField.className = 'prompt-field herdr-prompt';
+      this.promptField.setAttribute('aria-label', 'Type a message');
+      this.promptField.append(node('span', 'prompt-prefix', '❯'), node('i', 'herdr-caret'));
+      this.promptRow.append(this.attachButton, this.promptField);
+      this.detail.append(this.detailBar, this.metadata, this.output, inputBar, this.promptRow);
       this.term = terminal(this.canvas, true);
       this.fit = new FitAddon.FitAddon();
       this.term.loadAddon(this.fit);
@@ -895,10 +907,17 @@
         ['all', 'all'],
       ]) {
         const count = this.snapshot.panes.filter(p => key === 'all' || paneGroup(p) === key).length;
-        const b = button(key === 'all' ? 'all' : label + ' · ' + count, () => {
+        const b = button(label, () => {
           this.filter = key;
           this.renderList();
         });
+        b.className = '';
+        if (key !== 'all') {
+          const n = node('span', 'count', String(count));
+          if (count)
+            n.dataset.tone = key === 'attention' ? 'yellow' : key === 'running' ? 'accent' : '';
+          b.append(n);
+        }
         b.setAttribute('aria-pressed', String(this.filter === key));
         this.filters.append(b);
       }
@@ -923,23 +942,21 @@
               .includes(this.search.value.toLowerCase())
         );
         if (!panes.length) continue;
-        const group = node('section', 'herdr-group');
-        const heading = node('div', 'herdr-group-title');
-        heading.append(
-          node('strong', '', workspace.label || workspace.workspace_id),
-          node('span', 'remote-status', `${panes.length} panes`)
+        const group = node('section', 'herdr-group legend');
+        group.append(
+          node('span', 'legend-title', workspace.label || workspace.workspace_id),
+          node('span', 'legend-meta', `${panes.length} pane${panes.length === 1 ? '' : 's'}`)
         );
-        group.append(heading);
         for (const pane of panes) {
           const row = button('', () => this.select(pane.pane_id));
           row.className = 'herdr-pane';
-          const icon = node('span', 'herdr-agent-icon', '●');
-          icon.dataset.group = paneGroup(pane);
+          const icon = this.stateDot(pane);
+          icon.classList.add('herdr-agent-icon');
           const info = node('span', 'herdr-pane-info');
           const label = node('span', 'herdr-name-line');
           label.append(
             node('strong', '', this.paneLabel(pane)),
-            node('span', 'herdr-provider', pane.agent || 'shell')
+            node('span', 'herdr-provider tag', pane.agent || 'shell')
           );
           info.append(
             label,
@@ -956,6 +973,12 @@
         this.list.append(node('p', 'remote-empty', 'No matching panes.'));
       this.list.scrollTop = scroll;
     }
+    stateDot(pane) {
+      const dot = node('i', 'state-dot');
+      dot.dataset.state = paneGroup(pane);
+      dot.dataset.group = dot.dataset.state;
+      return dot;
+    }
     paneLabel(pane) {
       return (
         this.snapshot?.tabs.find(t => t.tab_id === pane.tab_id)?.label?.trim() ||
@@ -965,7 +988,7 @@
     }
     showDetail(pane) {
       this.filters.hidden = true;
-      this.search.hidden = true;
+      this.searchField.hidden = true;
       this.list.hidden = true;
       this.detail.hidden = false;
       this.title.textContent = this.paneLabel(pane);
@@ -1003,6 +1026,7 @@
         this.title.hidden = !this.paneTabs.hidden;
         for (const p of siblings) {
           const b = button(this.paneLabel(p), () => this.select(p.pane_id));
+          b.prepend(this.stateDot(p));
           b.setAttribute('aria-pressed', String(p.pane_id === pane.pane_id));
           this.paneTabs.append(b);
         }
@@ -1013,6 +1037,7 @@
             this.snapshot.workspaces.find(w => w.workspace_id === recent.workspace_id)?.label ||
             'another project';
           const back = button(this.paneLabel(recent), () => this.select(recent.pane_id));
+          back.prepend(this.stateDot(recent));
           back.classList.add('herdr-recent-project');
           back.title = `Return to ${project} · ${this.paneLabel(recent)}`;
           back.setAttribute('aria-label', back.title);
@@ -1043,7 +1068,7 @@
       } else {
         this.detail.hidden = true;
         this.filters.hidden = false;
-        this.search.hidden = false;
+        this.searchField.hidden = false;
         this.list.hidden = false;
         this.bridge.logic.set({ kb: false });
       }
@@ -1059,9 +1084,17 @@
       this.fitButton.setAttribute('aria-label', 'Fit to Phone');
       this.term.nativeView.setFit(this.fitOutput);
     }
+    // The composer replaces the prompt row and adopts the attach and ↓ Latest controls.
     placeLatest() {
-      if (this.nativeInput.element.hidden) this.output.append(this.latest);
-      else this.nativeInput.header.insertBefore(this.latest, this.nativeInput.hideButton);
+      const composing = !this.nativeInput.element.hidden;
+      this.promptRow.hidden = composing;
+      if (composing) {
+        this.nativeInput.row.insertBefore(this.attachButton, this.nativeInput.field);
+        this.nativeInput.header.insertBefore(this.latest, this.nativeInput.hideButton);
+      } else {
+        this.promptRow.prepend(this.attachButton);
+        this.outputTools.append(this.latest);
+      }
     }
     trackScroll() {
       this.followOutput = this.term.nativeView.follow;

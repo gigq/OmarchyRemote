@@ -48,112 +48,11 @@
   font-size: 13px;
   color: var(--theme-secondary);
 }
-.herdr-list {
-  flex: 1;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 0 2px 10px;
-}
-.herdr-group {
-  border: 1px solid var(--theme-border);
-  border-radius: 14px;
-  margin: 0 0 12px;
-  padding: 10px;
-  background: var(--theme-surface);
-}
-.herdr-group-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--theme-green);
-  padding: 2px 2px 8px;
-}
-.herdr-pane {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  text-align: left;
-  gap: 8px;
-  border: 0;
-  border-top: 1px solid var(--theme-surface-raised);
-  padding: 12px 0;
-  background: transparent;
-  color: var(--theme-foreground);
-  font: inherit;
-  cursor: pointer;
-}
-.herdr-agent-icon {
-  flex: none;
-  width: 38px;
-  font-size: 10px;
-  color: var(--theme-magenta);
-}
-.herdr-pane-info {
-  min-width: 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.herdr-pane-info strong {
-  font-size: 11px;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.herdr-pane-info .remote-status {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.herdr-state {
-  font-size: 9px;
-  color: var(--theme-secondary);
-}
-.herdr-state[data-state='working'] {
-  color: var(--theme-green);
-}
-.herdr-state[data-state='blocked'] {
-  color: var(--theme-yellow);
-}
-.herdr-state[data-state='done'] {
-  color: var(--theme-magenta);
-}
 .herdr-detail {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
-}
-.herdr-detail-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 0 10px;
-}
-.herdr-detail-bar button {
-  white-space: nowrap;
-  font-size: 11px;
-}
-.herdr-pane-title {
-  min-width: 0;
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.herdr-output {
-  flex: 1;
-  min-height: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  background: var(--theme-terminal);
-  border: 1px solid var(--theme-border);
-  border-radius: 10px;
-  overscroll-behavior: contain;
 }
 .herdr-canvas {
   height: 100%;
@@ -179,6 +78,7 @@
   background: var(--theme-terminal) !important;
 }
 
+/* xterm retains parsing and measurement; its native overflow view owns scrolling. */
 /* xterm retains parsing and measurement; its native overflow view owns scrolling. */
 .remote-terminal,
 .herdr-output {
@@ -323,44 +223,9 @@
   display: none;
 }
 
-.herdr-attach {
-  display: grid;
-  place-items: center;
-  flex: none;
-  min-width: 36px;
-  min-height: 36px;
-  padding: 7px;
-}
-.herdr-detail-bar {
-  gap: 6px;
-}
-.herdr-detail-bar .herdr-pane-title {
-  flex: 1;
-}
 .remote-button:disabled,
 .native-send:disabled {
   opacity: 0.45;
-}
-
-.herdr-output > .herdr-latest {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  z-index: 2;
-  font-size: 12px;
-}
-.native-input-header .herdr-latest {
-  margin-left: auto;
-  margin-right: 8px;
-}
-
-.herdr-detail-bar .herdr-back {
-  flex: none;
-  min-width: 36px;
-  min-height: 36px;
-  padding: 0 8px;
-  font-size: 26px;
-  line-height: 1;
 }
 
 .files-toolbar {
@@ -489,27 +354,8 @@
 }
 
 /* Pane tabs share the header's center; a single pane keeps its title. */
-.herdr-detail-center {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-}
-.herdr-detail-bar .herdr-pane-tabs {
-  padding: 0;
-  min-width: 0;
-}
-.herdr-detail-bar > button {
-  flex: none;
-}
 
 /* Herd uses theme surfaces and a distinct palette color for composer controls. */
-.herdr-composer .native-input {
-  background: var(--theme-terminal);
-  border-color: var(--theme-magenta);
-}
-.herdr-composer .native-input:focus {
-  outline-color: var(--theme-magenta);
-}
 .herdr-composer button svg {
   display: block;
   margin: auto;
@@ -565,14 +411,6 @@
     margin: 0;
   }
 }
-.herdr-project-divider {
-  align-self: center;
-  flex: none;
-  width: 1px;
-  height: 22px;
-  margin: 0 10px;
-  background: var(--theme-border);
-}
 .herdr-pane-tabs .herdr-recent-project {
   flex: none;
 }
@@ -624,4 +462,265 @@
     right: 0;
     margin: 0;
   }
+}
+
+/* ── Herdr list: filter rail, search prompt, legend panels per project ── */
+.herdr-filters {
+  flex: none;
+  margin-bottom: 12px;
+}
+.herdr-filters > button:last-child {
+  flex: 0.7;
+}
+.herdr-search-field {
+  flex: none;
+  margin-bottom: 12px;
+}
+.herdr-list {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 0 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.herdr-group {
+  flex: none;
+  margin: 0;
+  padding: 6px 0 0;
+  background: color-mix(in srgb, var(--theme-surface) 22%, transparent);
+}
+.herdr-pane {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  text-align: left;
+  gap: 10px;
+  border: 0;
+  border-top: 1px solid var(--theme-border);
+  padding: 14px 12px 12px;
+  background: transparent;
+  color: var(--theme-foreground);
+  font: inherit;
+  cursor: pointer;
+}
+.herdr-pane:first-of-type {
+  border-top: 0;
+}
+.herdr-pane > .state-dot {
+  flex: none;
+  margin: 0 4px 0 2px;
+}
+.herdr-pane-info {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.herdr-name-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.herdr-pane-info strong {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.herdr-provider {
+  flex: none;
+  color: var(--theme-magenta);
+  background: var(--theme-terminal);
+}
+.herdr-pane-info .remote-status {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.herdr-state {
+  flex: none;
+  font-size: 10px;
+  color: var(--theme-dim);
+}
+.herdr-state[data-state='working'] {
+  color: var(--theme-accent);
+}
+.herdr-state[data-state='blocked'] {
+  color: var(--theme-yellow);
+}
+.herdr-state[data-state='done'] {
+  color: var(--theme-magenta);
+}
+
+/* ── Herdr pane: back keycap, tab rail, output panel, prompt row ── */
+.herdr-detail-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 10px;
+}
+.herdr-detail-bar > button {
+  flex: none;
+}
+.herdr-back {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 18px;
+}
+.herdr-detail-center {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.herdr-pane-title {
+  min-width: 0;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 4px;
+}
+.herdr-pane-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  touch-action: pan-x;
+  background: var(--theme-surface-raised);
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  mask-image: linear-gradient(90deg, #000 88%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent);
+}
+.herdr-pane-tabs::-webkit-scrollbar {
+  display: none;
+}
+.herdr-pane-tabs > button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--theme-secondary);
+  font:
+    11px 'JetBrains Mono',
+    ui-monospace,
+    monospace;
+  white-space: nowrap;
+}
+.herdr-pane-tabs > button[aria-pressed='true'] {
+  color: var(--theme-foreground);
+  background: var(--theme-surface);
+}
+.herdr-pane-tabs > button > .state-dot {
+  width: 6px;
+  height: 6px;
+}
+.herdr-project-divider {
+  align-self: center;
+  flex: none;
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--theme-border);
+}
+.herdr-output {
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--theme-terminal);
+  border: 1px solid var(--theme-border);
+  border-radius: 14px;
+  overscroll-behavior: contain;
+}
+.herdr-output-tools {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 2;
+  display: flex;
+  gap: 6px;
+}
+.native-input-header .herdr-latest {
+  margin-left: auto;
+  margin-right: 8px;
+}
+.herdr-prompt-row {
+  flex: none;
+  display: flex;
+  gap: 6px;
+  padding-top: 10px;
+}
+.herdr-attach {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 44px;
+  padding: 0;
+}
+.herdr-prompt {
+  flex: 1;
+  height: 44px;
+  cursor: text;
+  font: inherit;
+  text-align: left;
+}
+.herdr-caret {
+  width: 2px;
+  height: 18px;
+  background: var(--theme-accent);
+  animation: herdr-caret 1s steps(2) infinite;
+}
+@keyframes herdr-caret {
+  to {
+    opacity: 0;
+  }
+}
+/* The composer takes the prompt-field look; send is the accent keycap. */
+.herdr-composer .native-input {
+  height: 44px;
+  min-height: 44px;
+  max-height: 120px;
+  field-sizing: content;
+  padding: 10px 12px;
+  background: var(--theme-terminal);
+  border-color: var(--theme-border);
+  border-radius: 12px;
+  font:
+    14px/22px 'JetBrains Mono',
+    ui-monospace,
+    monospace;
+}
+.herdr-composer .native-input:focus {
+  outline: 0;
+  border-color: var(--theme-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-accent) 15%, transparent);
+}
+.herdr-composer .native-send {
+  border-radius: 10px;
+  background: var(--theme-accent);
+  border-color: var(--theme-accent);
+  color: var(--theme-background);
+}
+.herdr-composer .native-send:disabled {
+  opacity: 0.45;
+}
+.herdr-composer .native-mode,
+.herdr-composer .native-dismiss {
+  border-radius: 10px;
 }

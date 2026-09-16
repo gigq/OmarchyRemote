@@ -42,11 +42,16 @@ for (const viewport of [
       await expect(tabs.locator('.herdr-project-label')).toHaveText('Tabs QA');
     else await expect(tabs.locator('.herdr-project-label')).toBeHidden();
     const row = await tabs.boundingBox(),
+      bar = await p.locator('.herdr-detail-bar').boundingBox(),
       back = await p.getByRole('button', { name: 'All panes', exact: true }).boundingBox(),
+      output = await p.locator('.herdr-output').boundingBox(),
       fit = await p.getByRole('button', { name: 'Fit to Phone', exact: true }).boundingBox();
     expect(row.x).toBeGreaterThanOrEqual(back.x + back.width);
-    expect(row.x + row.width).toBeLessThanOrEqual(fit.x);
+    expect(row.x + row.width).toBeLessThanOrEqual(bar.x + bar.width + 0.5);
     expect(Math.abs(row.y + row.height / 2 - (back.y + back.height / 2))).toBeLessThan(2);
+    // Fit floats inside the output panel rather than crowding the tab row.
+    expect(fit.y).toBeGreaterThan(output.y);
+    expect(fit.y + fit.height).toBeLessThanOrEqual(output.y + output.height);
     await tabs.getByRole('button', { name: 'Herd two', exact: true }).click();
     await expect(tabs.getByRole('button', { name: 'Herd two', exact: true })).toHaveAttribute(
       'aria-pressed',

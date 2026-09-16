@@ -188,8 +188,7 @@
   gap: 8px;
   align-items: center;
 }
-.dashboard-search,
-.herdr-search {
+.dashboard-search {
   min-width: 0;
   width: 100%;
   box-sizing: border-box;
@@ -204,8 +203,7 @@
   user-select: text;
   touch-action: auto;
 }
-.dashboard-search:focus,
-.herdr-search:focus {
+.dashboard-search:focus {
   outline: 1px solid var(--theme-accent);
 }
 .dashboard-results {
@@ -247,59 +245,6 @@
 }
 .dashboard-launch-open .custom-keyboard {
   display: none !important;
-}
-.herdr-filters {
-  display: flex;
-  gap: 5px;
-  overflow: auto;
-  flex: none;
-  touch-action: pan-x;
-  padding: 4px 0 12px;
-}
-.herdr-filters button {
-  white-space: nowrap;
-  font-size: 11px;
-  border-radius: 22px;
-  padding: 10px;
-  background: transparent;
-}
-.herdr-filters button[aria-pressed='true'] {
-  background: var(--theme-accent);
-  color: var(--theme-background);
-}
-.herdr-search {
-  margin-bottom: 16px;
-  flex: none;
-}
-.herdr-group {
-  padding: 0;
-  border-radius: 16px;
-  overflow: hidden;
-  background: var(--theme-surface);
-}
-.herdr-group-title {
-  padding: 14px;
-  color: var(--theme-accent);
-}
-.herdr-pane {
-  padding: 14px 12px;
-  gap: 8px;
-}
-.herdr-pane-info strong {
-  font-size: 13px;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-.herdr-state {
-  font-size: 10px;
-}
-.herdr-agent-icon {
-  width: 34px;
-  font-size: 9px;
-}
-.herdr-output {
-  border: 0;
-  border-radius: 14px;
 }
 .terminal-tabs {
   display: flex;
