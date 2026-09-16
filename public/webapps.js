@@ -279,73 +279,162 @@
   setInterval(() => {
     if (!document.hidden) sync();
   }, 5000);
-  function settings(root) {
-    const section = node('section', 'webapps-settings');
-    section.setAttribute('aria-label', 'Web apps');
-    section.append(
-      node('h2', '', 'Web apps'),
-      node(
-        'p',
-        'theme-note',
-        'Install for all devices connected to this host. Home pins stay personal to each device.'
+  const keycap = (label, fn, aria, cls = '') => {
+    const b = node('button', 'keycap ' + cls, label);
+    b.type = 'button';
+    if (aria) b.setAttribute('aria-label', aria);
+    b.onclick = e => {
+      e.stopPropagation();
+      fn();
+    };
+    return b;
+  };
+  const field = (label, input) => {
+    const wrap = node('label', 'prompt-field webapps-field');
+    wrap.append(node('span', 'prompt-label', label), input);
+    return wrap;
+  };
+  /* Danger sheet over the Home sheet, naming the app and the host before removal. */
+  function confirmUninstall(app, accept) {
+    document.querySelector('.webapps-confirm')?.remove();
+    const panel = node('section', 'webapps-confirm legend danger');
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-label', 'Uninstall from host');
+    panel.append(node('span', 'legend-title', 'uninstall from ' + HyprlandApps.host.name));
+    const line = node('div', 'webapps-confirm-app'),
+      glyph = node('span', 'nf webapps-glyph', ''),
+      text = node('div');
+    text.append(node('strong', '', app.name), node('small', '', new URL(app.url).hostname));
+    line.append(glyph, text);
+    const copy = node(
+      'p',
+      '',
+      `Removes it for every device connected to ${HyprlandApps.host.name}. Pins on this device and on other devices are cleared. You can install it again any time.`
+    );
+    const actions = node('div', 'webapps-confirm-actions');
+    const close = () => panel.remove();
+    actions.append(
+      keycap('cancel', close, 'Cancel'),
+      keycap(
+        'uninstall',
+        () => {
+          close();
+          accept();
+        },
+        'Uninstall',
+        'rose filled'
       )
     );
+    panel.append(line, copy, actions);
+    for (const type of ['pointerdown', 'pointerup', 'touchstart', 'touchmove', 'touchend'])
+      panel.addEventListener(type, e => e.stopPropagation(), { passive: true });
+    (document.getElementById('touch-shell') || document.body).append(panel);
+  }
+  function settings(root) {
+    const host = HyprlandApps.host.name;
+    const section = node('section', 'webapps-settings');
+    section.setAttribute('aria-label', 'Web apps');
+    const add = node('section', 'legend webapps-add');
+    add.append(node('span', 'legend-title', 'add'));
     const form = node('form', 'webapps-install'),
       name = node('input'),
       url = node('input');
     name.required = true;
     name.maxLength = 40;
-    name.placeholder = 'App name';
     name.setAttribute('aria-label', 'Web app name');
     url.required = true;
-    url.placeholder = 'https://example.com';
+    url.defaultValue = 'https://';
+    url.value = 'https://';
     url.inputMode = 'url';
     url.autocapitalize = 'none';
     url.autocomplete = 'off';
     url.setAttribute('autocorrect', 'off');
     url.setAttribute('aria-label', 'Web app URL');
-    const install = button('Install web app', () => {});
+    const install = keycap('install', () => {}, 'Install web app', 'accent webapps-install-key');
     install.type = 'submit';
-    const status = node('p', 'theme-note');
+    const line = node('div', 'webapps-install-line');
+    line.append(
+      node(
+        'span',
+        'webapps-note',
+        `Installs on ${host} for every connected device. Pins stay on this device.`
+      ),
+      install
+    );
+    form.append(field('name', name), field('url', url), line);
+    const status = node('p', 'webapps-status');
     status.setAttribute('role', 'status');
+    add.append(form, status);
+    const installed = node('section', 'legend webapps-installed');
+    const count = node('span', 'legend-meta');
+    installed.append(node('span', 'legend-title', 'installed on ' + host), count);
     const list = node('div', 'webapps-list');
-    form.append(name, url, install);
-    section.append(form, status, list);
+    installed.append(list);
+    section.append(add, installed);
     root.prepend(section);
+    const pins = () => logic?.state.homePins || HyprlandApps.DEFAULT_PINS;
+    const setPins = next => {
+      storage.write('omarchy-home-pins', next);
+      logic?.set({ homePins: next });
+    };
     const draw = () => {
       list.replaceChildren();
+      count.textContent = String(saved.length);
+      if (!saved.length)
+        list.append(node('p', 'webapps-empty', 'No web apps on ' + host + ' yet.'));
       for (const app of saved) {
         const row = node('div', 'webapps-row'),
-          text = node('div');
+          open = keycap(
+            '',
+            () => {
+              logic?.openApp(app.id);
+              logic?.dashboard?.closeSheet();
+            },
+            'Open ' + app.name,
+            'webapps-open'
+          ),
+          glyph = node('span', 'nf webapps-glyph', ''),
+          text = node('div', 'webapps-text');
         text.append(node('strong', '', app.name), node('small', '', new URL(app.url).hostname));
-        row.append(
-          text,
-          button('Open', () => logic?.openApp(app.id)),
-          button('Uninstall from host', async () => {
-            try {
-              await logic?.closeApp(app.id);
-              if (logic?.state.open.includes(app.id))
-                throw Error('Close the app before removing it.');
-              queue = queue.filter(q => q.app?.id !== app.id);
-              enqueue({ action: 'remove', id: app.id });
-              persist(saved.filter(a => a.id !== app.id));
-              delete HyprlandApps.catalog[app.id];
-              const pins = (logic?.state.homePins || HyprlandApps.DEFAULT_PINS).filter(
-                k => k !== app.id
-              );
-              storage.write('omarchy-home-pins', pins);
-              logic?.set({ homePins: pins });
-              draw();
-              status.textContent = app.name + ' uninstalled. ' + syncMessage;
-            } catch (e) {
-              status.textContent = e.message;
-            }
-          })
+        open.append(text);
+        const pinned = pins().includes(app.id);
+        const pin = keycap(
+          '',
+          () => {
+            setPins(pinned ? pins().filter(k => k !== app.id) : [...pins(), app.id]);
+            draw();
+          },
+          (pinned ? 'Unpin ' : 'Pin ') + app.name,
+          'small webapps-pin'
         );
-        row.querySelectorAll('button')[0].setAttribute('aria-label', 'Open ' + app.name);
-        row
-          .querySelectorAll('button')[1]
-          .setAttribute('aria-label', 'Uninstall ' + app.name + ' from host');
+        pin.append(
+          node('span', 'webapps-pin-mark', pinned ? '✓' : '+'),
+          document.createTextNode(pinned ? 'pinned' : 'pin')
+        );
+        pin.setAttribute('aria-pressed', String(pinned));
+        const remove = keycap(
+          'uninstall',
+          () =>
+            confirmUninstall(app, async () => {
+              try {
+                await logic?.closeApp(app.id);
+                if (logic?.state.open.includes(app.id))
+                  throw Error('Close the app before removing it.');
+                queue = queue.filter(q => q.app?.id !== app.id);
+                enqueue({ action: 'remove', id: app.id });
+                persist(saved.filter(a => a.id !== app.id));
+                delete HyprlandApps.catalog[app.id];
+                setPins(pins().filter(k => k !== app.id));
+                draw();
+                status.textContent = app.name + ' uninstalled. ' + syncMessage;
+              } catch (e) {
+                status.textContent = e.message;
+              }
+            }),
+          'Uninstall ' + app.name + ' from host',
+          'small rose'
+        );
+        row.append(glyph, open, pin, remove);
         list.append(row);
       }
     };
@@ -366,9 +455,7 @@
         persist([...saved, app]);
         register(app);
         enqueue({ action: 'install', app });
-        const pins = [...(logic?.state.homePins || HyprlandApps.DEFAULT_PINS), app.id];
-        storage.write('omarchy-home-pins', pins);
-        logic?.set({ homePins: pins });
+        setPins([...pins(), app.id]);
         form.reset();
         draw();
         status.textContent = title + ' added. ' + syncMessage;
@@ -378,6 +465,7 @@
     };
     let lastDraw;
     refreshSettings = () => {
+      if (!section.isConnected) return;
       const signature = JSON.stringify(saved);
       if (signature !== lastDraw) {
         lastDraw = signature;
@@ -391,6 +479,7 @@
     ready,
     sync,
     settings,
+    manage: () => logic?.dashboard?.managePins('web'),
     bind: value => {
       logic = value;
     },

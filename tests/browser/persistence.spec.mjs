@@ -77,13 +77,17 @@ async function device(browser, server, name, seed) {
   await expect(p.getByRole('region', { name: 'Device settings', exact: true })).toBeVisible();
   return { c, p };
 }
+const sheet = p => p.evaluate(() => HyprlandWebApps.manage());
+const done = p => p.getByRole('button', { name: 'Done', exact: true }).click();
 async function install(p, name) {
+  await sheet(p);
   await p.getByRole('textbox', { name: 'Web app name', exact: true }).fill(name);
   await p
     .getByRole('textbox', { name: 'Web app URL', exact: true })
     .fill('https://example.com/' + name);
   await p.getByRole('button', { name: 'Install web app', exact: true }).click();
   await p.evaluate(() => HyprlandWebApps.sync());
+  await done(p);
 }
 test('shared installs, independent preferences, durable offline queue and tombstones', async ({
   browser,
@@ -95,7 +99,9 @@ test('shared installs, independent preferences, durable offline queue and tombst
     await install(a.p, 'Reader');
     await expect.poll(() => h.apps.size).toBe(1);
     await b.p.evaluate(() => HyprlandWebApps.sync());
+    await sheet(b.p);
     await expect(b.p.getByRole('button', { name: 'Open Reader', exact: true })).toBeVisible();
+    await done(b.p);
     const app = [...h.apps.values()][0];
     expect(
       await b.p.evaluate(
@@ -116,12 +122,18 @@ test('shared installs, independent preferences, durable offline queue and tombst
     await install(a.p, 'Offline');
     await a.p.reload();
     await a.p.evaluate(() => HyprlandPreferences.ready);
+    await sheet(a.p);
     await expect(a.p.getByRole('button', { name: 'Open Offline', exact: true })).toBeVisible();
     expect(h.apps.size).toBe(1);
     h.offline = false;
     await a.p.evaluate(() => HyprlandWebApps.sync());
     await expect.poll(() => h.apps.size).toBe(2);
+    await sheet(b.p);
     await b.p.getByRole('button', { name: 'Uninstall Reader from host', exact: true }).click();
+    await b.p
+      .getByRole('dialog', { name: 'Uninstall from host' })
+      .getByRole('button', { name: 'Uninstall', exact: true })
+      .click();
     await b.p.evaluate(() => HyprlandWebApps.sync());
     await a.p.evaluate(() => HyprlandWebApps.sync());
     await expect(a.p.getByRole('button', { name: 'Open Reader', exact: true })).toHaveCount(0);
@@ -131,6 +143,7 @@ test('shared installs, independent preferences, durable offline queue and tombst
     });
     try {
       await stale.p.evaluate(() => HyprlandWebApps.ready);
+      await sheet(stale.p);
       await expect(stale.p.getByRole('button', { name: 'Open Reader', exact: true })).toHaveCount(
         0
       );

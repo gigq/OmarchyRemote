@@ -172,7 +172,6 @@
     host = host || [...document.querySelectorAll('#theme-settings')].find(n => !n.closest('x-dc'));
     if (!host || host.childElementCount) return;
     host.innerHTML = `<header><div class="theme-current">Current <strong data-theme-name></strong></div></header><div class="theme-grid" role="group" aria-label="Choose a theme"></div>`;
-    window.HyprlandWebApps?.settings(host);
     window.HyprlandPreferences?.settings(host);
     const grid = host.querySelector('.theme-grid');
     for (const t of catalog) {

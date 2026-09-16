@@ -143,7 +143,7 @@
     color: 'var(--theme-accent)',
     glyph: 'st',
     icon: '\uf013',
-    description: 'appearance · themes · web apps',
+    description: 'appearance · themes · this device',
     mount: 'theme-settings',
     mountClass: 'theme-settings',
     offline: true,

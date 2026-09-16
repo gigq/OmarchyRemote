@@ -45,46 +45,151 @@
       this.host.replaceChildren(name);
       if (uptime) this.host.append(el('span', '', uptime));
     }
-    managePins() {
-      if (this.pinPanel) return;
-      const panel = (this.pinPanel = el('section', 'dashboard-pin-panel'));
+    /* Home sheet: pinned apps (drag to reorder), the host catalog, and the web apps tab. */
+    managePins(tab = 'apps') {
+      if (this.pinPanel) {
+        this.pinTab = tab;
+        this.pinDraw?.();
+        return;
+      }
+      const panel = (this.pinPanel = el('section', 'home-sheet'));
       panel.setAttribute('role', 'dialog');
       panel.setAttribute('aria-label', 'Pinned apps');
-      const draw = () => {
-        const keys = this.logic.state.homePins || HyprlandApps.DEFAULT_PINS;
-        panel.replaceChildren();
-        const head = el('div', 'dashboard-line');
-        head.append(
-          el('h2', '', 'Pinned apps'),
-          this.button('Done', () => {
-            panel.remove();
-            this.pinPanel = null;
-          })
+      this.pinTab = tab;
+      const key = (label, fn, aria, cls = '') => {
+        const b = el('button', 'keycap ' + cls, label);
+        b.type = 'button';
+        if (aria) b.setAttribute('aria-label', aria);
+        b.onclick = e => {
+          e.stopPropagation();
+          fn();
+        };
+        return b;
+      };
+      const pins = () => this.logic.state.homePins || HyprlandApps.DEFAULT_PINS;
+      const setPins = next => {
+        save('omarchy-home-pins', next);
+        this.logic.set({ homePins: next });
+        draw();
+      };
+      const glyphOf = app => {
+        const g = el('span', 'nf home-sheet-glyph', app.icon || app.glyph);
+        g.style.color = app.color;
+        return g;
+      };
+      const appRow = (k, app, pinned) => {
+        const row = el('div', 'home-sheet-row');
+        if (pinned) {
+          const handle = el('span', 'home-sheet-handle', '⋮⋮');
+          handle.onpointerdown = ev => this.dragPin(ev, row, k, pins(), setPins);
+          row.append(handle);
+        }
+        row.append(glyphOf(app), el('span', 'home-sheet-name', app.name));
+        const letter = app.superKeys?.find(x => /^[a-z]$/.test(x));
+        if (pinned && letter) row.append(el('span', 'kbd super', letter));
+        if (!pinned)
+          row.append(
+            k.startsWith('webapp-')
+              ? el('span', 'tag', 'web')
+              : el('span', 'home-sheet-detail', app.description || '')
+          );
+        const toggle = key(
+          pinned ? '−' : '+',
+          () => setPins(pinned ? pins().filter(x => x !== k) : [...pins(), k]),
+          app.name,
+          'icon ' + (pinned ? 'rose' : 'home-sheet-add')
         );
-        panel.append(
-          head,
-          el(
-            'p',
-            'dashboard-muted',
-            'Choose which apps appear on Home. All apps remain in the launcher.'
+        toggle.setAttribute('aria-pressed', String(pinned));
+        row.append(toggle);
+        return row;
+      };
+      const legend = (title, meta) => {
+        const box = el('section', 'legend home-sheet-legend');
+        box.append(el('span', 'legend-title', title));
+        if (meta) box.append(el('span', 'legend-meta', meta));
+        return box;
+      };
+      const draw = () => {
+        const keys = pins().filter(k => this.logic.APPS[k]);
+        const apps = Object.entries(this.logic.APPS).filter(([k]) => k !== 'home');
+        const webCount = apps.filter(([k]) => k.startsWith('webapp-')).length;
+        panel.replaceChildren();
+        const head = el('div', 'home-sheet-head');
+        head.append(
+          el('h2', '', 'Home'),
+          key(
+            'done',
+            () => {
+              this.closeSheet();
+            },
+            'Done',
+            'medium'
           )
         );
-        for (const [key, app] of Object.entries(this.logic.APPS).filter(([k]) => k !== 'home')) {
-          const b = this.button(app.name, () => {
-            const next = keys.includes(key) ? keys.filter(k => k !== key) : [...keys, key];
-            save('omarchy-home-pins', next);
-            this.logic.set({ homePins: next });
-            draw();
-          });
-          b.setAttribute('aria-label', app.name);
-          b.setAttribute('aria-pressed', String(keys.includes(key)));
-          panel.append(b);
+        const rail = el('div', 'rail home-sheet-rail');
+        for (const [id, label, count] of [
+          ['apps', 'apps', keys.length + ' pinned'],
+          ['web', 'web apps', String(webCount)],
+        ]) {
+          const b = key(label, () => this.managePins(id), id === 'web' ? 'Web apps' : 'Apps');
+          b.className = '';
+          b.append(el('span', 'count', count));
+          b.setAttribute('aria-pressed', String(this.pinTab === id));
+          rail.append(b);
         }
+        const body = el('div', 'home-sheet-body');
+        panel.append(head, rail, body);
+        if (this.pinTab === 'web') {
+          window.HyprlandWebApps?.settings(body);
+          return;
+        }
+        const onHome = legend('on home', 'this device · drag to reorder');
+        for (const k of keys) onHome.append(appRow(k, this.logic.APPS[k], true));
+        if (!keys.length)
+          onHome.append(el('p', 'dashboard-muted home-sheet-empty', 'Nothing pinned yet.'));
+        const available = legend('available on ' + HyprlandApps.host.name);
+        const rest = apps.filter(([k]) => !keys.includes(k));
+        for (const [k, app] of rest) available.append(appRow(k, app, false));
+        if (!rest.length)
+          available.append(
+            el('p', 'dashboard-muted home-sheet-empty', 'Everything is on Home already.')
+          );
+        body.append(onHome, available);
       };
+      this.pinDraw = draw;
       for (const type of ['pointerdown', 'pointerup', 'touchstart', 'touchmove', 'touchend'])
         panel.addEventListener(type, e => e.stopPropagation(), { passive: true });
       mount('touch-shell').append(panel);
       draw();
+    }
+    closeSheet() {
+      this.pinPanel?.remove();
+      this.pinPanel = null;
+      this.pinDraw = null;
+    }
+    dragPin(ev, row, k, keys, commit) {
+      ev.preventDefault();
+      const handle = ev.currentTarget;
+      const rows = [...row.parentElement.querySelectorAll('.home-sheet-row')];
+      const from = rows.indexOf(row);
+      let to = from;
+      const place = y => {
+        to = rows.findIndex(r => y < r.getBoundingClientRect().bottom);
+        if (to < 0) to = rows.length - 1;
+        rows.forEach((r, i) => r.classList.toggle('home-sheet-target', i === to && i !== from));
+      };
+      row.classList.add('home-sheet-dragging');
+      handle.setPointerCapture(ev.pointerId);
+      handle.onpointermove = e => place(e.clientY);
+      handle.onpointerup = handle.onpointercancel = () => {
+        handle.onpointermove = handle.onpointerup = handle.onpointercancel = null;
+        row.classList.remove('home-sheet-dragging');
+        rows.forEach(r => r.classList.remove('home-sheet-target'));
+        if (to === from) return;
+        const next = keys.filter(x => x !== k);
+        next.splice(to, 0, k);
+        commit(next);
+      };
     }
     button(label, fn, cls = '') {
       const b = el('button', 'dashboard-button ' + cls, label);

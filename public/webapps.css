@@ -1,60 +1,176 @@
 .webapps-settings {
-  margin: 0 0 28px;
-  padding: 0 0 24px;
-  border-bottom: 1px solid var(--theme-border);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  font-size: 12px;
 }
-.webapps-settings h2 {
-  font:
-    500 15px 'JetBrains Mono',
-    monospace;
-  margin: 0 0 8px;
+.webapps-add {
+  padding: 16px 12px 12px;
+  background: color-mix(in srgb, var(--theme-surface) 22%, transparent);
 }
 .webapps-install {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
-.webapps-install input {
-  flex: 1 1 180px;
+.webapps-field > input {
   min-width: 0;
-  box-sizing: border-box;
-  border: 1px solid var(--theme-border);
-  border-radius: 8px;
-  background: var(--theme-surface);
-  color: var(--theme-foreground);
-  padding: 10px;
-  font:
-    16px 'JetBrains Mono',
-    monospace;
 }
-.webapps-settings .remote-button {
-  min-height: 44px;
+.webapps-install-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
+}
+.webapps-note {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--theme-dim);
+}
+.webapps-install-key {
+  flex: none;
+  height: 36px;
+  padding: 0 14px;
+}
+.webapps-status {
+  margin: 8px 0 0;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--theme-secondary);
+}
+.webapps-status:empty {
+  display: none;
+}
+.webapps-installed {
+  padding: 8px 8px 4px 12px;
+  background: color-mix(in srgb, var(--theme-surface) 22%, transparent);
 }
 .webapps-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 0;
+  height: 52px;
   border-bottom: 1px solid var(--theme-border);
 }
-.webapps-row > div {
-  min-width: 0;
-  flex: 1;
+.webapps-row:last-child {
+  border-bottom: 0;
 }
-.webapps-row strong,
-.webapps-row small {
+.webapps-glyph {
+  width: 18px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--theme-yellow);
+  flex: none;
+}
+.webapps-row > .webapps-open {
+  flex: 1;
+  min-width: 0;
+  height: auto;
+  padding: 0 4px;
+  justify-content: flex-start;
+  background: transparent;
+  border-color: transparent;
+  text-align: left;
+}
+.webapps-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.webapps-text strong,
+.webapps-text small {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.webapps-row strong {
-  font-size: 13px;
+.webapps-text strong {
+  font-size: 12px;
+  font-weight: 400;
 }
-.webapps-row small {
-  font-size: 11px;
+.webapps-text small {
+  font-size: 10px;
+  color: var(--theme-dim);
+}
+.webapps-row > .keycap.small {
+  height: 28px;
+  border-radius: 8px;
+  padding: 0 10px;
+  flex: none;
+}
+.webapps-pin[aria-pressed='true'] {
+  background: var(--theme-surface);
+}
+.webapps-pin-mark {
+  color: var(--theme-accent);
+}
+.webapps-pin[aria-pressed='true'] .webapps-pin-mark {
+  color: var(--theme-green);
+}
+.webapps-empty {
+  margin: 0;
+  padding: 10px 0;
   color: var(--theme-secondary);
-  margin-top: 4px;
+}
+.webapps-confirm {
+  position: absolute;
+  z-index: 31;
+  left: 12px;
+  right: 12px;
+  bottom: 42px;
+  padding: 24px 16px 16px;
+  box-sizing: border-box;
+  border-radius: 20px;
+  background: var(--theme-background);
+  box-shadow: 0 -20px 60px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-size: 12px;
+}
+.webapps-confirm > .legend-title {
+  left: 16px;
+  color: var(--theme-red);
+}
+.webapps-confirm-app {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 2px;
+}
+.webapps-confirm-app .webapps-glyph {
+  width: 22px;
+  font-size: 18px;
+}
+.webapps-confirm-app strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--theme-foreground);
+}
+.webapps-confirm-app small {
+  display: block;
+  font-size: 10px;
+  color: var(--theme-dim);
+  margin-top: 3px;
+}
+.webapps-confirm > p {
+  margin: 0;
+  padding: 0 2px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--theme-secondary);
+}
+.webapps-confirm-actions {
+  display: flex;
+  gap: 6px;
+  padding-top: 2px;
+}
+.webapps-confirm-actions > .keycap {
+  flex: 1;
+  height: 40px;
 }
 #touch-shell .webapp-app {
   inset: var(--phone-content-inset);

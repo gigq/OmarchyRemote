@@ -15,7 +15,16 @@ const boot = async p => {
     };
   });
   await p.goto('/native/');
-  await p.keyboard.press('Meta+Comma');
+  await p.getByRole('button', { name: 'Manage pinned apps' }).click();
+  await p.getByRole('button', { name: 'Web apps', exact: true }).click();
+};
+const sheet = p => p.evaluate(() => HyprlandWebApps.manage());
+const uninstall = async (p, name) => {
+  await p.getByRole('button', { name: `Uninstall ${name} from host`, exact: true }).click();
+  await p
+    .getByRole('dialog', { name: 'Uninstall from host' })
+    .getByRole('button', { name: 'Uninstall', exact: true })
+    .click();
 };
 const install = async (p, name, url) => {
   await p.getByRole('textbox', { name: 'Web app name', exact: true }).fill(name);
@@ -36,7 +45,7 @@ for (const viewport of [
     await install(p, 'Other', 'https://example.org/');
     await p.screenshot({ path: `artifacts/browser/webapps-settings-${viewport.width}.png` });
     await p.reload();
-    await p.keyboard.press('Meta+Comma');
+    await sheet(p);
     await expect(p.getByRole('button', { name: 'Open Example', exact: true })).toBeVisible();
     await p.getByRole('button', { name: 'Open Example', exact: true }).click();
     const first = await p.evaluate(
@@ -69,7 +78,7 @@ for (const viewport of [
     });
     expect(Math.abs(rect.width - (card.width - frame))).toBeLessThan(1);
     if (viewport.width > 600) {
-      await p.keyboard.press('Meta+Comma');
+      await sheet(p);
       await p.getByRole('button', { name: 'Open Other', exact: true }).click();
       const ids = await p.evaluate(() =>
         window.webCommands.filter(q => q.action === 'open' && q.appID).map(q => q.appID)
@@ -103,11 +112,9 @@ for (const viewport of [
       expect(
         await p.evaluate(() => window.webCommands.filter(q => q.action === 'close').length)
       ).toBe(1);
-      await p.keyboard.press('Meta+Comma');
-    } else {
-      await p.keyboard.press('Meta+Comma');
     }
-    await p.getByRole('button', { name: 'Uninstall Example from host', exact: true }).click();
+    await sheet(p);
+    await uninstall(p, 'Example');
     await expect(p.getByRole('button', { name: 'Open Example', exact: true })).toHaveCount(0);
     expect(
       await p.evaluate(() => JSON.parse(localStorage.getItem('omarchy-webapps')).map(a => a.name))
