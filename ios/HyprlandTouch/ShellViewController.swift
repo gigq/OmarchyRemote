@@ -642,7 +642,6 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
             }
             for (input, code, title) in [
                 ("l", "KeyL", "Address"), ("n", "KeyN", "New desktop window"), ("t", "KeyT", "New tab"),
-                ("w", "KeyW", "Close tab"),
                 ("f", "KeyF", "Find"), ("r", "KeyR", "Reload"), ("g", "KeyG", "Find next"),
                 ("=", "Equal", "Zoom in"), ("+", "Equal", "Zoom in"), ("-", "Minus", "Zoom out"),
                 ("[", "BracketLeft", "Back"), ("]", "BracketRight", "Forward"),
@@ -652,7 +651,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
             }
             for (input, code, title) in [
                 ("r", "KeyR", "Reload from origin"), ("g", "KeyG", "Find previous"),
-                ("t", "KeyT", "Reopen tab"), ("w", "KeyW", "Close Browser"),
+                ("t", "KeyT", "Reopen tab"), ("w", "KeyW", "Close tab"),
                 ("l", "KeyL", "Tab manager"), ("f", "KeyF", "Toggle fullscreen"), ("+", "Equal", "Zoom in"),
             ] { add(input, code, [.command, .shift], title) }
             add(UIKeyCommand.inputLeftArrow, "ArrowLeft", [.command, .alternate], "Previous tab")
