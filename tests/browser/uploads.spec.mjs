@@ -40,11 +40,17 @@ test('image picker preserves pane drafts, blocks premature send, and Latest shar
     });
   });
   await page.route(
-    '**/api/uploads/images',
+    '**/api/uploads/files?*',
     route =>
       new Promise(resolve => {
+        const name = new URL(route.request().url()).searchParams.get('name');
         finishUpload = async () => {
-          await route.fulfill({ json: { path: '/tmp/upload-test.png' } });
+          await route.fulfill({
+            json: name.endsWith('.png')
+              ? { path: '/tmp/upload-test.png', kind: 'image' }
+              : { path: '/tmp/upload-test.zip', kind: 'file' },
+          });
+          finishUpload = null;
           resolve();
         };
       })
@@ -78,7 +84,7 @@ test('image picker preserves pane drafts, blocks premature send, and Latest shar
   const field = page.locator('#remote-herdr-app .native-input');
   await field.fill('First draft');
   const picker = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Attach images', exact: true }).click();
+  await page.getByRole('button', { name: 'Attach files', exact: true }).click();
   await (await picker).setFiles({ name: 'photo.png', mimeType: 'image/png', buffer: png });
   await expect.poll(() => !!finishUpload).toBe(true);
   await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
@@ -86,9 +92,22 @@ test('image picker preserves pane drafts, blocks premature send, and Latest shar
   await openPane('two');
   await field.fill('Second draft');
   await finishUpload();
-  await expect(page.getByRole('button', { name: 'Attach images', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Attach files', exact: true })).toBeEnabled();
   await expect(field).toHaveValue('Second draft');
   expect(sent).toEqual([]);
+  // Any file type is accepted; a non-image gets a File: line.
+  const zipPicker = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Attach files', exact: true }).click();
+  await (
+    await zipPicker
+  ).setFiles({
+    name: 'bundle.zip',
+    mimeType: 'application/zip',
+    buffer: Buffer.from('PK\x03\x04not really'),
+  });
+  await expect.poll(() => !!finishUpload).toBe(true);
+  await finishUpload();
+  await expect(field).toHaveValue('Second draft\nFile: /tmp/upload-test.zip\n');
   await page.getByRole('button', { name: 'All panes' }).click();
   await openPane('one');
   await expect(field).toHaveValue('First draft\nImage: /tmp/upload-test.png\n');

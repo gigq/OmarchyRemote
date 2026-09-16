@@ -212,35 +212,47 @@ test('home widgets expose live host metrics and sanitized CodexBar windows', asy
   }
 });
 
-test('image uploads preserve bytes privately and reject invalid or oversized files', async () => {
+test('uploads keep bytes and names privately, classify images, and reject empty or oversized files', async () => {
   const { readFile, stat, unlink } = await import('node:fs/promises');
-  const upload = body =>
-    fetch(base + '/api/uploads/images', {
-      method: 'POST',
-      headers: { 'X-Hyprland-Client': '1', 'Content-Type': 'image/png' },
-      body,
-    });
-  const bytes = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.alloc(65536, 42)]);
-  const response = await upload(bytes);
-  assert.equal(response.status, 200, await response.clone().text());
-  const { path } = await response.json();
-  assert.match(
-    path,
-    new RegExp(
-      '^' + process.env.HOME + '/.local/share/omarchy-remote/uploads/image-[a-f0-9-]+\\.png$'
-    )
-  );
+  const uploads = process.env.HOME + '/.local/share/omarchy-remote/uploads/';
+  const upload = (body, name, route = 'files') =>
+    fetch(
+      base +
+        '/api/uploads/' +
+        route +
+        (name === undefined ? '' : '?name=' + encodeURIComponent(name)),
+      {
+        method: 'POST',
+        headers: { 'X-Hyprland-Client': '1', 'Content-Type': 'application/octet-stream' },
+        body,
+      }
+    );
+  const png = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.alloc(65536, 42)]);
+  const zip = Buffer.concat([Buffer.from('504b0304', 'hex'), Buffer.alloc(4096, 7)]);
+  const stored = [];
   try {
-    assert.deepEqual(await readFile(path), bytes);
-    assert.equal((await stat(path)).mode & 0o777, 0o600);
+    for (const [body, name, route, kind, pattern] of [
+      [png, 'photo.png', 'files', 'image', '[a-f0-9-]+-photo\\.png'],
+      [png, undefined, 'images', 'image', 'image-[a-f0-9-]+\\.png'],
+      [zip, '../../etc/passwd/../bundle (1).zip', 'files', 'file', '[a-f0-9-]+-bundle _1_\\.zip'],
+      [zip, '///', 'files', 'file', 'file-[a-f0-9-]+'],
+    ]) {
+      const response = await upload(body, name, route);
+      assert.equal(response.status, 200, await response.clone().text());
+      const result = await response.json();
+      stored.push(result.path);
+      assert.equal(result.kind, kind);
+      assert.match(result.path, new RegExp('^' + uploads + pattern + '$'));
+      assert.deepEqual(await readFile(result.path), body);
+      assert.equal((await stat(result.path)).mode & 0o777, 0o600);
+    }
   } finally {
-    await unlink(path);
+    for (const path of stored) await unlink(path).catch(() => {});
   }
-  assert.equal((await upload(Buffer.from('<svg/>'))).status, 400);
-  assert.equal((await upload(Buffer.alloc(0))).status, 400);
-  assert.equal((await upload(Buffer.alloc(10 * 1024 * 1024 + 1))).status, 413);
+  assert.equal((await upload(Buffer.alloc(0), 'empty.zip')).status, 400);
+  assert.equal((await upload(Buffer.alloc(100 * 1024 * 1024 + 1), 'big.bin')).status, 413);
   assert.equal(
-    (await fetch(base + '/api/uploads/images', { method: 'POST', body: bytes })).status,
+    (await fetch(base + '/api/uploads/files?name=x.zip', { method: 'POST', body: zip })).status,
     403
   );
 });

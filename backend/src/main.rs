@@ -92,16 +92,23 @@ fn authorized_browser(
         client == Some("1")
     }
 }
-async fn image_upload(body: axum::body::Bytes) -> Result<Json<Value>, ApiError> {
+#[derive(Deserialize)]
+struct UploadQuery {
+    name: Option<String>,
+}
+async fn file_upload(
+    Query(q): Query<UploadQuery>,
+    body: axum::body::Bytes,
+) -> Result<Json<Value>, ApiError> {
     tokio::task::spawn_blocking(move || {
         let dir = uploads::directory().map_err(error)?;
-        let path = uploads::store(&dir, &body).map_err(|e| {
+        let (path, kind) = uploads::store(&dir, &body, q.name.as_deref()).map_err(|e| {
             (
                 StatusCode::BAD_REQUEST,
                 Json(json!({"error":e.to_string()})),
             )
         })?;
-        Ok(Json(json!({"path":path})))
+        Ok(Json(json!({"path":path,"kind":kind.as_str()})))
     })
     .await
     .map_err(error)?
@@ -420,8 +427,13 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/browser/snapshot", get(browser::snapshot))
         .route("/api/browser/action", post(browser::action))
         .route(
+            "/api/uploads/files",
+            post(file_upload).layer(DefaultBodyLimit::max(uploads::MAX_BYTES)),
+        )
+        // Older shells still post images here; same store, no name.
+        .route(
             "/api/uploads/images",
-            post(image_upload).layer(DefaultBodyLimit::max(uploads::MAX_BYTES)),
+            post(file_upload).layer(DefaultBodyLimit::max(uploads::MAX_BYTES)),
         )
         .route("/api/files", get(files::list))
         .route("/api/files/search", get(files_ops::search))

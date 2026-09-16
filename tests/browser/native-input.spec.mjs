@@ -75,11 +75,11 @@ test('image paths append to the original draft without sending or replacing text
   await field.fill('Look at this');
   await page.evaluate(() => input.select('two'));
   await field.fill('Other draft');
-  await page.evaluate(() => input.attachImage('one', '/tmp/image-one.png'));
+  await page.evaluate(() => input.attachFile('one', '/tmp/image-one.png', 'image'));
   await expect(field).toHaveValue('Other draft');
   await page.evaluate(() => input.select('one'));
   await expect(field).toHaveValue('Look at this\nImage: /tmp/image-one.png\n');
-  await page.evaluate(() => input.attachImage('one', '/tmp/image-two.png'));
+  await page.evaluate(() => input.attachFile('one', '/tmp/image-two.png', 'image'));
   expect(await page.evaluate(() => sent)).toEqual([]);
   await page.evaluate(() => (input.submit.disabled = true));
   await field.press('Enter');
@@ -160,7 +160,7 @@ test('Herd drafts survive page reload per pane, including composition and backgr
   await field.fill('First unfinished message');
   await page.evaluate(() => input.select('agent-b'));
   await field.fill('Second message');
-  await page.evaluate(() => input.attachImage('agent-a', '/tmp/attached.png'));
+  await page.evaluate(() => input.attachFile('agent-a', '/tmp/attached.png', 'image'));
   // Simulate termination without dispose/pagehide: persistence must happen on input itself.
   await page.reload();
   await mount();

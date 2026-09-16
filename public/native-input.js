@@ -287,11 +287,12 @@
       } else this.key('⏎', {});
       this.focus();
     }
-    attachImage(id, path) {
+    // Append an upload reference to a pane's draft: `Image:` for pictures, `File:` otherwise.
+    attachFile(id, path, kind = 'file') {
       this.saveDraft();
       const before = id === this.id ? this.draft : this.loadDraft(id);
-      const text =
-        before + (before && !before.endsWith('\n') ? '\n' : '') + 'Image: ' + path + '\n';
+      const label = kind === 'image' ? 'Image: ' : 'File: ';
+      const text = before + (before && !before.endsWith('\n') ? '\n' : '') + label + path + '\n';
       if (id === this.id) {
         this.field.blur();
         this.message = true;

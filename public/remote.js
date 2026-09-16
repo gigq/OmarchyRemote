@@ -707,7 +707,7 @@
       });
       this.filePicker = node('input');
       this.filePicker.type = 'file';
-      this.filePicker.accept = 'image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif';
+      // Any file type: on iOS an unrestricted picker offers the photo library and Files.
       this.filePicker.multiple = true;
       this.filePicker.hidden = true;
       this.attachButton = button('', () => {
@@ -716,14 +716,14 @@
         this.filePicker.click();
       });
       this.attachButton.classList.add('herdr-attach');
-      this.attachButton.setAttribute('aria-label', 'Attach images');
-      this.attachButton.title = 'Attach images';
+      this.attachButton.setAttribute('aria-label', 'Attach files');
+      this.attachButton.title = 'Attach files';
       this.attachButton.innerHTML =
         '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m8 13 7-7a3 3 0 0 1 4 4l-9 9a5 5 0 0 1-7-7l9-9m-6 12 9-9"/></svg>';
       this.filePicker.onchange = () => {
         const files = [...this.filePicker.files];
         this.filePicker.value = '';
-        this.uploadImages(files, this.pickerPane);
+        this.uploadFiles(files, this.pickerPane);
       };
       this.uploadAbort = new AbortController();
       this.backButton = button('‹', () => this.select(null));
@@ -784,12 +784,12 @@
       this.nativeInput.select(this.selected);
       this.nativeInput.field.addEventListener('paste', e => {
         const files = [...(e.clipboardData?.items || [])]
-          .filter(i => i.kind === 'file' && i.type.startsWith('image/'))
+          .filter(i => i.kind === 'file')
           .map(i => i.getAsFile())
           .filter(Boolean);
         if (files.length) {
           e.preventDefault();
-          this.uploadImages(files, this.selected);
+          this.uploadFiles(files, this.selected);
         }
       });
       this.resizeObserver = new ResizeObserver(() => {
@@ -1133,10 +1133,10 @@
         this.flushRead();
       });
     }
-    async uploadImages(files, pane) {
+    async uploadFiles(files, pane) {
       if (!pane || !files.length || this.disposed) return;
       if (this.uploading) {
-        this.inputStatus.textContent = 'An image is still uploading. Try again when it finishes.';
+        this.inputStatus.textContent = 'A file is still uploading. Try again when it finishes.';
         return;
       }
       this.uploading = true;
@@ -1147,37 +1147,41 @@
       try {
         for (const file of files) {
           if (this.disposed) break;
-          if (file.size > 10 * 1024 * 1024) {
-            messages.push(file.name + ': larger than 10 MB');
+          if (file.size > 100 * 1024 * 1024) {
+            messages.push(file.name + ': larger than 100 MB');
             continue;
           }
           if (!file.size) {
-            messages.push(file.name + ': empty image');
+            messages.push(file.name + ': empty file');
             continue;
           }
           if (this.selected === pane)
-            this.inputStatus.textContent = 'Uploading ' + (file.name || 'image') + '…';
+            this.inputStatus.textContent = 'Uploading ' + (file.name || 'file') + '…';
           try {
-            const response = await fetch('/api/uploads/images', {
-              method: 'POST',
-              headers: {
-                'X-Hyprland-Client': '1',
-                'Content-Type': file.type || 'application/octet-stream',
-              },
-              body: file,
-              signal: AbortSignal.any([this.uploadAbort.signal, AbortSignal.timeout(60000)]),
-            });
-            if (response.status === 413) throw Error('Image is larger than 10 MB');
+            const response = await fetch(
+              '/api/uploads/files?name=' + encodeURIComponent(file.name || ''),
+              {
+                method: 'POST',
+                headers: {
+                  'X-Hyprland-Client': '1',
+                  'Content-Type': file.type || 'application/octet-stream',
+                },
+                body: file,
+                // Large archives over Tailscale take a while; the limit is on bytes, not time.
+                signal: AbortSignal.any([this.uploadAbort.signal, AbortSignal.timeout(600000)]),
+              }
+            );
+            if (response.status === 413) throw Error('File is larger than 100 MB');
             const result = await response.json().catch(() => ({}));
             if (!response.ok || typeof result.path !== 'string')
               throw Error(result.error || 'Upload failed');
             if (this.disposed) break;
-            this.nativeInput.attachImage(pane, result.path);
-            messages.push('Attached ' + (file.name || 'image'));
+            this.nativeInput.attachFile(pane, result.path, result.kind);
+            messages.push('Attached ' + (file.name || 'file'));
           } catch (e) {
             if (this.disposed) break;
             messages.push(
-              (file.name || 'Image') +
+              (file.name || 'File') +
                 ': ' +
                 (e.name === 'TimeoutError'
                   ? 'Upload timed out. Try again.'
