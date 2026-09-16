@@ -234,7 +234,9 @@ html.desk-mode {
   font-size: 11px !important;
 }
 
-/* Widgets show all at once instead of a paged strip. */
+/* Widgets show all at once. The strip fills the column: the peer list runs the full height on
+   the right while the other cards stack on the left, sharing whatever height is left over. Cards
+   sit on the wallpaper here rather than inside the Home panel, so they carry the panel ground. */
 .desk-mode #home-widgets {
   position: static !important;
   width: auto;
@@ -246,33 +248,41 @@ html.desk-mode {
   height: auto !important;
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  touch-action: pan-y;
+  overflow: hidden;
   border-radius: 0;
 }
 .desk-mode .widget-strip {
   display: grid !important;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(3, auto);
   gap: 7px;
-  height: auto !important;
+  height: 100% !important;
   width: auto !important;
   transform: none !important;
   align-content: start;
 }
+.desk-mode .widget-strip:has(> #widget-tailscale) {
+  align-content: stretch;
+}
 .desk-mode .widget-strip > .home-widget {
   flex: none !important;
-  min-height: 150px;
-  box-sizing: border-box;
-}
-.desk-mode .widget-strip > #widget-weather,
-.desk-mode .widget-strip > #widget-codexbar {
+  min-height: 0;
   grid-column: 1 / -1;
+  background: color-mix(in srgb, var(--theme-surface) 28%, var(--theme-background));
 }
-.desk-mode.desk-portrait .widget-strip {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.desk-mode .widget-strip:has(> #widget-tailscale) > .home-widget {
+  grid-column: 1;
 }
-.desk-mode.desk-portrait .widget-strip > #widget-codexbar {
-  grid-column: auto;
+.desk-mode .widget-strip:has(> #widget-tailscale) > #widget-tailscale {
+  grid-column: 2;
+  grid-row: 1 / -1;
+}
+.desk-mode .widget-metrics {
+  justify-content: flex-start;
+  gap: 14px;
+}
+.desk-mode .widget-metrics > .widget-line:last-child {
+  margin-top: auto;
 }
 .desk-mode .widget-dot {
   display: none;
