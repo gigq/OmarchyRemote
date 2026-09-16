@@ -85,6 +85,27 @@
       };
       document.addEventListener('visibilitychange', this.foreground);
       window.addEventListener('online', this.foreground);
+      // A host backup restored by persistence.js lands in storage; adopt it without a reload.
+      this.restored = e => {
+        const key = e.detail?.key;
+        if (key === 'omarchy-weather-location') {
+          const next = storage.get(key);
+          if (JSON.stringify(next) === JSON.stringify(this.location)) return;
+          this.location = next;
+          this.weather = null;
+          this.weatherError = null;
+          this.nextWeather = 0;
+          this.renderWeather();
+          if (next) this.loadWeather();
+        } else if (key === 'omarchy-weather-unit-mode') {
+          const mode = storage.get(key) || 'auto';
+          if (mode === this.unitMode) return;
+          this.unitMode = mode;
+          this.unit = mode === 'auto' ? this.localeUnit : mode;
+          this.renderWeather();
+        }
+      };
+      window.addEventListener('hyprland-storage', this.restored);
       this.poll();
       this.timer = setInterval(() => this.poll(), 3000);
     }
@@ -478,10 +499,17 @@
       this.nextWeather = Date.now() + 60000;
       try {
         if (location.source === 'phone' && Date.now() - (location.locatedAt || 0) > 15 * 60000) {
-          const fix = await this.phoneLocation(false);
-          if (this.location !== location) return;
-          Object.assign(location, fix, { locatedAt: Date.now() });
-          storage.set('omarchy-weather-location', location);
+          // Refreshing the fix is best effort: a saved location keeps its forecast when the
+          // device declines a silent request (permission pending, no signal). Only the
+          // picker's own button asks for access again.
+          try {
+            const fix = await this.phoneLocation(false);
+            if (this.location !== location) return;
+            Object.assign(location, fix, { locatedAt: Date.now() });
+            storage.set('omarchy-weather-location', location);
+          } catch {
+            if (this.location !== location) return;
+          }
         }
         const w = await this.api(
           `widgets/weather?lat=${encodeURIComponent(location.lat)}&lon=${encodeURIComponent(location.lon)}`
@@ -490,9 +518,8 @@
         this.weather = w;
         this.weatherError = null;
         this.nextWeather = Date.now() + 15 * 60000;
-      } catch (e) {
-        this.weatherError =
-          location.source === 'phone' ? String(e.message || e) : 'Weather unavailable · retrying…';
+      } catch {
+        this.weatherError = 'Weather unavailable · retrying…';
       } finally {
         this.weatherBusy = false;
         this.renderWeather();
@@ -614,6 +641,7 @@
       clearInterval(this.timer);
       document.removeEventListener('visibilitychange', this.foreground);
       window.removeEventListener('online', this.foreground);
+      window.removeEventListener('hyprland-storage', this.restored);
       this.picker?.remove();
     }
   }

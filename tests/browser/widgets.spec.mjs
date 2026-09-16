@@ -140,3 +140,58 @@ test('native temperature preference overrides browser region in automatic mode',
     'Automatic (°F)'
   );
 });
+test('a saved phone location keeps its forecast when the device declines a silent refresh, and a restored backup applies live', async ({
+  page: p,
+}) => {
+  await p.addInitScript(() => {
+    // The native bridge answers silent refreshes like iOS does before access is granted.
+    window.webkit = {
+      messageHandlers: {
+        weatherDevice: {
+          postMessage: async body => {
+            if (body.action === 'locale') return { unit: 'c', locale: 'en_GB' };
+            if (!body.requestPermission)
+              throw Error('Tap Use phone location to allow location access.');
+            return { lat: 30.33, lon: -97.96, name: 'Lakeway' };
+          },
+        },
+      },
+    };
+    localStorage.setItem(
+      'omarchy-weather-location',
+      JSON.stringify({
+        name: 'Lakeway',
+        lat: 30.33,
+        lon: -97.96,
+        source: 'phone',
+        locatedAt: Date.now() - 3600000,
+      })
+    );
+  });
+  await p.route('**/api/widgets', r =>
+    r.fulfill({ json: { metrics, tailscale: { state: 'Running', peers: [] } } })
+  );
+  const requests = [];
+  await p.route('**/api/widgets/weather?*', r => {
+    requests.push(r.request().url());
+    return r.fulfill({ json: weather });
+  });
+  await p.goto('/native/');
+  await expect(p.locator('#widget-weather')).toContainText('Lakeway');
+  await expect(p.locator('#widget-weather')).toContainText('20°');
+  await expect(p.locator('#widget-weather')).not.toContainText('Tap Use phone location');
+  expect(requests[0]).toContain('lat=30.33&lon=-97.96');
+  // persistence.js writes a restored host backup straight into storage.
+  await p.evaluate(() =>
+    HyprlandUtil.storage.write('omarchy-weather-location', {
+      name: 'Chicago',
+      lat: 41.85,
+      lon: -87.65,
+      source: 'city',
+    })
+  );
+  await expect(p.locator('#widget-weather')).toContainText('Chicago');
+  await expect.poll(() => requests.at(-1)).toContain('lat=41.85&lon=-87.65');
+  await p.evaluate(() => HyprlandUtil.storage.write('omarchy-weather-unit-mode', 'f'));
+  await expect(p.locator('#widget-weather')).toContainText('68°');
+});
