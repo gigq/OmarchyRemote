@@ -350,7 +350,7 @@
     <sc-for list="{{ kbRows }}" as="r" hint-placeholder-count="4"><div style="display:flex;gap:5px;margin-bottom:6px"><sc-for list="{{ r.keys }}" as="k" hint-placeholder-count="10"><button type="button" class="touch-key" aria-label="{{ k.l }}" sc-camel-on-pointer-down="{{ k.down }}" sc-camel-on-pointer-up="{{ keyEnd }}" sc-camel-on-pointer-cancel="{{ keyEnd }}" sc-camel-on-lost-pointer-capture="{{ keyEnd }}" sc-camel-on-click="{{ k.click }}" style="border:0;padding:0;min-width:0;font-family:inherit;touch-action:none;flex: {{ k.w }};height:42px;border-radius:8px;display:grid;place-items:center;font-size: {{ k.fs }};background: {{ k.bg }};color: {{ k.c }};cursor:pointer;transition:background .2s,color .2s">{{ k.l }}</button></sc-for></div></sc-for>
   </div>
 
-  <div class="shell-overlay" style="position:absolute;left:0;right:0;top:52px;z-index:14;background:color-mix(in srgb, var(--theme-surface) 96%, transparent);border:1px solid var(--theme-border);border-top:0;border-radius:0 0 28px 28px;visibility: {{ launchVisibility }};transform: {{ launchTf }};transition: {{ tr }};padding:12px 14px 14px;display:flex;flex-direction:column;gap:6px">
+  <div class="shell-overlay" style="position:absolute;left:0;right:0;top:52px;z-index:14;background:color-mix(in srgb, var(--theme-terminal) 96%, transparent);border:1px solid var(--theme-border);border-top:0;border-radius:0 0 28px 28px;box-shadow:0 20px 60px rgba(0,0,0,.5);visibility: {{ launchVisibility }};transform: {{ launchTf }};transition: {{ tr }};padding:12px 14px 14px;display:flex;flex-direction:column;gap:6px">
     <div id="dashboard-launcher"></div>
   </div>
 

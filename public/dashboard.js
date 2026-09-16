@@ -307,21 +307,41 @@
     }
     buildLauncher() {
       const line = el('div', 'launcher-search-line');
+      // The search is a prompt field: ❯ prefix, accent ring on focus, an `esc` keycap beside it.
+      const field = el('div', 'prompt-field launcher-field');
       this.field = el('input', 'dashboard-search');
       this.field.type = 'search';
-      this.field.placeholder = 'apps, panes, files…';
       this.field.setAttribute('aria-label', 'Search apps, panes and files');
       this.field.autocapitalize = 'none';
       this.field.autocomplete = 'off';
       this.field.spellcheck = false;
       this.field.setAttribute('autocorrect', 'off');
+      field.append(el('span', 'prompt-prefix', '❯'), this.field);
       line.append(
-        el('span', '', '›'),
-        this.field,
-        this.button('esc', () => this.logic.set({ launch: false, kb: false, query: '' }))
+        field,
+        this.button('esc', () => this.logic.set({ launch: false, kb: false, query: '' }), 'keycap')
       );
       this.results = el('div', 'dashboard-results');
-      this.hint = el('div', 'dashboard-muted launcher-hint', '/ files   @ panes   > snippets');
+      this.hint = el('div', 'launcher-hint');
+      for (const [prefix, label] of [
+        ['/', 'files'],
+        ['@', 'panes'],
+        ['>', 'snippets'],
+      ]) {
+        const chip = this.button(
+          '',
+          () => {
+            this.field.value = prefix;
+            this.field.focus();
+            this.field.oninput();
+          },
+          'keycap small launcher-scope'
+        );
+        chip.append(el('span', 'launcher-scope-prefix', prefix), label);
+        chip.setAttribute('aria-label', `Search ${label}`);
+        this.hint.append(chip);
+      }
+      this.hint.append(el('span', 'launcher-keys', '↑↓ · ⏎'));
       this.launch.append(line, this.results, this.hint);
       this.field.oninput = () => {
         ++this.seq;
@@ -346,12 +366,28 @@
         mode = raw[0],
         q = raw.replace(/^[@/>]\s*/, '').toLowerCase();
       this.results.replaceChildren();
+      // Rows: a cursor bar marks the selection, a glyph carries the app's tile color,
+      // and a kbd chip shows the SUPER binding (⏎ on the selected row).
       const add = (heading, items) => {
         if (!items.length) return;
         this.results.append(el('div', 'launcher-group', heading));
         for (const item of items.slice(0, 6)) {
           const b = this.button('', item.run, 'launcher-result');
-          b.append(el('strong', '', item.name), el('span', 'dashboard-muted', item.detail));
+          const body = el('div', 'launcher-body'),
+            name = el('strong', '');
+          if (item.glyph) {
+            const g = el('span', 'nf launcher-glyph', item.glyph);
+            g.style.color = item.color || '';
+            name.append(g);
+          }
+          name.append(el('span', 'launcher-name', item.name));
+          const detail = el('span', 'dashboard-muted');
+          if (item.detail instanceof Node) detail.append(item.detail);
+          else detail.textContent = item.detail;
+          body.append(name, detail);
+          b.append(el('i', 'launcher-mark'), body);
+          const first = !this.results.querySelector('.launcher-result');
+          b.append(el('span', 'kbd launcher-key', first ? '⏎' : item.key || ''));
           this.results.append(b);
         }
       };
@@ -362,7 +398,10 @@
             .filter(([k, a]) => (a.name + ' ' + a.description).toLowerCase().includes(q))
             .map(([k, a]) => ({
               name: a.name,
-              detail: a.description,
+              detail: k === 'herdr' ? this.herdrDetail(a.description) : a.description,
+              glyph: a.icon || a.glyph,
+              color: a.color,
+              key: (k => (k ? 'super ' + k : ''))(a.superKeys.find(x => /^[a-z]$/.test(x))),
               run: () => this.logic.openApp(k),
             }))
         );
@@ -374,6 +413,8 @@
             .map(p => ({
               name: title(p),
               detail: (p.agent || 'shell') + ' · ' + p.agent_status,
+              glyph: this.logic.APPS.herdr?.icon,
+              color: this.logic.APPS.herdr?.color,
               run: () => this.openPane(p),
             }))
         );
@@ -435,6 +476,16 @@
       }
       if (seq === this.seq && !this.results.children.length)
         this.results.append(el('p', 'dashboard-empty', 'No matches.'));
+    }
+    // "agents · herdr · 2 running" with the running count in accent.
+    herdrDetail(description) {
+      const running = this.panes().filter(p =>
+        /working|running|progress|busy/.test(p.agent_status || '')
+      ).length;
+      if (!running) return description;
+      const frag = document.createDocumentFragment();
+      frag.append(description + ' · ', el('em', 'launcher-running', running + ' running'));
+      return frag;
     }
     update() {
       if (this.pending && this.logic.cur() === this.pending.key) {
