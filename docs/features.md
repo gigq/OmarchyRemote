@@ -66,4 +66,4 @@ Theme selection lives in Settings and persists on the device (`omarchy-theme`). 
 
 The standalone build's service worker caches only known app files, rejects redirected install responses, and activates a new version after old app windows close. Close all app windows and reopen to pick up an update. A PWA cannot defer iOS system gestures; the native app can.
 
-Development views reload after source changes, including atomic file replacements. The host checks sources every 750 ms and publishes a reload only after native assets regenerate successfully; a failed regeneration is retried.
+Development views reload after source changes, including atomic file replacements. The host checks sources every 750 ms and publishes a reload only after native assets regenerate successfully; a failed regeneration is retried once, then waits for the next source change.

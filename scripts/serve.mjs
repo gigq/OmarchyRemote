@@ -71,7 +71,9 @@ prepareNative();
 function sendVersion(client) {
   client.write(`event: version\ndata: ${version}\n\n`);
 }
-function changed() {
+// A failed regeneration (for example a half-written file) is retried once; after that the
+// poller's next source change triggers the next attempt, so a broken source cannot spin.
+function changed(retry = true) {
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(() => {
     try {
@@ -81,7 +83,7 @@ function changed() {
       console.log(`Reload ${version}: ${clients.size} connected preview(s)`);
     } catch (error) {
       console.error('Native preparation failed; preserving current previews:', error.message);
-      changed();
+      if (retry) changed(false);
     }
   }, 180);
 }
