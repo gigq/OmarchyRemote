@@ -215,21 +215,33 @@
       full: s.full,
     });
   }
+  function key(label, fn, aria, icon, cls = '') {
+    const b = button(label, fn, 'keycap ' + cls);
+    if (icon) {
+      const glyph = node('span', 'nf', icon);
+      glyph.setAttribute('aria-hidden', 'true');
+      b.prepend(glyph);
+    }
+    b.setAttribute('aria-label', aria || label);
+    return b;
+  }
   function settings(root) {
-    const section = node('section', 'device-settings');
+    const section = node('section', 'device-settings legend');
     section.setAttribute('aria-label', 'Device settings');
-    section.append(node('h2', '', 'This device'));
+    const state = node('span', 'legend-meta device-state');
+    state.setAttribute('role', 'status');
+    section.append(node('span', 'legend-title', 'this device'), state);
     const row = node('form', 'device-name-form'),
-      label = node('label', '', 'Device name'),
+      field = node('label', 'prompt-field device-field'),
       input = node('input');
     input.value = name;
     input.maxLength = 80;
     input.required = true;
     input.setAttribute('aria-label', 'Device name');
-    label.append(input);
-    const save = button('Save', () => {});
+    const save = key('save', () => {}, 'Save', null, 'small');
     save.type = 'submit';
-    row.append(label, save);
+    field.append(node('span', 'prompt-label', 'name'), input, save);
+    row.append(field);
     row.onsubmit = e => {
       e.preventDefault();
       if (!input.value.trim()) return;
@@ -237,32 +249,46 @@
       storage.set('omarchy-device-name', name);
       sync();
     };
-    const state = node('p', 'theme-note');
-    state.setAttribute('role', 'status');
+    const problem = node('p', 'theme-note device-problem');
     const paint = () => {
-      state.textContent = status + (lastError ? ' · ' + lastError : '');
+      state.textContent = status.toLowerCase();
+      state.classList.toggle('device-ok', status === 'Backed up');
+      problem.textContent = lastError;
     };
     window.addEventListener('hyprland-sync-status', paint);
     paint();
     const actions = node('div', 'device-actions'),
       backups = node('div', 'device-backups');
     actions.append(
-      button('Back up now', sync),
-      button('Reload saved settings', () => location.reload()),
-      button('Restore a device backup', async () => {
-        backups.replaceChildren(node('p', 'theme-note', 'Loading backups…'));
-        try {
-          const data = await request('/devices');
-          backups.replaceChildren();
-          for (const d of data.devices) {
-            const date = new Date(d.updated_at * 1000).toLocaleString();
-            backups.append(button(`${d.name} · ${date}`, () => confirmRestore(d)));
+      key('back up now', sync, 'Back up now', '\uf093'),
+      key('reload saved', () => location.reload(), 'Reload saved settings', '\uf021'),
+      key(
+        'restore…',
+        async () => {
+          backups.replaceChildren(node('p', 'theme-note', 'Loading backups…'));
+          try {
+            const data = await request('/devices');
+            backups.replaceChildren();
+            for (const d of data.devices) {
+              const date = new Date(d.updated_at * 1000).toLocaleString();
+              backups.append(
+                key(
+                  `${d.name} · ${date}`,
+                  () => confirmRestore(d),
+                  null,
+                  null,
+                  'small device-backup'
+                )
+              );
+            }
+            if (!data.devices.length) backups.append(node('p', 'theme-note', 'No backups yet.'));
+          } catch (e) {
+            backups.replaceChildren(node('p', 'theme-note', e.message));
           }
-          if (!data.devices.length) backups.append(node('p', 'theme-note', 'No backups yet.'));
-        } catch (e) {
-          backups.textContent = e.message;
-        }
-      })
+        },
+        'Restore a device backup',
+        '\uf019'
+      )
     );
     function confirmRestore(d) {
       backups.replaceChildren(
@@ -272,24 +298,32 @@
           `Replace this device’s appearance, Home layout, widgets and window arrangement with “${d.name}”? Shared apps and website logins stay as they are.`
         )
       );
-      backups.append(
-        button('Cancel', () => backups.replaceChildren()),
-        button('Restore and reload', async () => {
-          try {
-            const data = await request('/devices/' + d.id);
-            if (!data.revision) throw Error('Backup no longer exists');
-            writeValues(data.values);
-            await sync();
-            if (Object.keys(changed(snapshot(), ack?.values || {})).length) await sync();
-            if (lastError) throw Error(lastError);
-            location.reload();
-          } catch (e) {
-            state.textContent = e.message;
-          }
-        })
+      const choice = node('div', 'device-confirm');
+      choice.append(
+        key('cancel', () => backups.replaceChildren(), 'Cancel', null, 'small'),
+        key(
+          'restore and reload',
+          async () => {
+            try {
+              const data = await request('/devices/' + d.id);
+              if (!data.revision) throw Error('Backup no longer exists');
+              writeValues(data.values);
+              await sync();
+              if (Object.keys(changed(snapshot(), ack?.values || {})).length) await sync();
+              if (lastError) throw Error(lastError);
+              location.reload();
+            } catch (e) {
+              problem.textContent = e.message;
+            }
+          },
+          'Restore and reload',
+          null,
+          'small accent'
+        )
       );
+      backups.append(choice);
     }
-    section.append(row, state, actions, backups);
+    section.append(row, problem, actions, backups);
     root.append(section);
   }
   window.HyprlandPreferences = {

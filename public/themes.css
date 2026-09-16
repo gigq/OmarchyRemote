@@ -23,20 +23,27 @@
   overscroll-behavior: contain;
   touch-action: pan-y;
   padding: 0 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  font-size: 12px;
 }
-.theme-settings header {
-  padding: 0 4px 22px;
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  padding: 0 2px;
+  flex: none;
 }
-.theme-eyebrow {
-  color: var(--theme-accent);
-  font-size: 11px;
+.settings-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
 }
-.theme-settings h1 {
-  font:
-    500 20px 'JetBrains Mono',
-    monospace;
-  letter-spacing: -1px;
-  margin: 14px 0 6px;
+.settings-host {
+  font-size: 10px;
+  color: var(--theme-dim);
 }
 .theme-settings p {
   color: var(--theme-secondary);
@@ -44,48 +51,51 @@
   line-height: 1.6;
   margin: 0;
 }
-.theme-current {
-  display: flex;
-  justify-content: space-between;
-  padding-top: 22px;
-  font-size: 12px;
+.theme-settings .legend {
+  flex: none;
+  padding: 16px 12px 12px;
+  background: color-mix(in srgb, var(--theme-surface) 22%, transparent);
+}
+.theme-settings .legend-meta.settings-current {
   color: var(--theme-secondary);
 }
-.theme-current strong {
-  font-weight: 500;
-  color: var(--theme-foreground);
-}
-.theme-grid {
+.theme-grid,
+.background-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
 }
-.theme-choice {
+.theme-choice,
+.background-choice {
   text-align: left;
   min-width: 0;
-  padding: 5px;
+  padding: 4px;
   border: 1px solid var(--theme-border);
-  border-radius: 13px;
-  background: var(--theme-surface);
-  color: var(--theme-foreground);
+  border-radius: 12px;
+  background: var(--theme-terminal);
+  color: var(--theme-secondary);
   font:
     11px 'JetBrains Mono',
     monospace;
   cursor: pointer;
   touch-action: pan-y;
+  overflow: hidden;
 }
-.theme-choice[aria-pressed='true'] {
-  border: 2px solid var(--theme-accent);
-  padding: 4px;
+.theme-choice[aria-pressed='true'],
+.background-choice[aria-pressed='true'] {
+  border-color: var(--theme-accent);
+  background: var(--theme-surface-raised);
+  color: var(--theme-foreground);
 }
-.theme-choice:focus-visible {
+.theme-choice:focus-visible,
+.background-choice:focus-visible {
   outline: 2px solid var(--theme-accent);
   outline-offset: 3px;
 }
 .theme-preview {
-  height: 70px;
+  height: 58px;
   border-radius: 8px;
-  padding: 12px;
+  padding: 10px;
   background: var(--preview-bg);
   color: var(--preview-fg);
   box-sizing: border-box;
@@ -95,28 +105,32 @@
 }
 .theme-swatches {
   display: flex;
-  gap: 4px;
-  margin-top: 12px;
+  gap: 3px;
+  margin-top: 10px;
 }
 .theme-swatches i {
   flex: 1;
-  height: 7px;
+  height: 6px;
   border-radius: 2px;
 }
-.theme-label {
+.settings-card-label {
   display: flex;
   justify-content: space-between;
   gap: 4px;
   align-items: center;
-  min-height: 36px;
-  padding: 2px 5px;
+  min-height: 30px;
+  padding: 0 5px;
 }
-.theme-check {
-  color: var(--theme-accent);
+.settings-card-label span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-check {
+  color: var(--theme-green);
 }
 .theme-settings .theme-note {
   font-size: 10px;
-  padding: 20px 4px 0;
 }
 
 /* Installed Omarchy wallpapers and its default active/inactive window opacity. */
@@ -143,54 +157,18 @@
 #touch-shell .shell-topbar {
   background: color-mix(in srgb, var(--theme-background) 88%, transparent) !important;
 }
-.background-picker {
-  margin: 22px 0;
-  padding: 20px 0;
-  border-top: 1px solid var(--theme-border);
-}
-.background-picker h2 {
-  font:
-    500 15px 'JetBrains Mono',
-    monospace;
-  margin: 0 0 8px;
-}
-.background-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 10px;
-}
-.background-choice {
-  padding: 4px;
-  border: 2px solid transparent;
-  border-radius: 12px;
-  background: var(--theme-surface);
-  color: var(--theme-foreground);
-  font:
-    11px 'JetBrains Mono',
-    monospace;
-  text-align: left;
-  cursor: pointer;
-  overflow: hidden;
-  min-width: 0;
-}
-.background-choice[aria-pressed='true'] {
-  border-color: var(--theme-accent);
-}
 .background-choice img,
 .background-swatch {
   display: block;
   width: 100%;
-  height: 84px;
+  height: 70px;
   object-fit: cover;
-  border-radius: 7px;
+  border-radius: 8px;
   background: var(--theme-background);
 }
-.background-choice span:last-child {
-  display: block;
-  padding: 8px 3px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.background-choice .settings-card-label {
+  padding: 8px 5px 2px;
+  min-height: 0;
 }
 #touch-shell [data-workspace].native-surface-visible {
   background: transparent !important;
@@ -229,50 +207,71 @@ html:not(.desk-mode) #touch-shell:not(.expo-mode) [data-workspace]::before {
 }
 
 .device-settings {
-  margin-top: 24px;
-  border-top: 1px solid var(--theme-border);
-  padding-top: 12px;
-}
-.device-settings h2 {
-  font-size: 16px;
-}
-.device-name-form {
   display: flex;
+  flex-direction: column;
   gap: 8px;
-  align-items: end;
 }
-.device-name-form label {
+.device-settings .legend-meta {
+  color: var(--theme-secondary);
+}
+.device-settings .legend-meta.device-ok {
+  color: var(--theme-green);
+}
+.device-field {
+  padding-right: 6px;
+}
+.device-field > input {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
-}
-.device-name-form input {
-  display: block;
-  box-sizing: border-box;
-  width: 100%;
-  margin-top: 6px;
-  background: var(--theme-surface);
+  background: transparent;
+  border: 0;
   color: var(--theme-foreground);
-  border: 1px solid var(--theme-border);
-  border-radius: 10px;
-  padding: 10px;
-  font: 16px system-ui;
+  font:
+    12px 'JetBrains Mono',
+    monospace;
   user-select: text;
+  -webkit-user-select: text;
+  outline: none;
 }
-.device-actions,
+.device-field > .keycap {
+  flex: none;
+}
+.device-problem:empty {
+  display: none;
+}
+.device-actions {
+  display: flex;
+  gap: 6px;
+}
+.device-actions > .keycap {
+  flex: 1;
+  height: 36px;
+  padding: 0 8px;
+  gap: 6px;
+}
+.device-actions > .keycap > .nf {
+  color: var(--theme-accent);
+}
 .device-backups {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
+  flex-direction: column;
+  gap: 6px;
 }
-.device-backups button {
+.device-backups:empty {
+  display: none;
+}
+.device-backup {
+  justify-content: flex-start;
+  height: 32px;
+  white-space: normal;
   text-align: left;
   overflow-wrap: anywhere;
 }
-.device-backups p {
-  width: 100%;
+.device-confirm {
+  display: flex;
+  gap: 6px;
 }
-.device-settings button {
-  font-size: 12px;
+.device-confirm > .keycap {
+  flex: 1;
+  height: 32px;
 }

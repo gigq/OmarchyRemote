@@ -46,29 +46,52 @@
         HyprlandUtil.storage.write('omarchy-wallpapers', wallpapers);
       } catch {}
     }
-    document
-      .querySelectorAll('[data-background-choice]')
-      .forEach(b => b.setAttribute('aria-pressed', String(b.dataset.backgroundChoice === value)));
+    document.querySelectorAll('[data-background-choice]').forEach(b => {
+      const on = b.dataset.backgroundChoice === value;
+      b.setAttribute('aria-pressed', String(on));
+      b.querySelector('.settings-check').textContent = on ? '✓' : '';
+    });
+  }
+  function card(cls, name) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = cls;
+    b.setAttribute('aria-label', name);
+    const label = document.createElement('div');
+    label.className = 'settings-card-label';
+    const text = document.createElement('span');
+    text.textContent = name;
+    const check = document.createElement('span');
+    check.className = 'settings-check';
+    check.setAttribute('aria-hidden', 'true');
+    label.append(text, check);
+    return { button: b, label };
+  }
+  function legend(cls, title) {
+    const panel = document.createElement('section');
+    panel.className = cls + ' legend';
+    const head = document.createElement('span');
+    head.className = 'legend-title';
+    head.textContent = title;
+    const meta = document.createElement('span');
+    meta.className = 'legend-meta';
+    panel.append(head, meta);
+    return { panel, meta };
   }
   function drawBackgrounds() {
     const grid = document.querySelector('.background-grid');
     if (!grid) return;
     grid.replaceChildren();
     for (const item of [{ id: 'none', name: 'Solid color' }, ...(current.backgrounds || [])]) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'background-choice';
+      const { button: b, label } = card('background-choice', item.name);
       b.dataset.backgroundChoice = item.id;
-      b.setAttribute('aria-label', item.name);
       const preview = document.createElement(item.thumbnail ? 'img' : 'span');
       if (item.thumbnail) {
         preview.src = assetURL(item.thumbnail);
         preview.alt = '';
         preview.loading = 'lazy';
       } else preview.className = 'background-swatch';
-      const name = document.createElement('span');
-      name.textContent = item.name;
-      b.append(preview, name);
+      b.append(preview, label);
       b.onclick = () => background(item.id);
       grid.append(b);
     }
@@ -162,25 +185,40 @@
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute('content', current.colors.background);
     document.querySelectorAll('[data-theme-name]').forEach(n => (n.textContent = current.name));
+    document
+      .querySelectorAll('[data-theme-for]')
+      .forEach(n => (n.textContent = 'for ' + current.name));
     document.querySelectorAll('[data-theme-choice]').forEach(b => {
       const selected = b.dataset.themeChoice === current.id;
       b.setAttribute('aria-pressed', String(selected));
-      b.querySelector('.theme-check').textContent = selected ? '✓' : '';
+      b.querySelector('.settings-check').textContent = selected ? '✓' : '';
     });
   }
   function attach(host) {
     host = host || [...document.querySelectorAll('#theme-settings')].find(n => !n.closest('x-dc'));
     if (!host || host.childElementCount) return;
-    host.innerHTML = `<header><div class="theme-current">Current <strong data-theme-name></strong></div></header><div class="theme-grid" role="group" aria-label="Choose a theme"></div>`;
-    window.HyprlandPreferences?.settings(host);
-    const grid = host.querySelector('.theme-grid');
+    const head = document.createElement('header');
+    head.className = 'settings-head';
+    const title = document.createElement('h2');
+    title.textContent = 'Settings';
+    const hostName = document.createElement('span');
+    hostName.className = 'settings-host';
+    const paintHost = () => (hostName.textContent = window.HyprlandApps?.host?.name || '');
+    document.addEventListener('hyprland-host', paintHost);
+    paintHost();
+    head.append(title, hostName);
+    const themes = legend('theme-panel', 'theme');
+    themes.meta.dataset.themeName = '';
+    themes.meta.classList.add('settings-current');
+    const grid = document.createElement('div');
+    grid.className = 'theme-grid';
+    grid.setAttribute('role', 'group');
+    grid.setAttribute('aria-label', 'Choose a theme');
+    themes.panel.append(grid);
     for (const t of catalog) {
       const c = t.colors,
-        b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'theme-choice';
+        { button: b, label } = card('theme-choice', t.name);
       b.dataset.themeChoice = t.id;
-      b.setAttribute('aria-label', t.name);
       b.style.setProperty('--preview-bg', c.background);
       b.style.setProperty('--preview-fg', c.foreground);
       b.style.setProperty('--preview-accent', c.accent);
@@ -198,14 +236,6 @@
         bars.append(swatch);
       }
       preview.append(bars);
-      const label = document.createElement('div');
-      label.className = 'theme-label';
-      const name = document.createElement('span');
-      name.textContent = t.name;
-      const check = document.createElement('span');
-      check.className = 'theme-check';
-      check.setAttribute('aria-hidden', 'true');
-      label.append(name, check);
       b.append(preview, label);
       b.onclick = e => {
         e.stopPropagation();
@@ -213,11 +243,15 @@
       };
       grid.append(b);
     }
-    const picker = document.createElement('section');
-    picker.className = 'background-picker';
-    picker.innerHTML =
-      '<h2>Background</h2><p class="theme-note">Choose a background for this theme.</p><div class="background-grid" role="group" aria-label="Choose a background"></div>';
-    host.querySelector('.theme-grid').before(picker);
+    const picker = legend('background-picker', 'background');
+    picker.meta.dataset.themeFor = '';
+    const backgrounds = document.createElement('div');
+    backgrounds.className = 'background-grid';
+    backgrounds.setAttribute('role', 'group');
+    backgrounds.setAttribute('aria-label', 'Choose a background');
+    picker.panel.append(backgrounds);
+    host.append(head, themes.panel, picker.panel);
+    window.HyprlandPreferences?.settings(host);
     drawBackgrounds();
     // Let native scrolling own this surface without triggering workspace swipes.
     for (const type of ['pointerdown', 'touchstart', 'touchmove', 'touchend'])
