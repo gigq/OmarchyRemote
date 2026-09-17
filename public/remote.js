@@ -734,9 +734,9 @@
       this.backButton.setAttribute('aria-label', 'All panes');
       this.backButton.classList.add('herdr-back', 'keycap');
       this.paneTabs = node('div', 'herdr-pane-tabs');
-      const center = node('div', 'herdr-detail-center');
-      center.append(this.title, this.paneTabs);
-      this.detailBar.append(this.backButton, center, this.filePicker);
+      this.detailCenter = node('div', 'herdr-detail-center');
+      this.detailCenter.append(this.title, this.paneTabs);
+      this.detailBar.append(this.backButton, this.detailCenter, this.filePicker);
       this.output = node('div', 'herdr-output');
       this.canvas = node('div', 'herdr-canvas');
       // Fit and ↓ Latest float inside the output panel's bottom-right corner.
@@ -808,6 +808,18 @@
         if (this.lastRead) this.renderOutput(this.lastRead, true);
       });
       this.resizeObserver.observe(this.output);
+      // Wide tiles stack the pane tabs in a sidebar, as the Herdr TUI does.
+      this.railObserver = new ResizeObserver(() => this.placeTabs(root.clientWidth >= 700));
+      this.railObserver.observe(root);
+    }
+    placeTabs(rail) {
+      if (rail !== this.rail) {
+        this.rail = rail;
+        this.detail.classList.toggle('herdr-rail', rail);
+        if (rail) this.detail.prepend(this.paneTabs);
+        else this.detailCenter.append(this.paneTabs);
+      }
+      this.title.hidden = !this.paneTabs.hidden && !this.rail;
     }
     connect() {
       if (this.disposed || this.ws?.readyState === 0 || this.ws?.readyState === 1) return;
@@ -1023,7 +1035,7 @@
           .map(id => this.snapshot.panes.find(p => p.pane_id === id))
           .find(p => p && p.workspace_id !== pane.workspace_id);
         this.paneTabs.hidden = siblings.length <= 1 && !recent && !this.bridge.logic.state.desk;
-        this.title.hidden = !this.paneTabs.hidden;
+        this.title.hidden = !this.paneTabs.hidden && !this.rail;
         for (const p of siblings) {
           const b = button(this.paneLabel(p), () => this.select(p.pane_id));
           b.prepend(this.stateDot(p));
@@ -1274,6 +1286,7 @@
       clearTimeout(this.retry);
       this.ws?.close();
       this.resizeObserver.disconnect();
+      this.railObserver.disconnect();
       this.stopTouchScroll();
       this.nativeInput.dispose();
       this.term.dispose();

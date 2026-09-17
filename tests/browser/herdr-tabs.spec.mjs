@@ -46,9 +46,21 @@ for (const viewport of [
       back = await p.getByRole('button', { name: 'All panes', exact: true }).boundingBox(),
       output = await p.locator('.herdr-output').boundingBox(),
       fit = await p.getByRole('button', { name: 'Fit to Phone', exact: true }).boundingBox();
-    expect(row.x).toBeGreaterThanOrEqual(back.x + back.width);
-    expect(row.x + row.width).toBeLessThanOrEqual(bar.x + bar.width + 0.5);
-    expect(Math.abs(row.y + row.height / 2 - (back.y + back.height / 2))).toBeLessThan(2);
+    if (viewport.width > 600) {
+      // A wide tile stacks the same groups in a sidebar beside the output.
+      expect(row.x + row.width).toBeLessThanOrEqual(back.x);
+      expect(row.y).toBeLessThanOrEqual(bar.y + 0.5);
+      expect(row.y + row.height).toBeGreaterThanOrEqual(output.y + output.height - 0.5);
+      const one = await tabs.getByRole('button', { name: 'Herd one', exact: true }).boundingBox(),
+        two = await tabs.getByRole('button', { name: 'Herd two', exact: true }).boundingBox();
+      expect(Math.abs(one.x - two.x)).toBeLessThan(1);
+      expect(two.y).toBeGreaterThanOrEqual(one.y + one.height);
+      await expect(p.locator('.herdr-pane-title')).toHaveText('Herd one');
+    } else {
+      expect(row.x).toBeGreaterThanOrEqual(back.x + back.width);
+      expect(row.x + row.width).toBeLessThanOrEqual(bar.x + bar.width + 0.5);
+      expect(Math.abs(row.y + row.height / 2 - (back.y + back.height / 2))).toBeLessThan(2);
+    }
     // Fit floats inside the output panel rather than crowding the tab row.
     expect(fit.y).toBeGreaterThan(output.y);
     expect(fit.y + fit.height).toBeLessThanOrEqual(output.y + output.height);

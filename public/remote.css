@@ -648,6 +648,64 @@
   margin: 0 4px;
   background: var(--theme-border);
 }
+/* Wide tiles: the same tab groups stand in a sidebar beside the output, as in the Herdr TUI. */
+.herdr-detail.herdr-rail {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  column-gap: 10px;
+}
+.herdr-detail.herdr-rail > .herdr-detail-bar {
+  grid-area: 1 / 2;
+}
+.herdr-detail.herdr-rail > .herdr-metadata {
+  grid-area: 2 / 2;
+}
+.herdr-detail.herdr-rail > .herdr-output {
+  grid-area: 3 / 2;
+}
+.herdr-detail.herdr-rail > .herdr-input-bar {
+  grid-area: 4 / 2;
+}
+.herdr-detail.herdr-rail > .herdr-prompt-row {
+  grid-area: 5 / 2;
+}
+.herdr-detail.herdr-rail > .herdr-pane-tabs {
+  grid-area: 1 / 1 / 6 / 2;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 6px;
+  overflow: hidden auto;
+  touch-action: pan-y;
+  border-radius: 14px;
+  mask-image: none;
+  -webkit-mask-image: none;
+}
+.herdr-detail.herdr-rail > .herdr-pane-tabs > button {
+  display: block;
+  height: 34px;
+  line-height: 34px;
+  padding: 0 10px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.herdr-detail.herdr-rail > .herdr-pane-tabs > button > .state-dot {
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+.herdr-detail.herdr-rail > .herdr-pane-tabs > .herdr-project-label {
+  align-self: stretch;
+  max-width: none;
+  margin: 0;
+  padding: 8px 10px 4px;
+}
+.herdr-detail.herdr-rail > .herdr-pane-tabs > .herdr-project-divider {
+  align-self: stretch;
+  width: auto;
+  height: 1px;
+  margin: 6px 4px;
+}
 .herdr-output {
   flex: 1;
   min-height: 0;
