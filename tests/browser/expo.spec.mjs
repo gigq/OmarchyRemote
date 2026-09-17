@@ -29,13 +29,13 @@ test('Home-only startup, toss dismissal, long press reorder and protected Home',
   await expo(p);
   let a = await center(card(p, 'settings'));
   await drag(p, a, { x: a.x, y: a.y - 30 });
-  await expect(card(p, 'settings')).toHaveCSS('opacity', '0.985');
+  await expect(card(p, 'settings')).toHaveCSS('opacity', '0.935');
   await drag(p, a, { x: a.x, y: a.y - 115 });
   await expect(card(p, 'settings')).toHaveCSS('opacity', '0');
   await expect(p.locator('#touch-shell')).toHaveClass(/expo-mode/);
   a = await center(card(p, 'home'));
   await drag(p, a, { x: a.x, y: a.y - 115 });
-  await expect(card(p, 'home')).toHaveCSS('opacity', '0.985');
+  await expect(card(p, 'home')).toHaveCSS('opacity', '0.935');
   await card(p, 'home').click();
   await p.getByText('files', { exact: true }).first().click();
   await expo(p);
