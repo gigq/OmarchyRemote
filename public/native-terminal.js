@@ -59,7 +59,10 @@
       this.scroller.setAttribute('aria-label', 'Terminal output');
       this.content = document.createElement('div');
       this.content.className = 'native-terminal-content';
-      this.scroller.append(this.content);
+      // Scroll room for the mouse-tracking trap; empty otherwise.
+      this.spacer = document.createElement('div');
+      this.spacer.className = 'native-terminal-spacer';
+      this.scroller.append(this.content, this.spacer);
       host.append(this.scroller);
       this.edges = ['left', 'right'].map(side => {
         const edge = document.createElement('div');
@@ -85,6 +88,10 @@
       listen(
         'scroll',
         () => {
+          if (this.trapped) {
+            this.trap();
+            return;
+          }
           if (
             this.expected !== undefined &&
             Math.abs(this.scroller.scrollTop - this.expected) < 1
@@ -120,9 +127,9 @@
         e => {
           this.finger = true;
           this.touchStarted = performance.now();
-          this.startY = this.lastY = e.touches[0]?.clientY;
+          this.startY = e.touches[0]?.clientY;
           this.startX = e.touches[0]?.clientX;
-          this.wheelDelta = 0;
+          this.pointer = { x: this.startX, y: this.startY };
           this.moved = this.busy;
           e.stopPropagation();
         },
@@ -131,22 +138,20 @@
       listen(
         'touchmove',
         e => {
-          const { clientX, clientY } = e.touches[0];
-          if (Math.hypot(clientY - this.startY, clientX - this.startX) > 6) this.moved = true;
-          // A tracking app scrolls its own content: swipes turn into wheel ticks.
-          if (this.moved && this.wheel(this.lastY - clientY, clientX, clientY))
-            this.lastY = clientY;
+          if (
+            Math.hypot(e.touches[0].clientY - this.startY, e.touches[0].clientX - this.startX) > 6
+          )
+            this.moved = true;
           e.stopPropagation();
         },
         { passive: true }
       );
       listen(
-        'wheel',
+        'pointermove',
         e => {
-          const delta = e.deltaMode === 1 ? e.deltaY * this.height : e.deltaY;
-          if (this.wheel(delta, e.clientX, e.clientY)) e.preventDefault();
+          if (e.pointerType !== 'touch') this.pointer = { x: e.clientX, y: e.clientY };
         },
-        { passive: false }
+        { passive: true }
       );
       const end = e => {
         this.moved ||= e.type === 'touchcancel' || performance.now() - this.touchStarted >= 350;
@@ -289,7 +294,7 @@
     cell(clientX, clientY) {
       const { term } = this,
         rect = this.content.getBoundingClientRect(),
-        entry = this.layout[Math.floor((clientY - rect.top) / this.height)];
+        entry = this.layout[this.origin() + Math.floor((clientY - rect.top) / this.height)];
       if (!entry) return null;
       const b = term.buffer.active,
         row = entry.source - b.viewportY,
@@ -318,19 +323,54 @@
         false
       );
     }
-    // Vertical movement becomes wheel ticks, one per row, at the cell under the pointer.
-    wheel(deltaY, clientX, clientY) {
-      const mode = this.tracking();
-      if (!mode || mode === 'x10') return false;
-      this.wheelDelta = (this.wheelDelta || 0) + deltaY;
-      const ticks = Math.trunc(this.wheelDelta / this.height);
-      this.wheelDelta -= ticks * this.height;
-      const cell = this.cell(clientX, clientY);
-      if (!cell) return true;
+    // While an app tracks the mouse the scroller becomes a trap: the text is pinned, native
+    // scrolling (finger flings, trackpads, wheels) runs over a tall spacer, every half row of
+    // travel is a wheel tick at the pointer's cell, and the scroller recentres when idle.
+    setTrapped(on) {
+      if (on === this.trapped) return;
+      this.trapped = on;
+      this.scroller.classList.toggle('mouse-tracking', on);
+      if (on) {
+        this.tickDelta = 0;
+        this.resizeTrap();
+      } else {
+        clearTimeout(this.trapTimer);
+        this.spacer.style.height = '0px';
+        const b = this.term.buffer.active;
+        this.target = b.viewportY;
+        this.follow = b.viewportY >= b.baseY;
+      }
+    }
+    resizeTrap() {
+      this.pad = 20 * this.scroller.clientHeight;
+      this.spacer.style.height = `${2 * this.pad}px`;
+      this.recenter();
+    }
+    recenter() {
+      this.trapTop = this.pad;
+      this.scroller.scrollTop = this.pad;
+    }
+    trap() {
+      const delta = this.scroller.scrollTop - this.trapTop;
+      this.trapTop = this.scroller.scrollTop;
+      clearTimeout(this.trapTimer);
+      this.trapTimer = setTimeout(() => this.recenter(), 150);
+      const step = this.height / 2;
+      this.tickDelta += delta;
+      const ticks = Math.trunc(this.tickDelta / step);
+      this.tickDelta -= ticks * step;
+      if (!ticks) return;
+      const rect = this.scroller.getBoundingClientRect(),
+        at = this.pointer || { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+        cell = this.cell(at.x, at.y);
+      if (!cell) return;
       let data = '';
       for (let i = 0; i < Math.abs(ticks); i++) data += this.encode(ticks > 0 ? 65 : 64, 'M', cell);
-      if (data) this.term.input(data, false);
-      return true;
+      this.term.input(data, false);
+    }
+    // First visual row of the pinned screen while trapped; the scroller's own offset otherwise.
+    origin() {
+      return this.trapped ? this.sourceRows[this.term.buffer.active.viewportY] || 0 : 0;
     }
     selecting() {
       const s = window.getSelection();
@@ -376,8 +416,8 @@
         return;
       }
       const screen = term.element.querySelector('.xterm-screen');
-      // While an app tracks the mouse, swipes are its wheel input rather than a native pan.
-      scroller.classList.toggle('mouse-tracking', !!this.tracking());
+      const tracking = this.tracking();
+      this.setTrapped(!!tracking && tracking !== 'x10');
       let dirty = this.dirty;
       this.dirty = false;
       const oldHeight = this.height,
@@ -387,7 +427,13 @@
       dirty ||= oldHeight !== this.height || oldWidth !== this.width;
       const b = term.buffer.active;
       const columns = Math.max(2, Math.floor(scroller.clientWidth / this.width));
-      if (columns !== this.columns && !this.follow && !this.savedAnchor && this.layout.length)
+      if (
+        columns !== this.columns &&
+        !this.follow &&
+        !this.savedAnchor &&
+        this.layout.length &&
+        !this.trapped
+      )
         this.savedAnchor = this.anchor();
       if (dirty || columns !== this.columns || !this.layout.length) {
         this.columns = columns;
@@ -396,8 +442,17 @@
       }
 
       if (this.viewportHeight !== scroller.clientHeight && this.follow) this.target = b.baseY;
+      if (this.trapped && this.viewportHeight !== scroller.clientHeight) this.resizeTrap();
       this.viewportHeight = scroller.clientHeight;
-      content.style.height = `${this.fit ? Math.max(this.layout.length * this.height, scroller.clientHeight) : Math.max(b.length * this.height, b.baseY * this.height + scroller.clientHeight)}px`;
+      const origin = this.origin();
+      if (origin !== this.lastOrigin) dirty = true;
+      this.lastOrigin = origin;
+      if (this.trapped) {
+        this.savedAnchor = null;
+        this.target = undefined;
+        content.style.height = `${Math.max((this.layout.length - origin) * this.height, scroller.clientHeight)}px`;
+      } else
+        content.style.height = `${this.fit ? Math.max(this.layout.length * this.height, scroller.clientHeight) : Math.max(b.length * this.height, b.baseY * this.height + scroller.clientHeight)}px`;
       content.style.width = this.fit ? '100%' : `${term.cols * this.width}px`;
       if (this.savedAnchor) {
         const a = this.savedAnchor;
@@ -428,10 +483,11 @@
         this.target = undefined;
       }
       // Overscan allows the compositor to keep moving existing text between JS updates.
-      const top = Math.max(0, Math.floor(scroller.scrollTop / this.height) - 80),
+      const offset = this.trapped ? origin * this.height : scroller.scrollTop;
+      const top = Math.max(0, Math.floor(offset / this.height) - 80),
         end = Math.min(
           this.layout.length,
-          Math.ceil((scroller.scrollTop + scroller.clientHeight) / this.height) + 80
+          Math.ceil((offset + scroller.clientHeight) / this.height) + 80
         );
       for (const [i, row] of this.rows)
         if (i < top || i >= end) {
@@ -452,7 +508,7 @@
           content.append(row);
           this.rows.set(y, row);
         }
-        row.style.top = `${y * this.height}px`;
+        row.style.top = `${(y - origin) * this.height}px`;
         row.style.height = row.style.lineHeight = `${this.height}px`;
         const runs = [];
         let run;
@@ -517,6 +573,7 @@
       this.listeners.forEach(l => l.dispose());
       cancelAnimationFrame(this.frame);
       clearTimeout(this.idleTimer);
+      clearTimeout(this.trapTimer);
       this.scroller.remove();
       this.edges.forEach(edge => edge.remove());
     }

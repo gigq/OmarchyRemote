@@ -101,8 +101,9 @@
   overflow-anchor: none;
   background: var(--theme-terminal);
 }
-.native-terminal-scroll.mouse-tracking {
-  touch-action: none;
+.native-terminal-scroll.mouse-tracking > .native-terminal-content {
+  position: sticky;
+  top: 0;
 }
 .native-terminal-content,
 .native-terminal-content * {
