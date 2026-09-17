@@ -54,7 +54,8 @@
     }
     paint(key, layout) {
       const card = this.cards[key],
-        c = layout.cards[key];
+        c = layout.cards[key],
+        state = this.logic.state;
       if (!card || !c) return;
       const s = card.style;
       s.width = c.w;
@@ -67,6 +68,8 @@
       card.dataset.active = String(focused);
       s.opacity = Number(c.op) * HyprlandThemes.windowOpacity(focused);
       s.pointerEvents = c.pe;
+      // Keep open phone cards composited between switches so a swipe starts without a re-raster.
+      s.willChange = !state.desk && c.pe === 'auto' ? 'transform, opacity' : 'auto';
       const label = card.querySelector(':scope > .workspace-label');
       if (label) {
         label.style.opacity = c.lab;
