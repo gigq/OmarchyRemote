@@ -30,15 +30,15 @@ for (const viewport of [
     await p.reload();
     await expect(p.locator('html')).toHaveAttribute('data-background', chosen);
     await p.keyboard.press('Meta+Digit1');
-    await expect(p.locator('[data-workspace="home"]').last()).toHaveCSS('opacity', '0.935');
+    await expect(p.locator('[data-workspace="home"]').last()).toHaveCSS('opacity', '0.95');
     await p.keyboard.press('Meta+Enter');
-    await expect(p.locator('[data-workspace="home"]').last()).toHaveCSS('opacity', '0.91');
-    await expect(p.locator('[data-workspace="terminal"]').last()).toHaveCSS('opacity', '0.935');
+    await expect(p.locator('[data-workspace="home"]').last()).toHaveCSS('opacity', '0.92');
+    await expect(p.locator('[data-workspace="terminal"]').last()).toHaveCSS('opacity', '0.95');
     if (viewport.width > 600) {
       await p.keyboard.press('Meta+Shift+A');
-      await expect(p.locator('[data-workspace="terminal"]').last()).toHaveCSS('opacity', '0.91');
+      await expect(p.locator('[data-workspace="terminal"]').last()).toHaveCSS('opacity', '0.92');
       await p.keyboard.press('Meta+ArrowLeft');
-      await expect(p.locator('[data-workspace="terminal"]').last()).toHaveCSS('opacity', '0.935');
+      await expect(p.locator('[data-workspace="terminal"]').last()).toHaveCSS('opacity', '0.95');
     }
     await p.screenshot({ path: `artifacts/browser/background-windows-${viewport.width}.png` });
   });

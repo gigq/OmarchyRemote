@@ -133,10 +133,10 @@
   font-size: 10px;
 }
 
-/* Installed Omarchy wallpapers; window opacity sits 0.05 under Omarchy's defaults for a touch more wallpaper. */
+/* Installed Omarchy wallpapers; window opacity sits a little under Omarchy's defaults for a touch more wallpaper. */
 :root {
-  --window-active-opacity: 0.935;
-  --window-inactive-opacity: 0.91;
+  --window-active-opacity: 0.95;
+  --window-inactive-opacity: 0.92;
   --theme-wallpaper: none;
 }
 #touch-shell {

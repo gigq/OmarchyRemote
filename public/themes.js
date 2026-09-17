@@ -273,7 +273,7 @@
     background,
     attach,
     catalog,
-    windowOpacity: active => (active ? 0.935 : 0.91),
+    windowOpacity: active => (active ? 0.95 : 0.92),
     backgroundRGB: () =>
       current.colors.background
         .slice(1)
