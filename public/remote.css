@@ -646,61 +646,49 @@
   margin: 0 4px;
   background: var(--theme-border);
 }
-/* Wide tiles: the same tab groups stand in a sidebar beside the output, as in the Herdr TUI. */
-.herdr-detail.herdr-rail {
+/* A full-width tile keeps the pane list as a sidebar beside the selected pane. */
+#remote-herdr-app.herdr-split {
   display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
-  column-gap: 10px;
+  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  column-gap: 14px;
 }
-.herdr-detail.herdr-rail > .herdr-detail-bar {
-  grid-area: 1 / 2;
+.herdr-split > .herdr-connection {
+  grid-area: 1 / 1 / 2 / 3;
 }
-.herdr-detail.herdr-rail > .herdr-metadata {
-  grid-area: 2 / 2;
+.herdr-split > .herdr-filters {
+  grid-area: 2 / 1;
 }
-.herdr-detail.herdr-rail > .herdr-output {
-  grid-area: 3 / 2;
+.herdr-split > .herdr-search-field {
+  grid-area: 3 / 1;
 }
-.herdr-detail.herdr-rail > .herdr-input-bar {
-  grid-area: 4 / 2;
+.herdr-split > .herdr-list {
+  grid-area: 4 / 1 / 6 / 2;
+  overflow-x: hidden;
 }
-.herdr-detail.herdr-rail > .herdr-prompt-row {
+#remote-herdr-app.herdr-split .herdr-group {
+  grid-template-columns: minmax(0, 1fr);
+}
+.herdr-split > .herdr-filters > button {
+  padding: 0 6px;
+}
+.herdr-split > .herdr-detail,
+.herdr-split > .herdr-placeholder {
+  grid-area: 2 / 2 / 5 / 3;
+}
+.herdr-split > .native-input-panel {
   grid-area: 5 / 2;
 }
-.herdr-detail.herdr-rail > .herdr-pane-tabs {
-  grid-area: 1 / 1 / 6 / 2;
-  flex-direction: column;
-  align-items: stretch;
-  padding: 6px;
-  overflow: hidden auto;
-  touch-action: pan-y;
-  border-radius: 14px;
+.herdr-split .herdr-pane[aria-current='true'] {
+  background: var(--theme-surface);
 }
-.herdr-detail.herdr-rail > .herdr-pane-tabs > button {
-  display: block;
-  height: 34px;
-  line-height: 34px;
-  padding: 0 10px;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.herdr-detail.herdr-rail > .herdr-pane-tabs > button > .state-dot {
-  margin-right: 6px;
-  vertical-align: 1px;
-}
-.herdr-detail.herdr-rail > .herdr-pane-tabs > .herdr-project-label {
-  align-self: stretch;
-  max-width: none;
+.herdr-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin: 0;
-  padding: 8px 10px 4px;
-}
-.herdr-detail.herdr-rail > .herdr-pane-tabs > .herdr-project-divider {
-  align-self: stretch;
-  width: auto;
-  height: 1px;
-  margin: 6px 4px;
+  border: 1px dashed var(--theme-border);
+  border-radius: 14px;
 }
 .herdr-output {
   flex: 1;

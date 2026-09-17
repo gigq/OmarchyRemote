@@ -3,7 +3,7 @@ for (const viewport of [
   { width: 1194, height: 834 },
   { width: 402, height: 874 },
 ]) {
-  test(`Herd pane tabs share the button row at ${viewport.width}px`, async ({ page: p }) => {
+  test(`Herd pane tabs follow the tile width at ${viewport.width}px`, async ({ page: p }) => {
     await p.setViewportSize(viewport);
     await p.route('**/api/**', r => r.abort());
     let stream;
@@ -35,47 +35,50 @@ for (const viewport of [
     });
     await p.goto('/native/');
     await p.keyboard.press('Meta+Shift+A');
+    const wide = viewport.width > 600;
+    if (wide) await expect(p.locator('.herdr-placeholder')).toBeVisible();
     await p.locator('.herdr-pane').filter({ hasText: 'Herd one' }).click();
-    const tabs = p.locator('.herdr-pane-tabs:visible');
-    await expect(tabs).toBeVisible();
-    if (viewport.width > 600)
-      await expect(tabs.locator('.herdr-project-label')).toHaveText('Tabs QA');
-    else await expect(tabs.locator('.herdr-project-label')).toBeHidden();
-    const row = await tabs.boundingBox(),
-      bar = await p.locator('.herdr-detail-bar').boundingBox(),
-      back = await p.getByRole('button', { name: 'All panes', exact: true }).boundingBox(),
-      output = await p.locator('.herdr-output').boundingBox(),
+    const output = await p.locator('.herdr-output').boundingBox(),
       fit = await p.getByRole('button', { name: 'Fit to Phone', exact: true }).boundingBox();
-    if (viewport.width > 600) {
-      // A wide tile stacks the same groups in a sidebar beside the output.
-      expect(row.x + row.width).toBeLessThanOrEqual(back.x);
-      expect(row.y).toBeLessThanOrEqual(bar.y + 0.5);
-      expect(row.y + row.height).toBeGreaterThanOrEqual(output.y + output.height - 0.5);
-      const one = await tabs.getByRole('button', { name: 'Herd one', exact: true }).boundingBox(),
-        two = await tabs.getByRole('button', { name: 'Herd two', exact: true }).boundingBox();
-      expect(Math.abs(one.x - two.x)).toBeLessThan(1);
-      expect(two.y).toBeGreaterThanOrEqual(one.y + one.height);
+    // Fit floats inside the output panel rather than crowding the tab row.
+    expect(fit.y).toBeGreaterThan(output.y);
+    expect(fit.y + fit.height).toBeLessThanOrEqual(output.y + output.height);
+    const tabs = p.locator(wide ? '.herdr-list' : '.herdr-pane-tabs:visible');
+    const tab = name =>
+      wide
+        ? tabs.locator('.herdr-pane').filter({ hasText: name })
+        : tabs.getByRole('button', { name, exact: true });
+    const current = wide ? 'aria-current' : 'aria-pressed';
+    await expect(tabs).toBeVisible();
+    if (wide) {
+      // A full-width tile keeps the whole list as a sidebar and drops the tab row and back key.
+      await expect(p.locator('.herdr-placeholder')).toBeHidden();
+      await expect(p.locator('.herdr-pane-tabs')).toBeHidden();
+      await expect(p.getByRole('button', { name: 'All panes', exact: true })).toBeHidden();
       await expect(p.locator('.herdr-pane-title')).toHaveText('Herd one');
+      await expect(p.locator('.herdr-search')).toBeVisible();
+      const list = await tabs.boundingBox(),
+        detail = await p.locator('.herdr-detail').boundingBox();
+      expect(list.x + list.width).toBeLessThanOrEqual(detail.x);
+      expect(detail.x + detail.width).toBeGreaterThan(list.x + list.width + 600);
+      await expect(tab('Herd one')).toHaveAttribute('aria-current', 'true');
     } else {
+      await expect(tabs.locator('.herdr-project-label')).toBeHidden();
+      const row = await tabs.boundingBox(),
+        bar = await p.locator('.herdr-detail-bar').boundingBox(),
+        back = await p.getByRole('button', { name: 'All panes', exact: true }).boundingBox();
       expect(row.x).toBeGreaterThanOrEqual(back.x + back.width);
       expect(row.x + row.width).toBeLessThanOrEqual(bar.x + bar.width + 0.5);
       expect(Math.abs(row.y + row.height / 2 - (back.y + back.height / 2))).toBeLessThan(2);
     }
-    // Fit floats inside the output panel rather than crowding the tab row.
-    expect(fit.y).toBeGreaterThan(output.y);
-    expect(fit.y + fit.height).toBeLessThanOrEqual(output.y + output.height);
-    await tabs.getByRole('button', { name: 'Herd two', exact: true }).click();
-    await expect(tabs.getByRole('button', { name: 'Herd two', exact: true })).toHaveAttribute(
-      'aria-pressed',
-      'true'
-    );
+    await tab('Herd two').click();
+    await expect(tab('Herd two')).toHaveAttribute(current, 'true');
+    await expect(tab('Herd one')).toHaveAttribute(current, 'false');
     await expect(p.locator('.herdr-output')).toContainText('Output for two');
-    await expect(tabs.getByRole('button', { name: 'Agent four', exact: true })).toBeVisible();
+    await expect(tab('Agent four')).toBeVisible();
     snapshot.tabs[1].label = 'Renamed in Herd';
     stream.send(JSON.stringify({ type: 'snapshot', snapshot }));
-    await expect(
-      tabs.getByRole('button', { name: 'Renamed in Herd', exact: true })
-    ).toHaveAttribute('aria-pressed', 'true');
+    await expect(tab('Renamed in Herd')).toHaveAttribute(current, 'true');
     await p.locator('.herdr-output').click();
     const composer = p.locator('.herdr-composer');
     await expect(composer).toBeVisible();
@@ -118,7 +121,8 @@ for (const viewport of [
 }
 
 test('last tab from another project is separated and swaps when used', async ({ page: p }) => {
-  await p.setViewportSize({ width: 1194, height: 834 });
+  // A half-width tile keeps the tab row; a full-width tile lists every pane instead.
+  await p.setViewportSize({ width: 660, height: 900 });
   await p.route('**/api/**', r => r.abort());
   const snapshot = {
     workspaces: [

@@ -682,6 +682,11 @@
       this.list = node('div', 'herdr-list');
       this.detail = node('div', 'herdr-detail');
       this.detail.hidden = true;
+      // A full-width tile keeps the list beside the pane, so an empty selection needs a stand-in.
+      this.placeholder = node('p', 'herdr-placeholder remote-empty', 'Choose an agent to follow.');
+      this.placeholder.hidden = true;
+      this.split = false;
+      this.tabsRedundant = true;
       const bar = node('div', 'remote-bar');
       bar.classList.add('herdr-connection');
       bar.append(this.status);
@@ -699,7 +704,7 @@
       searchKey.setAttribute('aria-hidden', 'true');
       this.searchField.append(node('span', 'prompt-prefix', '❯'), this.search, searchKey);
       this.filter = 'all';
-      root.append(bar, this.filters, this.searchField, this.list, this.detail);
+      root.append(bar, this.filters, this.searchField, this.list, this.detail, this.placeholder);
       this.detailBar = node('div', 'herdr-detail-bar');
       this.title = node('div', 'herdr-pane-title');
       this.fitOutput = storage.get('omarchy-herdr-fit') !== 'false';
@@ -808,18 +813,23 @@
         if (this.lastRead) this.renderOutput(this.lastRead, true);
       });
       this.resizeObserver.observe(this.output);
-      // Wide tiles stack the pane tabs in a sidebar, as the Herdr TUI does.
-      this.railObserver = new ResizeObserver(() => this.placeTabs(root.clientWidth >= 700));
-      this.railObserver.observe(root);
+      this.splitObserver = new ResizeObserver(() => this.layout(root.clientWidth >= 700));
+      this.splitObserver.observe(root);
     }
-    placeTabs(rail) {
-      if (rail !== this.rail) {
-        this.rail = rail;
-        this.detail.classList.toggle('herdr-rail', rail);
-        if (rail) this.detail.prepend(this.paneTabs);
-        else this.detailCenter.append(this.paneTabs);
-      }
-      this.title.hidden = !this.paneTabs.hidden && !this.rail;
+    // Wide tiles show the whole pane list as a sidebar in place of the list page.
+    layout(split) {
+      if (split === this.split) return;
+      this.split = split;
+      this.root.classList.toggle('herdr-split', split);
+      this.syncPanels();
+    }
+    syncPanels() {
+      const detail = !this.detail.hidden;
+      this.filters.hidden = this.searchField.hidden = this.list.hidden = detail && !this.split;
+      this.placeholder.hidden = detail || !this.split;
+      this.backButton.hidden = this.split;
+      this.paneTabs.hidden = this.split || this.tabsRedundant;
+      this.title.hidden = !this.paneTabs.hidden;
     }
     connect() {
       if (this.disposed || this.ws?.readyState === 0 || this.ws?.readyState === 1) return;
@@ -962,6 +972,8 @@
         for (const pane of panes) {
           const row = button('', () => this.select(pane.pane_id));
           row.className = 'herdr-pane';
+          row.dataset.pane = pane.pane_id;
+          row.setAttribute('aria-current', String(pane.pane_id === this.selected));
           const icon = this.stateDot(pane);
           icon.classList.add('herdr-agent-icon');
           const info = node('span', 'herdr-pane-info');
@@ -999,9 +1011,6 @@
       );
     }
     showDetail(pane) {
-      this.filters.hidden = true;
-      this.searchField.hidden = true;
-      this.list.hidden = true;
       this.detail.hidden = false;
       this.title.textContent = this.paneLabel(pane);
       const signature = JSON.stringify([
@@ -1034,8 +1043,7 @@
         const recent = this.recentPanes
           .map(id => this.snapshot.panes.find(p => p.pane_id === id))
           .find(p => p && p.workspace_id !== pane.workspace_id);
-        this.paneTabs.hidden = siblings.length <= 1 && !recent && !this.bridge.logic.state.desk;
-        this.title.hidden = !this.paneTabs.hidden && !this.rail;
+        this.tabsRedundant = siblings.length <= 1 && !recent && !this.bridge.logic.state.desk;
         for (const p of siblings) {
           const b = button(this.paneLabel(p), () => this.select(p.pane_id));
           b.prepend(this.stateDot(p));
@@ -1056,6 +1064,7 @@
           this.paneTabs.append(divider, node('span', 'herdr-project-label', project), back);
         }
       }
+      this.syncPanels();
     }
     select(id) {
       this.recentPanes = [
@@ -1067,6 +1076,8 @@
       this.nativeInput.submit.disabled = !!this.uploading && this.uploadPane === id;
       this.selected = id;
       storage.set('omarchy-herdr-pane', id);
+      for (const row of this.list.querySelectorAll('.herdr-pane'))
+        row.setAttribute('aria-current', String(row.dataset.pane === id));
       this.lastRead = null;
       this.queuedRead = null;
       this.followOutput = true;
@@ -1079,9 +1090,7 @@
         if (pane) this.showDetail(pane);
       } else {
         this.detail.hidden = true;
-        this.filters.hidden = false;
-        this.searchField.hidden = false;
-        this.list.hidden = false;
+        this.syncPanels();
         this.bridge.logic.set({ kb: false });
       }
     }
@@ -1286,7 +1295,7 @@
       clearTimeout(this.retry);
       this.ws?.close();
       this.resizeObserver.disconnect();
-      this.railObserver.disconnect();
+      this.splitObserver.disconnect();
       this.stopTouchScroll();
       this.nativeInput.dispose();
       this.term.dispose();
