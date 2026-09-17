@@ -120,8 +120,9 @@
         e => {
           this.finger = true;
           this.touchStarted = performance.now();
-          this.startY = e.touches[0]?.clientY;
+          this.startY = this.lastY = e.touches[0]?.clientY;
           this.startX = e.touches[0]?.clientX;
+          this.wheelDelta = 0;
           this.moved = this.busy;
           e.stopPropagation();
         },
@@ -130,13 +131,22 @@
       listen(
         'touchmove',
         e => {
-          if (
-            Math.hypot(e.touches[0].clientY - this.startY, e.touches[0].clientX - this.startX) > 6
-          )
-            this.moved = true;
+          const { clientX, clientY } = e.touches[0];
+          if (Math.hypot(clientY - this.startY, clientX - this.startX) > 6) this.moved = true;
+          // A tracking app scrolls its own content: swipes turn into wheel ticks.
+          if (this.moved && this.wheel(this.lastY - clientY, clientX, clientY))
+            this.lastY = clientY;
           e.stopPropagation();
         },
         { passive: true }
+      );
+      listen(
+        'wheel',
+        e => {
+          const delta = e.deltaMode === 1 ? e.deltaY * this.height : e.deltaY;
+          if (this.wheel(delta, e.clientX, e.clientY)) e.preventDefault();
+        },
+        { passive: false }
       );
       const end = e => {
         this.moved ||= e.type === 'touchcancel' || performance.now() - this.touchStarted >= 350;
@@ -275,29 +285,52 @@
     }
     // Sends a press and release for the tapped cell while the app tracks the mouse
     // (DECSET 1000/1002/1003; 9 is press only), SGR encoded when the app enabled 1006.
-    report(e) {
+    // The tapped cell in the app's screen coordinates, or null outside the screen.
+    cell(clientX, clientY) {
       const { term } = this,
-        mode = term.modes.mouseTrackingMode;
-      if (mode === 'none' || term.options.disableStdin) return;
-      const rect = this.content.getBoundingClientRect(),
-        entry = this.layout[Math.floor((e.clientY - rect.top) / this.height)];
-      if (!entry) return;
+        rect = this.content.getBoundingClientRect(),
+        entry = this.layout[Math.floor((clientY - rect.top) / this.height)];
+      if (!entry) return null;
       const b = term.buffer.active,
         row = entry.source - b.viewportY,
-        col = Math.min(
-          entry.end - 1,
-          entry.start + Math.floor((e.clientX - rect.left) / this.width)
-        );
-      if (row < 0 || row >= term.rows || col < 0 || col >= term.cols) return;
-      const x = col + 1,
-        y = row + 1;
-      const encode = (button, final) =>
-        this.sgrMouse
-          ? `\x1b[<${button};${x};${y}${final}`
-          : x < 224 && y < 224
-            ? `\x1b[M${String.fromCharCode(32 + (final === 'm' ? 3 : button), 32 + x, 32 + y)}`
-            : '';
-      term.input(encode(0, 'M') + (mode === 'x10' ? '' : encode(0, 'm')), false);
+        col = Math.min(entry.end - 1, entry.start + Math.floor((clientX - rect.left) / this.width));
+      if (row < 0 || row >= term.rows || col < 0 || col >= term.cols) return null;
+      return { x: col + 1, y: row + 1 };
+    }
+    // Mouse reports go to apps that asked for them (DECSET 1000/1002/1003; 9 is press only),
+    // SGR encoded when the app enabled 1006. Button 0 releases with 'm', 64/65 are wheel ticks.
+    tracking() {
+      const mode = this.term.modes.mouseTrackingMode;
+      return mode === 'none' || this.term.options.disableStdin ? null : mode;
+    }
+    encode(button, final, { x, y }) {
+      if (this.sgrMouse) return `\x1b[<${button};${x};${y}${final}`;
+      if (x >= 224 || y >= 224) return '';
+      const code = final === 'm' ? 3 : button;
+      return `\x1b[M${String.fromCharCode(32 + code, 32 + x, 32 + y)}`;
+    }
+    report(e) {
+      const mode = this.tracking(),
+        cell = mode && this.cell(e.clientX, e.clientY);
+      if (!cell) return;
+      this.term.input(
+        this.encode(0, 'M', cell) + (mode === 'x10' ? '' : this.encode(0, 'm', cell)),
+        false
+      );
+    }
+    // Vertical movement becomes wheel ticks, one per row, at the cell under the pointer.
+    wheel(deltaY, clientX, clientY) {
+      const mode = this.tracking();
+      if (!mode || mode === 'x10') return false;
+      this.wheelDelta = (this.wheelDelta || 0) + deltaY;
+      const ticks = Math.trunc(this.wheelDelta / this.height);
+      this.wheelDelta -= ticks * this.height;
+      const cell = this.cell(clientX, clientY);
+      if (!cell) return true;
+      let data = '';
+      for (let i = 0; i < Math.abs(ticks); i++) data += this.encode(ticks > 0 ? 65 : 64, 'M', cell);
+      if (data) this.term.input(data, false);
+      return true;
     }
     selecting() {
       const s = window.getSelection();
@@ -343,6 +376,8 @@
         return;
       }
       const screen = term.element.querySelector('.xterm-screen');
+      // While an app tracks the mouse, swipes are its wheel input rather than a native pan.
+      scroller.classList.toggle('mouse-tracking', !!this.tracking());
       let dirty = this.dirty;
       this.dirty = false;
       const oldHeight = this.height,
