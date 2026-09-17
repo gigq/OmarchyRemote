@@ -681,7 +681,8 @@ class Component extends DCLogic {
       A = this.APPS;
     const dur = '.5s',
       ease = 'cubic-bezier(.22,.9,.24,1)',
-      tr = `transform ${dur} ${ease}, opacity ${dur} ${ease}, border-color .3s, border-radius ${dur} ${ease}`;
+      // Width and height animate too, so a surviving desk tile grows into freed space instead of snapping.
+      tr = `transform ${dur} ${ease}, width ${dur} ${ease}, height ${dur} ${ease}, opacity ${dur} ${ease}, border-color .3s, border-radius ${dur} ${ease}`;
     const n = s.open.length,
       cols = n <= 4 ? 2 : 3,
       sc = n <= 4 ? 0.35 : n > 9 ? 0.19 : 0.26,
