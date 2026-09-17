@@ -825,7 +825,8 @@
       const detail = !this.detail.hidden;
       this.searchField.hidden = this.list.hidden = detail && !this.split;
       this.placeholder.hidden = detail || !this.split;
-      this.backButton.hidden = this.split;
+      // The sidebar already names the pane, so a split tile shows nothing above the output.
+      this.detailBar.hidden = this.backButton.hidden = this.split;
       this.paneTabs.hidden = this.split || this.tabsRedundant;
       this.title.hidden = !this.paneTabs.hidden;
     }

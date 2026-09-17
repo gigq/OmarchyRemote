@@ -55,7 +55,10 @@ for (const viewport of [
       await expect(p.locator('.herdr-placeholder')).toBeHidden();
       await expect(p.locator('.herdr-pane-tabs')).toBeHidden();
       await expect(p.getByRole('button', { name: 'All panes', exact: true })).toBeHidden();
-      await expect(p.locator('.herdr-pane-title')).toHaveText('Herd one');
+      await expect(p.locator('.herdr-detail-bar')).toBeHidden();
+      const bar = await p.locator('.herdr-output').boundingBox(),
+        search = await p.locator('.herdr-search-field').boundingBox();
+      expect(Math.abs(bar.y - search.y)).toBeLessThan(2);
       await expect(p.locator('.herdr-search')).toBeVisible();
       const list = await tabs.boundingBox(),
         detail = await p.locator('.herdr-detail').boundingBox();
