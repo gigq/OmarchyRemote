@@ -159,6 +159,11 @@
         },
         { capture: true }
       );
+      // A tap that was not a drag or a selection reaches TUIs that asked for mouse reports.
+      // The edge guards keep swipes local but still pass their taps through.
+      listen('click', e => this.report(e));
+      for (const edge of this.edges)
+        edge.addEventListener('click', e => this.report(e), { signal: this.abort.signal });
       listen('contextmenu', () => {
         this.moved = true;
       });
@@ -198,6 +203,7 @@
               this.cursorVisible = visible;
               this.schedule(true);
             }
+            if (params.includes(1006)) this.sgrMouse = visible;
             return false;
           })
         );
@@ -266,6 +272,32 @@
           start = Math.max(start + 1, stop);
         }
       }
+    }
+    // Sends a press and release for the tapped cell while the app tracks the mouse
+    // (DECSET 1000/1002/1003; 9 is press only), SGR encoded when the app enabled 1006.
+    report(e) {
+      const { term } = this,
+        mode = term.modes.mouseTrackingMode;
+      if (mode === 'none' || term.options.disableStdin) return;
+      const rect = this.content.getBoundingClientRect(),
+        entry = this.layout[Math.floor((e.clientY - rect.top) / this.height)];
+      if (!entry) return;
+      const b = term.buffer.active,
+        row = entry.source - b.viewportY,
+        col = Math.min(
+          entry.end - 1,
+          entry.start + Math.floor((e.clientX - rect.left) / this.width)
+        );
+      if (row < 0 || row >= term.rows || col < 0 || col >= term.cols) return;
+      const x = col + 1,
+        y = row + 1;
+      const encode = (button, final) =>
+        this.sgrMouse
+          ? `\x1b[<${button};${x};${y}${final}`
+          : x < 224 && y < 224
+            ? `\x1b[M${String.fromCharCode(32 + (final === 'm' ? 3 : button), 32 + x, 32 + y)}`
+            : '';
+      term.input(encode(0, 'M') + (mode === 'x10' ? '' : encode(0, 'm')), false);
     }
     selecting() {
       const s = window.getSelection();
