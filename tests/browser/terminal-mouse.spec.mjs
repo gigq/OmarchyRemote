@@ -16,6 +16,7 @@ test('taps and scrolling reach a TUI that tracks the mouse and stay local otherw
   await expect.poll(() => page.evaluate(() => qaTerms[0].modes.mouseTrackingMode)).toBe('vt200');
   const scroller = page.locator('.remote-terminal .native-terminal-scroll');
   await expect(scroller).toHaveClass(/mouse-tracking/);
+  await expect(scroller).toHaveCSS('scrollbar-width', 'none');
   // The first column sits under the left swipe guard, which passes taps through.
   const edge = page.locator('.remote-terminal .native-scroll-edge.left');
   await edge.click({ position: { x: 3, y: 3 } });
@@ -59,6 +60,7 @@ test('taps and scrolling reach a TUI that tracks the mouse and stay local otherw
   await page.evaluate(() => qaTerms[0].input("printf '\\e[?1000l'; cat -v\r"));
   await expect.poll(() => page.evaluate(() => qaTerms[0].modes.mouseTrackingMode)).toBe('none');
   await expect(scroller).not.toHaveClass(/mouse-tracking/);
+  await expect(scroller).not.toHaveCSS('scrollbar-width', 'none');
   await edge.click({ position: { x: 3, y: 3 } });
   await scroller.click({ position: { x: cell.width * 4.5, y: cell.height * 2.5 } });
   await page.mouse.wheel(0, cell.height * 2);

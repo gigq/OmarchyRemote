@@ -101,6 +101,13 @@
   overflow-anchor: none;
   background: var(--theme-terminal);
 }
+/* The trap's scroll position means nothing to the reader, so it shows no scrollbar. */
+.native-terminal-scroll.mouse-tracking {
+  scrollbar-width: none;
+}
+.native-terminal-scroll.mouse-tracking::-webkit-scrollbar {
+  display: none;
+}
 .native-terminal-scroll.mouse-tracking > .native-terminal-content {
   position: sticky;
   top: 0;
