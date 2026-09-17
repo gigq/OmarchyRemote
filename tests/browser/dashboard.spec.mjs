@@ -69,17 +69,15 @@ test('snippet is a reviewable draft and does not execute', async ({ page }) => {
   await expect(page.getByRole('textbox', { name: 'Message to host' })).toHaveValue('uptime');
   await expect(page.locator('.terminal-tab:visible')).toContainText('· connected');
 });
-test('Herd filters and search preserve a single row of chips', async ({ page }) => {
+test('Herd search sits first and narrows the pane list', async ({ page }) => {
   await page.goto('/native/');
   await page.getByText('herdr', { exact: true }).first().click();
   await expect(page.locator('.herdr-pane').first()).toBeVisible();
-  const bounds = await page
-    .locator('.herdr-filters button')
-    .evaluateAll(ns => ns.map(n => n.getBoundingClientRect().top));
-  expect(new Set(bounds).size).toBe(1);
-  await page.getByRole('button', { name: /needs you/ }).click();
-  await expect(page.locator('.herdr-state:not([data-state="blocked"])')).toHaveCount(0);
-  await page.getByRole('button', { name: 'all', exact: true }).click();
+  await expect(page.locator('.herdr-filters')).toHaveCount(0);
+  const first = await page
+    .locator('#remote-herdr-app > *:visible')
+    .evaluateAll(ns => ns.map(n => n.className).filter(c => !c.includes('herdr-connection'))[0]);
+  expect(first).toContain('herdr-search-field');
   await page.getByRole('searchbox', { name: 'Search panes' }).fill('no-such-pane-8811');
   await expect(page.locator('.herdr-list')).toContainText('No matching panes.');
 });

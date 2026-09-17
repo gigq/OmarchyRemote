@@ -690,7 +690,6 @@
       const bar = node('div', 'remote-bar');
       bar.classList.add('herdr-connection');
       bar.append(this.status);
-      this.filters = node('div', 'herdr-filters rail');
       // Search sits in a prompt field: the ❯ prefix at the left, a `/` hint at the right.
       this.searchField = node('div', 'prompt-field herdr-search-field');
       this.search = node('input', 'herdr-search');
@@ -703,8 +702,7 @@
       const searchKey = node('span', 'kbd', '/');
       searchKey.setAttribute('aria-hidden', 'true');
       this.searchField.append(node('span', 'prompt-prefix', '❯'), this.search, searchKey);
-      this.filter = 'all';
-      root.append(bar, this.filters, this.searchField, this.list, this.detail, this.placeholder);
+      root.append(bar, this.searchField, this.list, this.detail, this.placeholder);
       this.detailBar = node('div', 'herdr-detail-bar');
       this.title = node('div', 'herdr-pane-title');
       this.fitOutput = storage.get('omarchy-herdr-fit') !== 'false';
@@ -825,7 +823,7 @@
     }
     syncPanels() {
       const detail = !this.detail.hidden;
-      this.filters.hidden = this.searchField.hidden = this.list.hidden = detail && !this.split;
+      this.searchField.hidden = this.list.hidden = detail && !this.split;
       this.placeholder.hidden = detail || !this.split;
       this.backButton.hidden = this.split;
       this.paneTabs.hidden = this.split || this.tabsRedundant;
@@ -900,7 +898,6 @@
     }
     renderList() {
       const signature = JSON.stringify([
-        this.filter,
         this.search.value,
         this.snapshot.workspaces.map(w => [w.workspace_id, w.label]),
         this.snapshot.panes.map(p => [
@@ -921,47 +918,23 @@
       this.listSignature = signature;
       const scroll = this.list.scrollTop;
       this.list.replaceChildren();
-      this.filters.replaceChildren();
-      for (const [key, label] of [
-        ['attention', 'needs you'],
-        ['running', 'running'],
-        ['idle', 'idle'],
-        ['all', 'all'],
-      ]) {
-        const count = this.snapshot.panes.filter(p => key === 'all' || paneGroup(p) === key).length;
-        const b = button(label, () => {
-          this.filter = key;
-          this.renderList();
-        });
-        b.className = '';
-        if (key !== 'all') {
-          const n = node('span', 'count', String(count));
-          if (count)
-            n.dataset.tone = key === 'attention' ? 'yellow' : key === 'running' ? 'accent' : '';
-          b.append(n);
-        }
-        b.setAttribute('aria-pressed', String(this.filter === key));
-        this.filters.append(b);
-      }
       if (!this.snapshot.panes.length) {
         this.list.append(node('p', 'remote-empty', 'No panes are open in local Herdr.'));
         return;
       }
       for (const workspace of orderHerdr(this.snapshot)) {
-        const panes = workspace.panes.filter(
-          p =>
-            (this.filter === 'all' || paneGroup(p) === this.filter) &&
-            [
-              p.terminal_title_stripped,
-              p.agent,
-              p.cwd,
-              p.foreground_cwd,
-              workspace.label,
-              this.snapshot.tabs.find(t => t.tab_id === p.tab_id)?.label,
-            ]
-              .join(' ')
-              .toLowerCase()
-              .includes(this.search.value.toLowerCase())
+        const panes = workspace.panes.filter(p =>
+          [
+            p.terminal_title_stripped,
+            p.agent,
+            p.cwd,
+            p.foreground_cwd,
+            workspace.label,
+            this.snapshot.tabs.find(t => t.tab_id === p.tab_id)?.label,
+          ]
+            .join(' ')
+            .toLowerCase()
+            .includes(this.search.value.toLowerCase())
         );
         if (!panes.length) continue;
         const group = node('section', 'herdr-group legend');

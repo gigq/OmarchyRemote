@@ -475,14 +475,7 @@
   }
 }
 
-/* ── Herdr list: filter rail, search prompt, legend panels per project ── */
-.herdr-filters {
-  flex: none;
-  margin-bottom: 12px;
-}
-.herdr-filters > button:last-child {
-  flex: 0.7;
-}
+/* ── Herdr list: search prompt, legend panels per project ── */
 .herdr-search-field {
   flex: none;
   margin-bottom: 12px;
@@ -650,34 +643,28 @@
 #remote-herdr-app.herdr-split {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   column-gap: 14px;
 }
 .herdr-split > .herdr-connection {
   grid-area: 1 / 1 / 2 / 3;
 }
-.herdr-split > .herdr-filters {
+.herdr-split > .herdr-search-field {
   grid-area: 2 / 1;
 }
-.herdr-split > .herdr-search-field {
-  grid-area: 3 / 1;
-}
 .herdr-split > .herdr-list {
-  grid-area: 4 / 1 / 6 / 2;
+  grid-area: 3 / 1 / 5 / 2;
   overflow-x: hidden;
 }
 #remote-herdr-app.herdr-split .herdr-group {
   grid-template-columns: minmax(0, 1fr);
 }
-.herdr-split > .herdr-filters > button {
-  padding: 0 6px;
-}
 .herdr-split > .herdr-detail,
 .herdr-split > .herdr-placeholder {
-  grid-area: 2 / 2 / 5 / 3;
+  grid-area: 2 / 2 / 4 / 3;
 }
 .herdr-split > .native-input-panel {
-  grid-area: 5 / 2;
+  grid-area: 4 / 2;
 }
 .herdr-split .herdr-pane[aria-current='true'] {
   background: var(--theme-surface);
