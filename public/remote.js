@@ -1145,7 +1145,7 @@
       );
       const screen = this.term.element.querySelector('.xterm-screen');
       const cellWidth = parseFloat(screen.style.width) / this.term.cols;
-      this.canvas.style.width = `${Math.max(this.output.clientWidth, cols * cellWidth + 16)}px`;
+      this.canvas.style.width = `${Math.max(this.output.clientWidth - 16, cols * cellWidth + 16)}px`;
       // Use xterm's measured font metrics, not an assumed pixel height per row.
       const dimensions = this.fit.proposeDimensions();
       if (!dimensions) return;

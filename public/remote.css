@@ -712,6 +712,10 @@
   border-radius: 14px;
   overscroll-behavior: contain;
 }
+/* Output text keeps clear of the panel's border. */
+.herdr-output > .native-terminal-scroll {
+  inset: 0 8px;
+}
 .herdr-output-tools {
   position: absolute;
   right: 10px;
