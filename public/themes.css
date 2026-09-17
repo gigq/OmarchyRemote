@@ -139,18 +139,30 @@
   --window-inactive-opacity: 0.92;
   --theme-wallpaper: none;
 }
-#touch-shell {
-  background-image: var(--theme-wallpaper) !important;
-  background-size: cover !important;
-  background-position: var(--wallpaper-x, 50%) center !important;
-  background-repeat: no-repeat !important;
-  transition: background-position 0.5s cubic-bezier(0.22, 0.9, 0.24, 1);
+/* The wallpaper lives on its own layer, a little wider than the phone, and the workspace
+   parallax slides it with a transform so a switch never repaints the image. */
+#touch-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0 -12%;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--theme-wallpaper);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transform: translateX(calc((50% - var(--wallpaper-x, 50%)) / 2));
+  transition: transform 0.5s cubic-bezier(0.22, 0.9, 0.24, 1);
+  will-change: transform;
 }
-.desk-mode #touch-shell {
+.desk-mode #touch-shell::before {
+  inset: 0;
+  transform: none;
   transition: none;
+  will-change: auto;
 }
 @media (prefers-reduced-motion: reduce) {
-  #touch-shell {
+  #touch-shell::before {
     transition: none;
   }
 }

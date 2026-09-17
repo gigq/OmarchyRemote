@@ -18,7 +18,7 @@ for (const viewport of [
     await expect(p.locator('html')).toHaveAttribute('data-background', chosen);
     const background = await p
       .locator('#touch-shell')
-      .evaluate(e => getComputedStyle(e).backgroundImage);
+      .evaluate(e => getComputedStyle(e, '::before').backgroundImage);
     expect(background).toContain(chosen + '.webp');
     const request = await p.request.get('/backgrounds/' + chosen + '.webp');
     expect(request.ok()).toBe(true);
