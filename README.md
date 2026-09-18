@@ -15,7 +15,7 @@ Everything runs on the host you already own. There is no cloud relay: a Rust bac
 | `ios/`                         | Native iPhone/iPad wrapper (UIKit + WKWebView) that loads the live shell and bundles an offline copy.                                                                                                     |
 | `browser-extension/`           | Vivaldi/Chromium extension that exposes windows, workspaces, and tabs to the Browser app.                                                                                                                 |
 | `deploy/`                      | systemd user unit templates and `install.sh`.                                                                                                                                                             |
-| `docs/`                        | [Feature reference](docs/features.md) and design handoff notes.                                                                                                                                           |
+| `docs/`                        | [Feature reference](docs/features.md).                                                                                                                                                                    |
 | `tests/`, `scripts/*.test.mjs` | Playwright and Node tests.                                                                                                                                                                                |
 
 ## Requirements
