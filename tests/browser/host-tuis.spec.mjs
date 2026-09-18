@@ -22,7 +22,7 @@ for (const app of ['lazydocker', 'dua', 'lnav'])
           ? /Containers/
           : app === 'dua'
             ? /Scanning|Total|total|entries|items/
-            : /systemd|host|kernel|Started/
+            : /systemd|kernel|Started|Linux/
       );
     expect(await visibleText(p)).not.toContain('unknown command');
     await p.waitForTimeout(800);
