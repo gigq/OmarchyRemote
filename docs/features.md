@@ -60,7 +60,7 @@ Long-press a Home widget (or tap its manage icon) to open the widget overview. D
 
 ## Themes
 
-Theme selection lives in Settings and persists on the device (`omarchy-theme`). The shared CSS tokens also drive the launcher, custom keyboard, Terminal and Herdr; ANSI indexed colors update immediately, while explicit RGB output retains the host application's colors. Web controls follow the palette's light or dark color scheme; the native wrapper still requests a dark iOS keyboard. The portable catalog includes the stock Omarchy palettes plus the original prototype. Refresh it with `python scripts/import-themes.py`; stock palettes come from `/usr/share/omarchy/themes`, with `~/.config/omarchy/themes` overlays applied. This copies color definitions only and does not change the host's desktop theme.
+Theme selection lives in Settings and persists on the device (`omarchy-theme`). The shared CSS tokens also drive the launcher, custom keyboard, Terminal and Herdr; ANSI indexed colors update immediately, while explicit RGB output retains the host application's colors. Web controls follow the palette's light or dark color scheme; the native wrapper still requests a dark iOS keyboard. The portable catalog includes the stock Omarchy palettes plus the original prototype. Refresh it with `python scripts/import-themes.py` (which `deploy/install.sh` runs); stock palettes come from `/usr/share/omarchy/themes`, with `~/.config/omarchy/themes` overlays applied, and the theme backgrounds are converted into the untracked `public/backgrounds/` directory with a `catalog.js` index. This copies color definitions and images only and does not change the host's desktop theme.
 
 ## PWA
 

@@ -16,6 +16,8 @@ if [ ! -x "$repo/backend/target/release/omarchy-remote" ]; then
   echo "Build the backend first: cargo build --release --manifest-path backend/Cargo.toml" >&2
   exit 1
 fi
+# Convert the installed Omarchy theme backgrounds for the shell (public/backgrounds/ is generated, not tracked).
+python3 "$repo/scripts/import-themes.py"
 mkdir -p "$target"
 for unit in omarchy-remote.service omarchy-remote-dev.service; do
   sed -e "s|@REPO@|$repo|g" -e "s|@NODE@|$node|g" "$repo/deploy/$unit" > "$target/$unit"

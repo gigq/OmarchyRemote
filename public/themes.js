@@ -23,7 +23,12 @@
       bright_foreground: '#ffffff',
     },
   };
-  const catalog = [prototype, ...window.OmarchyThemeCatalog];
+  // Backgrounds are generated per host by scripts/import-themes.py and may be absent.
+  const wallpaperCatalog = window.OmarchyBackgroundCatalog || {};
+  const catalog = [prototype, ...window.OmarchyThemeCatalog].map(theme => ({
+    ...theme,
+    backgrounds: wallpaperCatalog[theme.id] || [],
+  }));
   const assetURL = path => (location.protocol === 'file:' ? '.' + path : path);
   let current = prototype;
   let wallpapers;

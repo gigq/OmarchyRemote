@@ -15,10 +15,16 @@ def prepare(output):
     output.mkdir(parents=True, exist_ok=True)
     expected = {file.relative_to(ROOT / "public") for file in (ROOT / "public").rglob("*") if file.is_file()}
     expected.add(Path("native.css"))
+    expected.add(Path("backgrounds/catalog.js"))
     for previous in output.rglob("*"):
         if previous.is_file() and previous.relative_to(output) not in expected:
             previous.unlink()
     shutil.copytree(ROOT / "public", output, dirs_exist_ok=True)
+    catalog = output / "backgrounds/catalog.js"
+    if not catalog.exists():
+        # Backgrounds are generated per host by scripts/import-themes.py; ship an empty index otherwise.
+        catalog.parent.mkdir(exist_ok=True)
+        catalog.write_text("window.OmarchyBackgroundCatalog = {};\n")
     page = (output / "index.html").read_text()
     page = re.sub(r'((?:src|href)=")/(?!/)', r'\1./', page)
     page = page.replace('url("/', 'url("./').replace("url('/", "url('./")

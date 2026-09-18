@@ -10,3 +10,4 @@ artifacts/
 __pycache__/
 /backend/target/
 .openai/
+/public/backgrounds/
