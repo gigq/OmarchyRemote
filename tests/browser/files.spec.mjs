@@ -5,7 +5,10 @@ test('Files browses the host, previews literal text, creates a folder and upload
 }) => {
   const folder = await mkdtemp(process.env.HOME + '/omarchy-files-ui-');
   try {
-    await writeFile(folder + '/readme.txt', 'Hello from HOST\n<script>window.bad=true</script>');
+    await writeFile(
+      folder + '/readme.txt',
+      'Hello from the host\n<script>window.bad=true</script>'
+    );
     await p.addInitScript(path => localStorage.setItem('omarchy-files-path', path), folder);
     await p.addInitScript(() => {
       Object.defineProperty(navigator, 'canShare', { value: () => true, configurable: true });
@@ -26,7 +29,10 @@ test('Files browses the host, previews literal text, creates a folder and upload
     await p.getByRole('button', { name: 'Save…', exact: true }).click();
     await expect
       .poll(() => p.evaluate(() => window.sharedFile))
-      .toEqual({ name: 'readme.txt', text: 'Hello from HOST\n<script>window.bad=true</script>' });
+      .toEqual({
+        name: 'readme.txt',
+        text: 'Hello from the host\n<script>window.bad=true</script>',
+      });
     await p.getByRole('button', { name: 'Parent folder', exact: true }).click();
     await p.getByRole('button', { name: 'New item', exact: true }).click();
     await p.getByRole('button', { name: 'folder', exact: true }).click();

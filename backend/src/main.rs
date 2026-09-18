@@ -481,7 +481,7 @@ mod tests {
     use super::*;
     #[test]
     fn rejects_cross_site_and_unauthenticated_browser_requests() {
-        let origins = vec!["https://host.example".into()];
+        let origins = vec!["https://remote.example".into()];
         assert!(authorized_browser(&origins, None, false, Some("1")));
         assert!(!authorized_browser(&origins, None, false, None));
         assert!(!authorized_browser(
@@ -493,7 +493,7 @@ mod tests {
         assert!(!authorized_browser(&origins, None, true, None));
         assert!(authorized_browser(
             &origins,
-            Some("https://host.example"),
+            Some("https://remote.example"),
             true,
             None
         ));
