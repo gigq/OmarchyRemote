@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Hyprland Touch",
-  "short_name": "Hyprland",
-  "description": "A Rosé Pine mobile OS prototype with touch workspaces and a SUPER keyboard.",
+  "name": "Omarchy Remote",
+  "short_name": "Omarchy",
+  "description": "A touch shell for your Omarchy desktop: terminal, files, agents, browser tabs, and host TUIs.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

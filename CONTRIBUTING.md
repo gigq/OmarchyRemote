@@ -4,7 +4,7 @@ Omarchy Remote is a single-user tool that runs on your own desktop, so most cont
 
 ## Setup
 
-Follow [Install on the host](README.md#install-on-the-host). Development happens against the running services: saves under `public/` reload every connected shell, Rust changes need a build and a restart of `omarchy-remote.service`, and changes under `scripts/` need a restart of `hyprland-touch-dev.service`. Never commit or print `~/.config/omarchy-remote/backend.env`.
+Follow [Install on the host](README.md#install-on-the-host). Development happens against the running services: saves under `public/` reload every connected shell, Rust changes need a build and a restart of `omarchy-remote.service`, and changes under `scripts/` need a restart of `omarchy-remote-dev.service`. Never commit or print `~/.config/omarchy-remote/backend.env`.
 
 Checks, in the order they usually matter:
 
@@ -83,7 +83,7 @@ The shell reads one catalog, `window.HyprlandApps` in `public/apps.js`. Every wo
 
 ## Code style
 
-Formatting is automated so reviews and merges stay about behavior. Prettier (`.prettierrc`, 100 columns) covers JavaScript, CSS, JSON, and Markdown; `cargo fmt` covers Rust; swift-format (`.swift-format`, four spaces, 120 columns) covers the iOS wrapper and runs on a Mac with `xcrun swift-format format -i -r ios/HyprlandTouch ios/HyprlandTouchUITests`. Write one statement per line and keep formatting-only commits separate, listing them in `.git-blame-ignore-revs` (enable it locally with `git config blame.ignoreRevsFile .git-blame-ignore-revs`). CI (`.github/workflows/ci.yml`) runs the host-independent checks on every push and pull request; the Playwright, live-server, and backend suites need a running host and stay local.
+Formatting is automated so reviews and merges stay about behavior. Prettier (`.prettierrc`, 100 columns) covers JavaScript, CSS, JSON, and Markdown; `cargo fmt` covers Rust; swift-format (`.swift-format`, four spaces, 120 columns) covers the iOS wrapper and runs on a Mac with `xcrun swift-format format -i -r ios/OmarchyRemote ios/OmarchyRemoteUITests`. Write one statement per line and keep formatting-only commits separate, listing them in `.git-blame-ignore-revs` (enable it locally with `git config blame.ignoreRevsFile .git-blame-ignore-revs`). CI (`.github/workflows/ci.yml`) runs the host-independent checks on every push and pull request; the Playwright, live-server, and backend suites need a running host and stay local.
 
 ## Conventions
 

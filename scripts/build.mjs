@@ -30,7 +30,7 @@ for (const file of files) {
   };
 }
 const version = hash.digest('hex').slice(0, 16);
-const sw = `const CACHE = 'hyprland-touch-${version}';
+const sw = `const CACHE = 'omarchy-remote-${version}';
 const URLS = ${JSON.stringify(['/', ...Object.keys(assets)])};
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
@@ -44,7 +44,7 @@ self.addEventListener('install', event => {
 });
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
-    for (const key of await caches.keys()) if (key.startsWith('hyprland-touch-') && key !== CACHE) await caches.delete(key);
+    for (const key of await caches.keys()) if (key.startsWith('omarchy-remote-') && key !== CACHE) await caches.delete(key);
     await self.clients.claim();
   })());
 });

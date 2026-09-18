@@ -20,18 +20,18 @@
 			containerPortal = 000000000000000000000001 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 000000000000000000000002;
-			remoteInfo = HyprlandTouch;
+			remoteInfo = OmarchyRemote;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		000000000000000000000005 /* HyprlandTouch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HyprlandTouch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000000005 /* OmarchyRemote.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OmarchyRemote.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000000015 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		000000000000000000000016 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		000000000000000000000017 /* ShellViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellViewController.swift; sourceTree = "<group>"; };
 		000000000000000000000018 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		000000000000000000000019 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		A00000000000000000000003 /* HyprlandTouchUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HyprlandTouchUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A00000000000000000000003 /* OmarchyRemoteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OmarchyRemoteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A00000000000000000000004 /* HardwareShortcutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareShortcutTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -56,8 +56,8 @@
 		000000000000000000000003 = {
 			isa = PBXGroup;
 			children = (
-				A00000000000000000000002 /* HyprlandTouchUITests */,
-				000000000000000000000014 /* HyprlandTouch */,
+				A00000000000000000000002 /* OmarchyRemoteUITests */,
+				000000000000000000000014 /* OmarchyRemote */,
 				000000000000000000000004 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -65,13 +65,13 @@
 		000000000000000000000004 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				000000000000000000000005 /* HyprlandTouch.app */,
-				A00000000000000000000003 /* HyprlandTouchUITests.xctest */,
+				000000000000000000000005 /* OmarchyRemote.app */,
+				A00000000000000000000003 /* OmarchyRemoteUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		000000000000000000000014 /* HyprlandTouch */ = {
+		000000000000000000000014 /* OmarchyRemote */ = {
 			isa = PBXGroup;
 			children = (
 				000000000000000000000015 /* AppDelegate.swift */,
@@ -80,23 +80,23 @@
 				000000000000000000000018 /* Assets.xcassets */,
 				000000000000000000000019 /* Info.plist */,
 			);
-			path = HyprlandTouch;
+			path = OmarchyRemote;
 			sourceTree = "<group>";
 		};
-		A00000000000000000000002 /* HyprlandTouchUITests */ = {
+		A00000000000000000000002 /* OmarchyRemoteUITests */ = {
 			isa = PBXGroup;
 			children = (
 				A00000000000000000000004 /* HardwareShortcutTests.swift */,
 			);
-			path = HyprlandTouchUITests;
+			path = OmarchyRemoteUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		000000000000000000000002 /* HyprlandTouch */ = {
+		000000000000000000000002 /* OmarchyRemote */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 00000000000000000000000B /* Build configuration list for PBXNativeTarget "HyprlandTouch" */;
+			buildConfigurationList = 00000000000000000000000B /* Build configuration list for PBXNativeTarget "OmarchyRemote" */;
 			buildPhases = (
 				000000000000000000000006 /* Sources */,
 				000000000000000000000007 /* Frameworks */,
@@ -107,14 +107,14 @@
 			);
 			dependencies = (
 			);
-			name = HyprlandTouch;
-			productName = HyprlandTouch;
-			productReference = 000000000000000000000005 /* HyprlandTouch.app */;
+			name = OmarchyRemote;
+			productName = OmarchyRemote;
+			productReference = 000000000000000000000005 /* OmarchyRemote.app */;
 			productType = "com.apple.product-type.application";
 		};
-		A00000000000000000000001 /* HyprlandTouchUITests */ = {
+		A00000000000000000000001 /* OmarchyRemoteUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A00000000000000000000009 /* Build configuration list for PBXNativeTarget "HyprlandTouchUITests" */;
+			buildConfigurationList = A00000000000000000000009 /* Build configuration list for PBXNativeTarget "OmarchyRemoteUITests" */;
 			buildPhases = (
 				A00000000000000000000006 /* Sources */,
 				A00000000000000000000007 /* Frameworks */,
@@ -125,9 +125,9 @@
 			dependencies = (
 				A0000000000000000000000D /* PBXTargetDependency */,
 			);
-			name = HyprlandTouchUITests;
-			productName = HyprlandTouchUITests;
-			productReference = A00000000000000000000003 /* HyprlandTouchUITests.xctest */;
+			name = OmarchyRemoteUITests;
+			productName = OmarchyRemoteUITests;
+			productReference = A00000000000000000000003 /* OmarchyRemoteUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
@@ -144,7 +144,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 00000000000000000000000A /* Build configuration list for PBXProject "HyprlandTouch" */;
+			buildConfigurationList = 00000000000000000000000A /* Build configuration list for PBXProject "OmarchyRemote" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -157,8 +157,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				000000000000000000000002 /* HyprlandTouch */,
-				A00000000000000000000001 /* HyprlandTouchUITests */,
+				000000000000000000000002 /* OmarchyRemote */,
+				A00000000000000000000001 /* OmarchyRemoteUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -223,7 +223,7 @@
 /* Begin PBXTargetDependency section */
 		A0000000000000000000000D /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 000000000000000000000002 /* HyprlandTouch */;
+			target = 000000000000000000000002 /* OmarchyRemote */;
 			targetProxy = A0000000000000000000000C /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -287,13 +287,13 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = HyprlandTouch/Info.plist;
+				INFOPLIST_FILE = OmarchyRemote/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.HyprlandTouch;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.OmarchyRemote;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator xros xrsimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -312,13 +312,13 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = HyprlandTouch/Info.plist;
+				INFOPLIST_FILE = OmarchyRemote/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.HyprlandTouch;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.OmarchyRemote;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator xros xrsimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -334,11 +334,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.HyprlandTouch.UITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.OmarchyRemote.UITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = HyprlandTouch;
+				TEST_TARGET_NAME = OmarchyRemote;
 			};
 			name = Debug;
 		};
@@ -348,18 +348,18 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.HyprlandTouch.UITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.OmarchyRemote.UITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = HyprlandTouch;
+				TEST_TARGET_NAME = OmarchyRemote;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		00000000000000000000000A /* Build configuration list for PBXProject "HyprlandTouch" */ = {
+		00000000000000000000000A /* Build configuration list for PBXProject "OmarchyRemote" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				00000000000000000000000C /* Debug */,
@@ -368,7 +368,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		00000000000000000000000B /* Build configuration list for PBXNativeTarget "HyprlandTouch" */ = {
+		00000000000000000000000B /* Build configuration list for PBXNativeTarget "OmarchyRemote" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				00000000000000000000000E /* Debug */,
@@ -377,7 +377,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A00000000000000000000009 /* Build configuration list for PBXNativeTarget "HyprlandTouchUITests" */ = {
+		A00000000000000000000009 /* Build configuration list for PBXNativeTarget "OmarchyRemoteUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A0000000000000000000000A /* Debug */,

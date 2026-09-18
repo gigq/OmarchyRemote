@@ -8,7 +8,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         configurationForConnecting connectingSceneSession: UISceneSession,
         options: UIScene.ConnectionOptions
     ) -> UISceneConfiguration {
-        let configuration = UISceneConfiguration(name: "Hyprland", sessionRole: connectingSceneSession.role)
+        let configuration = UISceneConfiguration(name: "OmarchyRemote", sessionRole: connectingSceneSession.role)
         configuration.delegateClass = SceneDelegate.self
         return configuration
     }

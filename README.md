@@ -133,13 +133,13 @@ Use ⌘ E for Expo, ⌘ J / ⇧ J for adjacent shell panes, and ⌘ Return for T
 
 ## Native iPhone, iPad, and Vision Pro app
 
-`ios/HyprlandTouch.xcodeproj` is a UIKit/WKWebView wrapper for iOS 18 or later and native visionOS with the shared **HyprlandTouch** scheme and automatic development signing. It hides the status bar, defers the system edge gestures so the shell's swipes work, registers native iPad key commands and routes them to the shell, adds a Core Location bridge for the weather widget, and opens browser pages in an isolated WKWebView inside the themed Browser window.
+`ios/OmarchyRemote.xcodeproj` is a UIKit/WKWebView wrapper for iOS 18 or later and native visionOS with the shared **OmarchyRemote** scheme and automatic development signing. It hides the status bar, defers the system edge gestures so the shell's swipes work, registers native iPad key commands and routes them to the shell, adds a Core Location bridge for the weather widget, and opens browser pages in an isolated WKWebView inside the themed Browser window.
 
 The native visionOS destination uses the same shell in a freely resizable window, initially 1280×900 points with a 600×400 minimum. Width and height resize independently, and the shell remains in desktop mode even in a short window. VisionOS supplies the system window controls; the shell’s iPhone home indicator is hidden there. The native Vision Pro build replaces the earlier iPad-compatible installation using the same bundle identifier.
 
-Before building, set two values in `ios/HyprlandTouch/Info.plist` and the project: `OmarchyRemoteURL` (your HTTPS address followed by `/native/`) and the bundle identifier. Debug builds load that live URL and fall back to the bundled offline copy if the host is unavailable; Release builds use the bundled copy only. If iOS terminates the shell’s web-content process, the app recovers automatically, deferring recovery until foreground when necessary. Repeated process failures are bounded before showing a manual retry. The offline copy preserves local settings and drafts, retries the host on foreground, and checks every 15 seconds while active without replacing the offline page on failed checks. Terminal output, agents, and other host-backed functions still require a connection. The offline status also offers a manual Retry live button. Every build runs `scripts/prepare-native.py` to package `public/` into the app. Hold two fingers on the screen for about a second to switch between the live and bundled sources or reload.
+Before building, set two values in `ios/OmarchyRemote/Info.plist` and the project: `OmarchyRemoteURL` (your HTTPS address followed by `/native/`) and the bundle identifier. Debug builds load that live URL and fall back to the bundled offline copy if the host is unavailable; Release builds use the bundled copy only. If iOS terminates the shell’s web-content process, the app recovers automatically, deferring recovery until foreground when necessary. Repeated process failures are bounded before showing a manual retry. The offline copy preserves local settings and drafts, retries the host on foreground, and checks every 15 seconds while active without replacing the offline page on failed checks. Terminal output, agents, and other host-backed functions still require a connection. The offline status also offers a manual Retry live button. Every build runs `scripts/prepare-native.py` to package `public/` into the app. Hold two fingers on the screen for about a second to switch between the live and bundled sources or reload.
 
-Build from Xcode with a paired device, or headlessly with `xcodebuild` and the HyprlandTouch scheme. `python -m unittest discover -s scripts -p 'test_native_bundle.py'` checks the packaging; `python scripts/prepare-native.py` writes an inspection copy to the ignored `ios/Generated/Web`.
+Build from Xcode with a paired device, or headlessly with `xcodebuild` and the OmarchyRemote scheme. `python -m unittest discover -s scripts -p 'test_native_bundle.py'` checks the packaging; `python scripts/prepare-native.py` writes an inspection copy to the ignored `ios/Generated/Web`.
 
 ## Adding your own app
 
@@ -147,12 +147,12 @@ Apps are self-contained: one `define(...)` line in `public/apps.js`, one module 
 
 ## Development
 
-Development live reload polls source metadata every 750 ms and regenerates the native bundle before notifying connected devices. This also detects atomic editor saves and replaced directories. Restart `hyprland-touch-dev.service` after changing server or reload-client scripts.
+Development live reload polls source metadata every 750 ms and regenerates the native bundle before notifying connected devices. This also detects atomic editor saves and replaced directories. Restart `omarchy-remote-dev.service` after changing server or reload-client scripts.
 
-The user service `hyprland-touch-dev.service` watches `public/` and reloads every connected shell within about a second of a save, including the native app when it is on the live source; host sessions reconnect. Restart that service after changing `scripts/serve.mjs` or `scripts/live-reload.js`. Rust changes need `cargo build --release --manifest-path backend/Cargo.toml` and a restart of `omarchy-remote.service`, which ends its PTYs.
+The user service `omarchy-remote-dev.service` watches `public/` and reloads every connected shell within about a second of a save, including the native app when it is on the live source; host sessions reconnect. Restart that service after changing `scripts/serve.mjs` or `scripts/live-reload.js`. Rust changes need `cargo build --release --manifest-path backend/Cargo.toml` and a restart of `omarchy-remote.service`, which ends its PTYs.
 
 ```sh
-systemctl --user status hyprland-touch-dev.service omarchy-remote.service
+systemctl --user status omarchy-remote-dev.service omarchy-remote.service
 journalctl --user -u omarchy-remote.service -f
 PORT=4190 npm run dev            # a second, foreground copy of the web server
 cargo test --manifest-path backend/Cargo.toml
@@ -165,7 +165,7 @@ npm run build && npm test        # standalone PWA build
 
 `GET /__dev/status` reports the current revision and connection count; `/__dev/events` is the reload stream. `scripts/build.mjs` writes a portable Cloudflare Worker to `dist/server/index.js` and the static client to `dist/client` with a content-versioned service worker for hosting the PWA elsewhere; the host APIs are still only reachable through your private address.
 
-To remove the setup: `systemctl --user disable --now hyprland-touch-dev.service omarchy-remote.service`, delete the unit files, and drop the HTTPS listener (`tailscale serve --https=12443 off`).
+To remove the setup: `systemctl --user disable --now omarchy-remote-dev.service omarchy-remote.service`, delete the unit files, and drop the HTTPS listener (`tailscale serve --https=12443 off`).
 
 ## License
 

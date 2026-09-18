@@ -34,7 +34,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - run: xcrun swift-format lint --strict --configuration .swift-format -r ios/HyprlandTouch ios/HyprlandTouchUITests
+      - run: xcrun swift-format lint --strict --configuration .swift-format -r ios/OmarchyRemote ios/OmarchyRemoteUITests
       - run: >
-          xcodebuild build-for-testing -project ios/HyprlandTouch.xcodeproj -scheme HyprlandTouch
+          xcodebuild build-for-testing -project ios/OmarchyRemote.xcodeproj -scheme OmarchyRemote
           -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO

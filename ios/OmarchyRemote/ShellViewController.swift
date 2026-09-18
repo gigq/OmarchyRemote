@@ -533,7 +533,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
 
 @MainActor
 final class ShellViewController: UIViewController, WKNavigationDelegate {
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "HyprlandTouch", category: "Shell")
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "OmarchyRemote", category: "Shell")
     private let background = UIColor(red: 25 / 255, green: 23 / 255, blue: 36 / 255, alpha: 1)
     private var webView: WKWebView!
     private let weatherDevice = WeatherDeviceBridge()
@@ -803,7 +803,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
 
-        retryButton.setTitle("Couldn’t open Hyprland. Tap to retry.", for: .normal)
+        retryButton.setTitle("Couldn’t open Omarchy Remote. Tap to retry.", for: .normal)
         retryButton.setTitleColor(.white, for: .normal)
         retryButton.titleLabel?.numberOfLines = 0
         retryButton.titleLabel?.textAlignment = .center
@@ -1080,7 +1080,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         if webView.url?.isFileURL == true {
             loadTimeout?.cancel()
             remoteNavigation = nil
-            logger.info("Loaded Hyprland shell: bundled")
+            logger.info("Loaded Omarchy Remote shell: bundled")
         } else if !usingOfflineFallback {
             verifyLiveShell(generation: loadGeneration, attemptsRemaining: 12)
         }
@@ -1096,7 +1096,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
             if result as? Bool == true {
                 self.loadTimeout?.cancel()
                 self.remoteNavigation = nil
-                self.logger.info("Loaded Hyprland shell: live from \(ShellSource.hostLabel) (rendered)")
+                self.logger.info("Loaded Omarchy Remote shell: live from \(ShellSource.hostLabel) (rendered)")
             } else if attemptsRemaining > 0 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
                     self?.verifyLiveShell(generation: generation, attemptsRemaining: attemptsRemaining - 1)

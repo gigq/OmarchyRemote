@@ -75,7 +75,7 @@ test('service worker installs and serves the shell with network unavailable', as
   });
   const response = await completion;
   assert.equal(response.status, 200);
-  assert.match(await response.text(), /Hyprland Touch/);
+  assert.match(await response.text(), /Omarchy Remote/);
 });
 test('worker preserves missing paths and rejects write requests', async () => {
   assert.equal((await request('/missing')).status, 404);

@@ -17,13 +17,13 @@ if [ ! -x "$repo/backend/target/release/omarchy-remote" ]; then
   exit 1
 fi
 mkdir -p "$target"
-for unit in omarchy-remote.service hyprland-touch-dev.service; do
+for unit in omarchy-remote.service omarchy-remote-dev.service; do
   sed -e "s|@REPO@|$repo|g" -e "s|@NODE@|$node|g" "$repo/deploy/$unit" > "$target/$unit"
 done
-echo "Wrote $target/omarchy-remote.service and $target/hyprland-touch-dev.service"
+echo "Wrote $target/omarchy-remote.service and $target/omarchy-remote-dev.service"
 if [ "${1:-}" = "--no-enable" ]; then
   exit 0
 fi
 systemctl --user daemon-reload
-systemctl --user enable --now omarchy-remote.service hyprland-touch-dev.service
-systemctl --user --no-pager status omarchy-remote.service hyprland-touch-dev.service || true
+systemctl --user enable --now omarchy-remote.service omarchy-remote-dev.service
+systemctl --user --no-pager status omarchy-remote.service omarchy-remote-dev.service || true

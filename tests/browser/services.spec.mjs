@@ -12,8 +12,8 @@ test('Services lists host units, searches, opens actions and reconnects', async 
   await p.waitForTimeout(500);
   await p.screenshot({ path: 'artifacts/browser/services.png' });
   await app.getByRole('button', { name: 'Search', exact: true }).click();
-  await p.evaluate(() => qaTerms[0].input('hyprland-touch-dev'));
-  await expect.poll(() => visibleText(p)).toContain('hyprland-touch-dev');
+  await p.evaluate(() => qaTerms[0].input('omarchy-remote-dev'));
+  await expect.poll(() => visibleText(p)).toContain('omarchy-remote-dev');
   await app.getByRole('button', { name: 'Back', exact: true }).click();
   await app.getByRole('button', { name: 'Select', exact: true }).click();
   await expect.poll(() => visibleText(p)).toContain('Restart');
@@ -24,6 +24,6 @@ test('Services lists host units, searches, opens actions and reconnects', async 
   await p.reload();
   await expect(app).toContainText('· connected');
   expect(await p.evaluate(() => localStorage.getItem('omarchy-services-id'))).toBe(id);
-  await expect.poll(() => visibleText(p)).toContain('hyprland-touch-dev');
+  await expect.poll(() => visibleText(p)).toContain('omarchy-remote-dev');
   await p.screenshot({ path: 'artifacts/browser/services-resume.png' });
 });

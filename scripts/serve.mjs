@@ -128,7 +128,7 @@ const server = http.createServer(async (req, res) => {
       res.end(
         req.method === 'HEAD'
           ? undefined
-          : JSON.stringify({ service: 'hyprland-touch-dev', version, clients: clients.size })
+          : JSON.stringify({ service: 'omarchy-remote-dev', version, clients: clients.size })
       );
       return;
     }
@@ -229,7 +229,7 @@ server.on('upgrade', (req, socket, head) => {
 });
 const port = Number(process.env.PORT || 4187);
 server.listen(port, '127.0.0.1', () =>
-  console.log(`Hyprland live preview: http://127.0.0.1:${port}/native/`)
+  console.log(`Omarchy Remote live preview: http://127.0.0.1:${port}/native/`)
 );
 function shutdown() {
   sourceWatcher.close();

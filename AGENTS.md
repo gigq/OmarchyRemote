@@ -6,7 +6,7 @@
 
 # Code style
 
-- Run `npm run format` before committing. `npm test` fails on unformatted code, and CI runs `npm run lint` (Prettier, `cargo fmt --check`, clippy). Prettier settings are in `.prettierrc`; Swift uses `.swift-format`, applied on the Mac with `xcrun swift-format format -i -r ios/HyprlandTouch ios/HyprlandTouchUITests`.
+- Run `npm run format` before committing. `npm test` fails on unformatted code, and CI runs `npm run lint` (Prettier, `cargo fmt --check`, clippy). Prettier settings are in `.prettierrc`; Swift uses `.swift-format`, applied on the Mac with `xcrun swift-format format -i -r ios/OmarchyRemote ios/OmarchyRemoteUITests`.
 - One statement per line. Never join statements with semicolons or write a class, method, or rule set as a single line; merges and reviews happen by line.
 - Keep formatting-only changes in their own commit and add its hash to `.git-blame-ignore-revs`.
 - The markup in `public/index.html` is a design-tool export; leave it as exported. Its component script is formatted by `scripts/format-template.mjs`, which `npm run format` runs.
@@ -20,7 +20,7 @@
 
 # Prototype iteration
 
-The installed development iPhone app loads the `OmarchyRemoteURL` from `ios/HyprlandTouch/Info.plist` (the host's private HTTPS address plus `/native/`). The persistent host user service is `hyprland-touch-dev.service`; its source server is `scripts/serve.mjs` on loopback port 4187.
+The installed development iPhone app loads the `OmarchyRemoteURL` from `ios/OmarchyRemote/Info.plist` (the host's private HTTPS address plus `/native/`). The persistent host user service is `omarchy-remote-dev.service`; its source server is `scripts/serve.mjs` on loopback port 4187.
 
 - Edit `public/index.html` for the shell template and component; app modules live in `public/*.js`.
 - Shared styles/behavior are `public/pwa.css` and `public/pwa.js`; native layout overrides are `ios/WebOverrides/native.css`.

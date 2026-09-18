@@ -48,7 +48,7 @@ The optional TUI programs are `btop`, `systemctl-tui`, `lazydocker`, `dua`, and 
 
 Install the Services dependency with `cargo install systemctl-tui --locked` (tested with 0.7.0) as the backend user. It runs without sudo and shows both system and user units; host permissions govern service actions.
 
-Build with `cargo build --release --manifest-path backend/Cargo.toml`. Run through the enabled `omarchy-remote.service`. Restart that service after changing Rust; running PTYs end on restart. Restart `hyprland-touch-dev.service` after proxy/server changes. Web asset saves require neither restart.
+Build with `cargo build --release --manifest-path backend/Cargo.toml`. Run through the enabled `omarchy-remote.service`. Restart that service after changing Rust; running PTYs end on restart. Restart `omarchy-remote-dev.service` after proxy/server changes. Web asset saves require neither restart.
 
 Validation:
 
