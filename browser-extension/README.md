@@ -9,6 +9,28 @@ The popup lets you name the instance and set its profile folder (Default or
 Profile N, shown in vivaldi://version). The profile folder supplies workspace
 names/metadata; it does not copy cookies or authentication data.
 
+## Extension id and the manifest key
+
+`manifest.json` carries a `key`: the public half of an RSA key pair. Chromium derives
+an unpacked extension's id from that key instead of from its folder path, so every
+checkout loads with the id in `extension-id.txt`, and the native-messaging host
+installed by `scripts/install-browser-bridge.py` allows exactly that id. The key is
+public and grants nothing by itself; the private half is not in this repository and
+is not needed for unpacked loading.
+
+To pin your own id instead, generate a key pair and replace both values:
+
+```sh
+openssl genrsa -out extension.pem 2048              # keep this file private
+openssl rsa -in extension.pem -pubout -outform DER | base64 -w0   # the new "key"
+openssl rsa -in extension.pem -pubout -outform DER | sha256sum | head -c32 | tr 0-9a-f a-p; echo   # the new id
+```
+
+Put the first output in `manifest.json` under `key`, the second in `extension-id.txt`
+(or export it as `OMARCHY_EXTENSION_ID`), and rerun `python scripts/install-browser-bridge.py`.
+Removing `key` also works; the id then depends on the folder path, and
+`vivaldi://extensions` shows it after the first load.
+
 The phone polls the shared Rust API while Browser is visible. Vivaldi pushes tab
 and window events through Chrome native messaging to the same Rust executable's
 `--browser-bridge` stdio adapter. That adapter connects to a mode-0600 Unix socket
