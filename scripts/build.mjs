@@ -78,6 +78,4 @@ await mkdir('dist/server', { recursive: true });
 await cp('public', 'dist/client', { recursive: true });
 await writeFile('dist/client/sw.js', sw);
 await writeFile('dist/server/index.js', worker);
-await mkdir('dist/.openai', { recursive: true });
-await cp('.openai/hosting.json', 'dist/.openai/hosting.json');
 console.log(`Built ${files.length + 1} assets; offline cache ${version}.`);

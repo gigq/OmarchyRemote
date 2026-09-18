@@ -9,3 +9,4 @@ DerivedData/
 artifacts/
 __pycache__/
 /backend/target/
+.openai/
