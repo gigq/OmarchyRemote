@@ -1,0 +1,7 @@
+// Build settings for the public project. Do not put personal values here: copy the
+// three settings below into ios/Local.xcconfig (ignored by git), which overrides them.
+// A URL needs $() before the slashes, because // starts a comment in this file.
+DEVELOPMENT_TEAM =
+PRODUCT_BUNDLE_IDENTIFIER = com.example.OmarchyRemote
+OMARCHY_REMOTE_URL = https:/$()/your-host.your-tailnet.ts.net:12443/native/
+#include? "Local.xcconfig"

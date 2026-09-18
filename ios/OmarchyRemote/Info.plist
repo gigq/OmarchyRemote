@@ -23,7 +23,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Take a photo to attach to your message. Photos you choose are uploaded to your Omarchy Remote server.</string>
 	<key>OmarchyRemoteURL</key>
-	<string>https://your-host.your-tailnet.ts.net:12443/native/</string>
+	<string>$(OMARCHY_REMOTE_URL)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

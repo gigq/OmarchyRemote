@@ -20,7 +20,7 @@
 
 # Development loop
 
-The two user services from `deploy/install.sh` are `omarchy-remote.service` (the Rust backend on loopback 4188) and `omarchy-remote-dev.service` (`scripts/serve.mjs` on loopback 4187: static files, live reload, and the `/api/` proxy). A Debug build of the native app loads `OmarchyRemoteURL` from `ios/OmarchyRemote/Info.plist`, the host's private HTTPS address plus `/native/`.
+The two user services from `deploy/install.sh` are `omarchy-remote.service` (the Rust backend on loopback 4188) and `omarchy-remote-dev.service` (`scripts/serve.mjs` on loopback 4187: static files, live reload, and the `/api/` proxy). A Debug build of the native app loads `OmarchyRemoteURL` from its Info.plist, which expands `OMARCHY_REMOTE_URL` from `ios/Config.xcconfig` and the gitignored `ios/Local.xcconfig`: the host's private HTTPS address plus `/native/`.
 
 - Edit `public/index.html` for the shell template and component; app modules live in `public/*.js`. Shared styles/behavior are `public/pwa.css` and `public/pwa.js`; native layout overrides are `ios/WebOverrides/native.css`.
 - Saves under `public/` reload every connected shell, including the native app on its live source. HTML/CSS/JS changes need no Xcode build or reinstall.
@@ -36,5 +36,5 @@ The two user services from `deploy/install.sh` are `omarchy-remote.service` (the
 - Allowed origins and the host's display name come from `OMARCHY_ORIGINS` and `OMARCHY_HOST_NAME` in `~/.config/omarchy-remote/backend.env`, which both services load.
 - `public/desk.js` and `public/desk.css` own desk mode (viewports with both edges ≥ 600px: iPad, Mac, desktop windows): tiled workspaces, ⌘/Ctrl+Alt bindings, and the ⌘/ sheet. Keep the phone shell below that threshold unchanged; `tests/browser/desk.spec.mjs` covers both.
 - `public/remote.js` and `public/remote.css` own the real app views. `public/native-terminal.js` renders xterm buffers into native overflow views; `public/native-input.js` owns system-keyboard input and pane drafts. `public/dashboard.js` and `public/dashboard.css` own Home summaries, pinned apps, notifications, and the native-input launcher. The exported component owns shell gestures and the SUPER custom keyboard.
-- Never print, embed, or commit `~/.config/omarchy-remote/backend.env`; its proxy secret is server-only. Machine-specific values (hostnames, tailnet URLs, signing teams, bundle identifiers) belong in that file, in your local `Info.plist` and signing settings, or in environment variables, never in committed code or docs.
+- Never print, embed, or commit `~/.config/omarchy-remote/backend.env`; its proxy secret is server-only. Machine-specific values (hostnames, tailnet URLs, signing teams, bundle identifiers) belong in that file, in the gitignored `ios/Local.xcconfig`, or in environment variables, never in committed code or docs.
 - `npm run test:backend` creates and deletes its own test workspace in Herdr. Never send QA prompts, approvals, or test input into existing agent panes. `npm run test:ui` uses headless Chromium and reads existing Herdr panes without typing into them, and its settings tests never touch the live web-app catalog.
