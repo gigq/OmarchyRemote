@@ -317,3 +317,49 @@ test('Return focuses Terminal while T explicitly adds a terminal tab', async ({ 
   await p.keyboard.press('Meta+t');
   await expect.poll(() => p.evaluate(() => logic.calls.at(-1))).toEqual(['new-tab']);
 });
+
+test('app handlers cannot consume reserved shell shortcuts', async ({ page: p }) => {
+  const results = await p.evaluate(() => {
+    const codes = [
+      'KeyT',
+      'KeyF',
+      'KeyW',
+      'KeyJ',
+      'KeyE',
+      'KeyK',
+      'KeyB',
+      'KeyA',
+      'KeyD',
+      'Comma',
+      'Slash',
+      'Enter',
+      'NumpadEnter',
+      'BracketLeft',
+      'BracketRight',
+      'ArrowLeft',
+      'ArrowRight',
+      'ArrowUp',
+      'ArrowDown',
+      ...Array.from({ length: 10 }, (_, n) => `Digit${n}`),
+    ];
+    const failures = [];
+    for (const binding of HyprlandDesk.BINDINGS) {
+      for (const code of codes.filter(code => binding.code.test(code))) {
+        reset();
+        let intercepted = false;
+        logic.remote = {
+          app: () => ({
+            shortcut: () => {
+              intercepted = true;
+              return true;
+            },
+          }),
+        };
+        HyprlandDesk.nativeKey({ code, shift: !!binding.shift, alt: !!binding.alt });
+        if (intercepted) failures.push(code);
+      }
+    }
+    return failures;
+  });
+  expect(results).toEqual([]);
+});

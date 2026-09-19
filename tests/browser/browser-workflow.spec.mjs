@@ -151,7 +151,7 @@ test('browser page shortcuts preserve shell window closing, including focus and 
   await key(p, 'KeyL');
   await expect(p.getByRole('textbox', { name: 'Page address' })).toBeFocused();
   await p.getByRole('button', { name: 'Browser options' }).click();
-  await key(p, 'KeyF');
+  await key(p, 'KeyF', { ctrl: true });
   await expect(p.getByRole('dialog', { name: 'Browser options' })).toBeHidden();
   await expect.poll(() => p.evaluate(() => window.findVisible)).toBe(true);
   await key(p, 'KeyG', { shift: true });
@@ -166,11 +166,11 @@ test('browser page shortcuts preserve shell window closing, including focus and 
   for (const [code, extra, action] of [
     ['KeyR', {}, 'reload'],
     ['KeyR', { shift: true }, 'reload'],
-    ['BracketLeft', {}, 'back'],
-    ['BracketRight', {}, 'forward'],
-    ['Equal', {}, 'zoom'],
-    ['Minus', {}, 'zoom'],
-    ['Digit0', {}, 'zoom'],
+    ['BracketLeft', { ctrl: true }, 'back'],
+    ['BracketRight', { ctrl: true }, 'forward'],
+    ['Equal', { ctrl: true }, 'zoom'],
+    ['Minus', { ctrl: true }, 'zoom'],
+    ['Digit0', { ctrl: true }, 'zoom'],
     ['F5', { plain: true }, 'reload'],
   ]) {
     await key(p, code, extra);
@@ -185,9 +185,9 @@ test('browser page shortcuts preserve shell window closing, including focus and 
   ).toBe(true);
   await key(p, 'Tab', { ctrl: true });
   await expect.poll(() => opened(p)).toEqual(['https://example.com/', 'https://example.org/']);
-  await key(p, 'Digit1');
+  await key(p, 'Digit1', { ctrl: true });
   await expect.poll(() => opened(p)).toHaveLength(3);
-  await key(p, 'KeyT');
+  await key(p, 'KeyT', { ctrl: true });
   await expect(p.getByRole('dialog', { name: 'New desktop tab' })).toBeVisible();
   await expect
     .poll(() =>
@@ -216,7 +216,7 @@ test('close, reopen and new tab shortcuts update the exact desktop tab and open 
     .poll(() => state.actions.filter(q => q.action === 'close'))
     .toEqual([{ instance_id: 'connection-new', action: 'close', tab_id: 10 }]);
   await expect.poll(() => opened(p)).toEqual(['https://example.com/', 'https://example.org/']);
-  await key(p, 'KeyT', { shift: true });
+  await key(p, 'KeyT', { ctrl: true, shift: true });
   await expect
     .poll(() => opened(p))
     .toEqual(['https://example.com/', 'https://example.org/', 'https://example.com/']);
@@ -226,7 +226,7 @@ test('close, reopen and new tab shortcuts update the exact desktop tab and open 
     url: 'https://example.com/',
     window_id: 1,
   });
-  await key(p, 'KeyT');
+  await key(p, 'KeyT', { ctrl: true });
   await p.getByRole('textbox', { name: 'URL', exact: true }).fill('https://example.edu/');
   await p.getByRole('button', { name: 'Create', exact: true }).click();
   await expect.poll(() => opened(p)).toHaveLength(4);
@@ -274,7 +274,7 @@ test('closing the last openable tab returns to the manager and keeps new-tab sho
       p.evaluate(() => window.browserCommands.filter(q => q.action === 'context').at(-1)?.active)
     )
     .toBe(true);
-  await key(p, 'KeyT');
+  await key(p, 'KeyT', { ctrl: true });
   await expect(p.getByRole('dialog', { name: 'New desktop tab' })).toBeVisible();
 });
 
@@ -285,7 +285,7 @@ test('phone find delegates to the native navigator without inserting another web
   await expect.poll(() => opened(p)).toHaveLength(1);
   await p.waitForTimeout(600);
   const before = await p.locator('.browser-native-slot').boundingBox();
-  await key(p, 'KeyF');
+  await key(p, 'KeyF', { ctrl: true });
   await expect.poll(() => p.evaluate(() => window.findVisible)).toBe(true);
   const after = await p.locator('.browser-native-slot').boundingBox();
   expect(after).toEqual(before);
@@ -334,7 +334,7 @@ test('a delayed native focus reply cannot reopen a dismissed field or steal anot
     };
   });
   await key(p, 'KeyL');
-  await key(p, 'KeyF');
+  await key(p, 'KeyF', { ctrl: true });
   await p.waitForTimeout(160);
   await expect(p.getByRole('textbox', { name: 'Page address' })).not.toBeFocused();
   await key(p, 'KeyL');
@@ -354,4 +354,18 @@ test('tab search opens its first matching page with Return', async ({ page: p })
   await p.getByRole('searchbox', { name: 'Find a tab' }).fill('Other profile');
   await p.getByRole('searchbox', { name: 'Find a tab' }).press('Enter');
   await expect.poll(() => opened(p)).toEqual(['https://example.com/', 'https://example.net/']);
+});
+
+test('Command numbers switch workspaces while Control numbers select browser tabs', async ({
+  page: p,
+}) => {
+  await setup(p, { profile_id: 'profile-one', tab_id: 10 });
+  await expect.poll(() => opened(p)).toHaveLength(1);
+  await key(p, 'Digit2', { ctrl: true });
+  await expect.poll(() => opened(p)).toEqual(['https://example.com/', 'https://example.org/']);
+  await key(p, 'Digit1');
+  await expect(p.locator('.desk-ws-label:visible')).toHaveText('home');
+  await expect.poll(() => opened(p)).toHaveLength(2);
+  await key(p, 'Digit2');
+  await expect(p.locator('.desk-ws-label:visible')).toHaveText('browser');
 });

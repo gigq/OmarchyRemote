@@ -34,6 +34,11 @@ final class HardwareShortcutTests: XCTestCase {
         let page = app.webViews["hyprland.browser.page"]
         XCTAssertTrue(page.waitForExistence(timeout: 10))
         XCTAssertTrue(page.staticTexts["Example Domain"].waitForExistence(timeout: 15))
+        app.typeKey("1", modifierFlags: .command)
+        expectWorkspace("home")
+        app.typeKey("2", modifierFlags: .command)
+        expectWorkspace("browser")
+        XCTAssertTrue(page.waitForExistence(timeout: 5))
         app.typeKey("l", modifierFlags: .command)
         let address = app.textFields["Page address"]
         XCTAssertTrue(address.waitForExistence(timeout: 5))
@@ -42,7 +47,7 @@ final class HardwareShortcutTests: XCTestCase {
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
         app.typeKey("l", modifierFlags: [.command, .shift])
         XCTAssertTrue(app.searchFields["Find a tab"].waitForExistence(timeout: 5))
-        app.typeKey("t", modifierFlags: .command)
+        app.typeKey("t", modifierFlags: .control)
         XCTAssertTrue(app.staticTexts["New desktop tab"].waitForExistence(timeout: 5))
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
         app.typeKey("w", modifierFlags: .command)

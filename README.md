@@ -116,20 +116,20 @@ When Browser is active, its keyboard commands handle tab and page actions. ⌘W 
 | --------------------------------------------- | --------------------------------------------------------------- |
 | ⌘ L                                           | Select address; in the manager, search tabs                     |
 | ⌘ ⇧ L or F2                                   | Open and search the tab manager                                 |
-| ⌘ T / ⌘ N                                     | Create a desktop tab / window (enter its URL)                   |
+| Ctrl T / ⌘ N                                  | Create a desktop tab / window (enter its URL)                   |
 | ⌘ ⇧ W                                         | Close the current desktop tab and select the next available tab |
-| ⌘ ⇧ T                                         | Reopen a tab closed here, restoring its URL                     |
+| Ctrl ⇧ T                                      | Reopen a tab closed here, restoring its URL                     |
 | Ctrl Tab / Ctrl ⇧ Tab, Ctrl PageDown / PageUp | Next / previous openable tab across profiles and windows        |
 | ⌘ ⌥ → / ←                                     | Next / previous openable tab                                    |
-| ⌘ 1–8 / ⌘ 9                                   | Numbered tab / last openable tab in the current desktop window  |
-| ⌘ [ / ]                                       | Page back / forward                                             |
+| Ctrl 1–8 / Ctrl 9                             | Numbered tab / last openable tab in the current desktop window  |
+| Ctrl [ / ]                                    | Page back / forward                                             |
 | ⌘ R / ⌘ ⇧ R, F5 / ⇧ F5                        | Reload / reload bypassing cache                                 |
-| ⌘ F, ⌘ G / ⌘ ⇧ G, F3 / ⇧ F3                   | Find in page, next / previous match                             |
-| ⌘ + / − / 0                                   | Page zoom in / out / reset                                      |
+| Ctrl F, ⌘ G / ⌘ ⇧ G, F3 / ⇧ F3                | Find in page, next / previous match                             |
+| Ctrl + / − / 0                                | Page zoom in / out / reset                                      |
 | Escape                                        | Dismiss dialog/find/options, otherwise stop loading             |
-| ⌘ W / ⌘ ⇧ F                                   | Close Browser's shell window / toggle its fullscreen layout     |
+| ⌘ W / ⌘ F                                     | Close Browser's shell window / toggle its fullscreen layout     |
 
-Use ⌘ E for Expo, ⌘ J / ⇧ J for adjacent shell panes, and ⌘ Return for Terminal while Browser owns the usual tab keys. Native shortcut interception and find/zoom require build 27 or later. These commands operate the embedded WebKit page or the desktop tab adapter; they do not reproduce Vivaldi-only features such as panels, bookmarks, command chains, or DevTools. Reopening a tab restores its URL, not its old page history or form state. The last tab and the last 20 tabs closed here are stored locally and included in the native local preferences mirror, not the shared installed-app catalog.
+Shell shortcuts keep the same meaning inside Browser: ⌘numbers switch workspaces, ⌘brackets switch adjacent workspaces, ⌘T/Return opens Terminal, ⌘F toggles fullscreen, and ⌘⇧F opens Files. Browser actions use separate Control chords where Command would conflict. These non-conflicting native shortcut registrations require build 28 or later. These commands operate the embedded WebKit page or the desktop tab adapter; they do not reproduce Vivaldi-only features such as panels, bookmarks, command chains, or DevTools. Reopening a tab restores its URL, not its old page history or form state. The last tab and the last 20 tabs closed here are stored locally and included in the native local preferences mirror, not the shared installed-app catalog.
 
 ## Native iPhone, iPad, and Vision Pro app
 

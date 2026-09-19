@@ -684,19 +684,19 @@
       this.command('zoom', { value: this.zoom });
     }
     // Listed in the desk shortcut sheet while the browser is in front; shortcut() below takes
-    // the matching keydown events before the shell bindings.
+    // app-specific events after the desk reserves its shell bindings.
     static shortcuts = [
       ['⌘L', 'Focus the address bar (⇧ opens the tab manager)'],
-      ['⌘T', 'New tab (⇧ reopens the last closed tab)'],
+      ['Ctrl+T', 'New tab (⇧ reopens the last closed tab)'],
       ['⌘N', 'New window'],
       ['⌘⇧W', 'Close browser tab (⌘W closes the window)'],
       ['⌘R / F5', 'Reload (⇧ bypasses the cache)'],
-      ['⌘F / F3', 'Find in page'],
+      ['Ctrl+F / F3', 'Find in page'],
       ['⌘G / ⇧⌘G', 'Next / previous match'],
-      ['⌘[ / ⌘]', 'Back / forward'],
-      ['⌘1 … ⌘9', 'Switch to a numbered tab'],
+      ['Ctrl+[ / Ctrl+]', 'Back / forward'],
+      ['Ctrl+1 … Ctrl+9', 'Switch to a numbered tab'],
       ['⌘⌥← / →', 'Previous / next tab (also Ctrl+Tab, Ctrl+PageUp/Down)'],
-      ['⌘+ / ⌘− / ⌘0', 'Zoom in / out / reset'],
+      ['Ctrl++ / Ctrl+− / Ctrl+0', 'Zoom in / out / reset'],
       ['F2', 'Tab manager'],
       ['Esc', 'Close the dialog, options, or page view'],
     ];
@@ -724,7 +724,19 @@
       else if (plain && c === 'F5') run = () => this.command('reload', { bypassCache: shift });
       else if (cmd && e.altKey && /^Arrow(Left|Right)$/.test(c))
         run = () => this.cycleTab(c === 'ArrowLeft' ? -1 : 1);
-      else if (cmd && !e.altKey) {
+      else if ((cmd || ctrl) && !e.altKey) {
+        const browserControl =
+          [
+            'KeyT',
+            'KeyF',
+            'BracketLeft',
+            'BracketRight',
+            'Equal',
+            'Minus',
+            'NumpadAdd',
+            'NumpadSubtract',
+          ].includes(c) || /^Digit[0-9]$/.test(c);
+        if (browserControl !== ctrl) return false;
         if (c === 'KeyL') run = () => (shift ? this.showManager(true) : this.focusAddress());
         else if (c === 'KeyT')
           run = () => {
@@ -742,8 +754,7 @@
             this.newTab(t?.instance, null, true);
           };
         else if (c === 'KeyW' && shift) run = () => this.closeTab();
-        else if (c === 'KeyF' && this.nativeFind)
-          run = () => (shift ? this.host.logic.desk?.toggleFull?.() : this.openFind());
+        else if (c === 'KeyF' && !shift && this.nativeFind) run = () => this.openFind();
         else if (c === 'KeyR')
           run = () =>
             this.pageOpen ? this.command('reload', { bypassCache: shift }) : this.refresh();

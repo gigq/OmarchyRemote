@@ -153,7 +153,7 @@
   // A provider is {create(root, bridge) → instance, close?(instance|null, bridge)}. Instances may
   // implement connect, resume, resize, show(visible), blur, key(input), nativeInput, stopTouchScroll,
   // placeLatest and dispose; the bridge calls whichever exist. In desk mode the front app's
-  // shortcut(event) sees hardware keys before the shell bindings, its shortcuts ([keys, text] pairs)
+  // shortcut(event) sees hardware keys only after reserving shell bindings, its shortcuts ([keys, text] pairs)
   // fill the shortcut sheet, and reopen() runs for bindings marked reopen: true while it is in front.
   const provide = (key, provider) => {
     const app = catalog[key];

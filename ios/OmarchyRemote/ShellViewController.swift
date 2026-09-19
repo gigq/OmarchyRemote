@@ -628,7 +628,11 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         }
         if browserDevice.shortcutsActive {
             func add(_ input: String, _ code: String, _ flags: UIKeyModifierFlags = .command, _ title: String) {
-                commands.removeAll { $0.input == input && $0.modifierFlags == flags }
+                // Browser commands must never shadow a shell workspace/window command.
+                guard !commands.contains(where: { $0.input == input && $0.modifierFlags == flags }) else {
+                    assertionFailure("Browser shortcut collides with a shell shortcut")
+                    return
+                }
                 let command = UIKeyCommand(
                     title: title, action: #selector(handleShellKey(_:)), input: input,
                     modifierFlags: flags,
@@ -641,19 +645,23 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
                 commands.append(command)
             }
             for (input, code, title) in [
-                ("l", "KeyL", "Address"), ("n", "KeyN", "New desktop window"), ("t", "KeyT", "New tab"),
-                ("f", "KeyF", "Find"), ("r", "KeyR", "Reload"), ("g", "KeyG", "Find next"),
+                ("l", "KeyL", "Address"), ("n", "KeyN", "New desktop window"),
+                ("r", "KeyR", "Reload"), ("g", "KeyG", "Find next"),
+            ] { add(input, code, .command, title) }
+            for (input, code, title) in [
+                ("t", "KeyT", "New tab"), ("f", "KeyF", "Find"),
                 ("=", "Equal", "Zoom in"), ("+", "Equal", "Zoom in"), ("-", "Minus", "Zoom out"),
                 ("[", "BracketLeft", "Back"), ("]", "BracketRight", "Forward"),
-            ] { add(input, code, .command, title) }
+            ] { add(input, code, .control, title) }
             for number in 0...9 {
-                add(String(number), "Digit\(number)", .command, number == 0 ? "Reset zoom" : "Select tab")
+                add(String(number), "Digit\(number)", .control, number == 0 ? "Reset zoom" : "Select tab")
             }
             for (input, code, title) in [
                 ("r", "KeyR", "Reload from origin"), ("g", "KeyG", "Find previous"),
-                ("t", "KeyT", "Reopen tab"), ("w", "KeyW", "Close tab"),
-                ("l", "KeyL", "Tab manager"), ("f", "KeyF", "Toggle fullscreen"), ("+", "Equal", "Zoom in"),
+                ("w", "KeyW", "Close tab"), ("l", "KeyL", "Tab manager"),
             ] { add(input, code, [.command, .shift], title) }
+            add("t", "KeyT", [.control, .shift], "Reopen tab")
+            add("+", "Equal", [.control, .shift], "Zoom in")
             add(UIKeyCommand.inputLeftArrow, "ArrowLeft", [.command, .alternate], "Previous tab")
             add(UIKeyCommand.inputRightArrow, "ArrowRight", [.command, .alternate], "Next tab")
             add(UIKeyCommand.inputPageUp, "PageUp", .control, "Previous tab")

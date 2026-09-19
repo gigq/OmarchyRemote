@@ -404,6 +404,21 @@
       const key = e.target.closest('[data-workspace]')?.dataset.workspace;
       if (key && key !== this.logic.cur() && deskOf(s, key) === s.ws) this.logic.focusApp(key);
     }
+    isShellShortcut(e) {
+      const apple = e.metaKey && !e.ctrlKey && (!e.altKey || NATIVE);
+      const combo = !apple && e.ctrlKey && e.altKey && !e.metaKey;
+      return (
+        (apple || combo) &&
+        bindings().some(
+          b =>
+            b.code.test(e.code) &&
+            !!b.shift === e.shiftKey &&
+            !!b.alt === !!(apple && e.altKey) &&
+            (!b.desk || this.logic.state.desk) &&
+            (!b.browserOnly || !NATIVE)
+        )
+      );
+    }
     keydown(e) {
       const s = this.logic.state,
         logic = this.logic;
@@ -412,6 +427,7 @@
         !s.ov &&
         !s.shade &&
         !s.launch &&
+        !this.isShellShortcut(e) &&
         logic.remote?.app(logic.cur())?.shortcut?.(e)
       )
         return;
@@ -543,11 +559,7 @@
       if (front?.shortcuts?.length) {
         const section = node('section', 'desk-sheet-group');
         section.append(
-          node(
-            'h3',
-            '',
-            `${frontName[0].toUpperCase()}${frontName.slice(1)} (overrides shell keys)`
-          )
+          node('h3', '', `${frontName[0].toUpperCase()}${frontName.slice(1)} (app shortcuts)`)
         );
         for (const [keys, text] of front.shortcuts) {
           const row = node('div', 'desk-sheet-row');
