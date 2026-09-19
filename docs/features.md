@@ -117,3 +117,19 @@ floating geometry persist per device, and it starts hidden after a reload.
 Command-drag moves it and Command+right-drag resizes it within the desktop bounds.
 These actions also appear in the palette and require native build 31 for hardware
 key registration. Phone layouts are unchanged.
+
+### Window instances and groups
+
+The action palette offers independent Terminal and Files windows. Each Terminal
+window owns its own tab list and PTYs, while each Files window keeps its own folder
+and navigation state. App providers opt into multiple instances; the installed app
+catalog remains distinct from its open window IDs. Other apps can share a group
+without needing multiple-instance support.
+
+Use Group window with next tile to combine the active tile with another in the
+workspace. The group shows app tabs above its content. Clicking a tab or using the
+existing next/previous-window commands selects it. Remove window from group splits
+out the current tab. Closing a grouped window closes only that window. Workspace
+layout backups include instance identities, group memberships, and the selected
+tab. Terminal session IDs stay local to the client; restoring on another device
+starts its own shells. Browser/web-app native surfaces follow visible group tabs.

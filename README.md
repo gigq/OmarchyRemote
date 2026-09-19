@@ -192,3 +192,8 @@ Native build 31 is required for registry-driven hardware shortcuts.
 Command+Shift+S sends the active desk window to the scratchpad. Command+S shows or
 hides it on the current workspace without closing it; Command+Shift+S returns it to
 tiling. Command-drag moves the floating scratchpad, and Command+right-drag resizes it.
+
+The action palette can create **New terminal window** and **New files window**.
+Each window has its own state. **Group window with next tile** combines tiles into
+a tabbed group; **Remove window from group** separates the active tab. Group tabs,
+independent windows, and their selected state are restored with the device layout.

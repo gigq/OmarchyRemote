@@ -518,6 +518,7 @@ class Component extends DCLogic {
     this.closing = true;
     try {
       await this.remote?.closeApp(k);
+      HyprlandApps.forgetInstance(k);
       const s = this.state;
       if (s.desk && window.HyprlandDesk) {
         this.set({
@@ -678,7 +679,10 @@ class Component extends DCLogic {
   matches() {
     const q = this.state.query.trim().toLowerCase();
     return Object.keys(this.APPS).filter(
-      k => k !== 'home' && (this.APPS[k].name.includes(q) || this.APPS[k].description.includes(q))
+      k =>
+        k !== 'home' &&
+        !this.APPS[k].baseKey &&
+        (this.APPS[k].name.includes(q) || this.APPS[k].description.includes(q))
     );
   }
   // Card geometry for every catalog app (public/cards.js paints it); the desk replaces it above 600 px.

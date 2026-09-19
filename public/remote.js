@@ -483,7 +483,10 @@
     }
   }
   class TerminalTabs {
-    constructor(root, bridge) {
+    constructor(root, bridge, windowKey = 'terminal') {
+      root.classList.add('terminal-window');
+      this.windowKey = windowKey;
+      this.prefix = 'omarchy-' + windowKey;
       this.root = root;
       this.bridge = bridge;
       this.tabs = [];
@@ -492,7 +495,7 @@
       root.append(this.bar, this.body);
       let saved;
       try {
-        saved = JSON.parse(storage.get('omarchy-terminal-tabs'));
+        saved = JSON.parse(storage.get(this.prefix + '-tabs'));
       } catch {}
       const keys = Array.isArray(saved)
         ? [...new Set(saved.filter(k => /^omarchy-terminal-(id|tab-[a-z0-9-]+)$/.test(k)))].slice(
@@ -500,11 +503,18 @@
             8
           )
         : [];
-      for (const key of keys.length ? keys : ['omarchy-terminal-id']) this.add(key, false);
+      for (const key of keys.length
+        ? keys
+        : [
+            this.windowKey === 'terminal'
+              ? 'omarchy-terminal-id'
+              : 'omarchy-terminal-tab-' + crypto.randomUUID(),
+          ])
+        this.add(key, false);
       this.activate(
         Math.max(
           0,
-          this.tabs.findIndex(t => t.storageKey === storage.get('omarchy-terminal-active'))
+          this.tabs.findIndex(t => t.storageKey === storage.get(this.prefix + '-active'))
         )
       );
       this.stopTouchScroll = { cancel: () => this.active.stopTouchScroll.cancel() };
@@ -538,7 +548,7 @@
     shellExited(tab) {
       if (this.disposed || this.closingTab === tab || !this.tabs.includes(tab)) return;
       if (this.tabs.length === 1) {
-        this.bridge.logic.closeApp('terminal');
+        this.bridge.logic.closeApp(this.windowKey);
         return;
       }
       const sessionId = storage.get(tab.storageKey);
@@ -556,7 +566,7 @@
       );
     }
     save() {
-      storage.set('omarchy-terminal-tabs', JSON.stringify(this.tabs.map(t => t.storageKey)));
+      storage.set(this.prefix + '-tabs', JSON.stringify(this.tabs.map(t => t.storageKey)));
     }
     activate(index) {
       this.confirmation?.remove();
@@ -566,11 +576,11 @@
         t.root.hidden = i !== index;
         t.nativeInput.show(false);
       });
-      storage.set('omarchy-terminal-active', this.active.storageKey);
+      storage.set(this.prefix + '-active', this.active.storageKey);
       this.render();
       this.active.connect();
       this.active.resize();
-      if (this.bridge.apps.terminal === this) this.bridge.update();
+      if (this.bridge.apps[this.windowKey] === this) this.bridge.update();
     }
     render() {
       this.addButton?.remove();
@@ -638,8 +648,8 @@
         if (id) await api('terminal/' + encodeURIComponent(id) + '/close', {});
         storage.set(tab.storageKey, null);
       }
-      storage.set('omarchy-terminal-tabs', null);
-      storage.set('omarchy-terminal-active', null);
+      storage.set(this.prefix + '-tabs', null);
+      storage.set(this.prefix + '-active', null);
     }
     connect() {
       this.active.connect();
@@ -1325,7 +1335,7 @@
       const spec = HyprlandApps.get(key),
         app = this.apps[key] || null;
       if (!spec) return;
-      if (spec.provider?.close) await spec.provider.close(app, this);
+      if (spec.provider?.close) await spec.provider.close(app, this, spec);
       if (app) {
         app.dispose?.();
         mount(spec.mount)?.replaceChildren();
@@ -1383,7 +1393,7 @@
           continue;
         const root = mount(spec.mount);
         if (!root) continue;
-        const app = spec.provider.create(root, this);
+        const app = spec.provider.create(root, this, spec);
         this.apps[key] = app;
         app.connect?.();
       }
@@ -1496,8 +1506,26 @@
   };
   if (window.HyprlandApps) {
     HyprlandApps.provide('terminal', {
-      create: (root, bridge) => new TerminalTabs(root, bridge),
-      close: app => (app ? app.closeSessions() : closeSession('terminal', null)),
+      multiple: true,
+      create: (root, bridge, spec) => new TerminalTabs(root, bridge, spec?.key),
+      close: async (app, bridge, spec) => {
+        if (app) return app.closeSessions();
+        const prefix = 'omarchy-' + spec.key;
+        const saved = storage.read(prefix + '-tabs', []);
+        const keys = Array.isArray(saved)
+          ? saved.filter(
+              k => typeof k === 'string' && /^omarchy-terminal-(id|tab-[a-z0-9-]+)$/.test(k)
+            )
+          : [];
+        if (!keys.length && spec.key === 'terminal') keys.push('omarchy-terminal-id');
+        for (const key of keys) {
+          const id = storage.get(key);
+          if (id) await api(`terminal/${encodeURIComponent(id)}/close`, {});
+          storage.set(key, null);
+        }
+        storage.set(prefix + '-tabs', null);
+        storage.set(prefix + '-active', null);
+      },
     });
     for (const key of Object.keys(HOST_TUIS))
       if (key !== 'terminal')

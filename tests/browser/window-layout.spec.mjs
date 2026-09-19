@@ -101,9 +101,9 @@ test('action palette filters and executes without losing window focus; registry 
     b = await rect(p, 'browser');
   expect(a.y + a.height).toBeLessThan(b.y);
   const duplicates = await p.evaluate(() => {
-    const keys = HyprlandDesk.actions().map(a =>
-      JSON.stringify([a.code, a.meta, a.ctrl, a.alt, a.shift])
-    );
+    const keys = HyprlandDesk.actions()
+      .filter(a => a.code)
+      .map(a => JSON.stringify([a.code, a.meta, a.ctrl, a.alt, a.shift]));
     return keys.length - new Set(keys).size;
   });
   expect(duplicates).toBe(0);
@@ -135,4 +135,108 @@ test('scratchpad hides without closing, follows workspace, and returns to tiling
   await p.keyboard.press('Meta+Shift+S');
   await expect(frame(p, 'browser')).not.toHaveClass(/desk-scratchpad/);
   expect((await rect(p, 'browser')).width).toBeGreaterThan(1100);
+});
+async function action(p, label) {
+  await p.keyboard.press('Meta+Shift+K');
+  const search = p.getByRole('textbox', { name: 'Search actions', exact: true });
+  await search.fill(label);
+  await p.getByRole('button', { name: label, exact: true }).click();
+}
+test('independent terminal windows survive reload and closing one does not close another session', async ({
+  page: p,
+}) => {
+  const sessions = [],
+    closed = [];
+  await p.route('**/api/**', async r => {
+    const url = new URL(r.request().url());
+    if (url.pathname === '/api/terminal/session') {
+      const data = r.request().postDataJSON();
+      const id = data.id || 'test-' + (sessions.length + 1);
+      sessions.push(id);
+      await r.fulfill({ json: { id } });
+    } else if (url.pathname.endsWith('/close')) {
+      closed.push(url.pathname);
+      await r.fulfill({ json: { ok: true } });
+    } else await r.abort();
+  });
+  await p.goto('/native/');
+  await p.keyboard.press('Meta+Enter');
+  await action(p, 'New terminal window');
+  const stored = await p.evaluate(() => JSON.parse(localStorage.getItem('omarchy-layout-desk')));
+  const key = Object.keys(stored.instances)[0];
+  expect(key).toMatch(/^window-/);
+  await expect.poll(() => sessions.length).toBe(2);
+  expect(new Set(sessions).size).toBe(2);
+  const cloneTabs = await p.evaluate(
+    k => JSON.parse(localStorage.getItem('omarchy-' + k + '-tabs')),
+    key
+  );
+  const originalTabs = await p.evaluate(() =>
+    JSON.parse(localStorage.getItem('omarchy-terminal-tabs'))
+  );
+  expect(cloneTabs[0]).not.toBe(originalTabs[0]);
+  await p.reload();
+  await expect.poll(() => sessions.length).toBe(4);
+  expect(new Set(sessions).size).toBe(2);
+  await p.keyboard.press('Meta+W');
+  await expect.poll(() => closed.length).toBe(1);
+  expect(closed[0]).toContain('test-2');
+  await expect(p.locator('.desk-ws-label:visible')).toHaveText('terminal');
+});
+test('group tabs select independent windows, persist, and can be separated', async ({
+  page: p,
+}) => {
+  await boot(p);
+  await action(p, 'Group window with next tile');
+  const bar = frame(p, 'browser').locator('.desk-window-tabs');
+  await expect(bar).toBeVisible();
+  await expect(p.locator('.desk-divider')).toHaveCount(0);
+  await bar.getByRole('button', { name: 'terminal', exact: true }).click();
+  await expect(p.locator('.desk-ws-label:visible')).toHaveText('terminal');
+  await p.reload();
+  await expect(frame(p, 'terminal').locator('.desk-window-tabs')).toBeVisible();
+  await expect(frame(p, 'browser')).toHaveCSS('opacity', '0');
+  await action(p, 'Remove window from group');
+  await expect(p.locator('.desk-divider')).toHaveCount(1);
+  await expect(frame(p, 'terminal').locator('.desk-window-tabs')).toHaveCount(0);
+});
+test('Files instances keep independent folders and restore them', async ({ page: p }) => {
+  await p.route('**/api/**', r => {
+    const url = new URL(r.request().url());
+    if (url.pathname === '/api/files') {
+      const path = url.searchParams.get('path') || '/home/test';
+      return r.fulfill({
+        json: {
+          path,
+          root: '/home/test',
+          parent: path === '/home/test' ? '/home' : '/home/test',
+          entries:
+            path === '/home/test'
+              ? [{ name: 'Documents', path: '/home/test/Documents', directory: true, size: 0 }]
+              : [],
+        },
+      });
+    }
+    return r.abort();
+  });
+  await p.goto('/native/');
+  await p.keyboard.press('Meta+Shift+F');
+  await expect(frame(p, 'files').locator('.files-path')).toHaveAttribute('data-path', '/home/test');
+  await action(p, 'New files window');
+  const key = await p.evaluate(
+    () => Object.keys(JSON.parse(localStorage.getItem('omarchy-layout-desk')).instances)[0]
+  );
+  await frame(p, key)
+    .getByRole('button', { name: /Documents/ })
+    .click();
+  await expect(frame(p, key).locator('.files-path')).toHaveAttribute(
+    'data-path',
+    '/home/test/Documents'
+  );
+  await expect(frame(p, 'files').locator('.files-path')).toHaveAttribute('data-path', '/home/test');
+  await p.reload();
+  await expect(frame(p, key).locator('.files-path')).toHaveAttribute(
+    'data-path',
+    '/home/test/Documents'
+  );
 });

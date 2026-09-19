@@ -171,6 +171,9 @@
     const key = state.desk ? 'omarchy-layout-desk' : 'omarchy-layout-phone';
     const saved = storage.read(key);
     if (!saved || !Array.isArray(saved.open)) return {};
+    for (const [id, base] of Object.entries(saved.instances || {}).slice(0, 9)) {
+      if (saved.open.includes(id)) HyprlandApps.createInstance(base, id);
+    }
     const open = [
       'home',
       ...new Set(saved.open.filter(k => k !== 'home' && HyprlandApps.get(k))),
@@ -193,6 +196,16 @@
       )
     );
     return {
+      groups: Object.fromEntries(
+        Object.entries(saved.groups || {}).filter(
+          ([k, v]) => k !== 'home' && open.includes(k) && typeof v === 'string' && v.length <= 100
+        )
+      ),
+      groupActive: Object.fromEntries(
+        Object.entries(saved.groupActive || {}).filter(
+          ([k, v]) => k.length <= 100 && open.includes(v)
+        )
+      ),
       scratchKey:
         open.includes(saved.scratchKey) && saved.scratchKey !== 'home' ? saved.scratchKey : null,
       scratchVisible: false,
@@ -231,6 +244,11 @@
     const s = value.state;
     storage.write(s.desk ? 'omarchy-layout-desk' : 'omarchy-layout-phone', {
       open: s.open,
+      instances: Object.fromEntries(
+        s.open.filter(k => HyprlandApps.get(k)?.baseKey).map(k => [k, HyprlandApps.get(k).baseKey])
+      ),
+      groups: s.groups,
+      groupActive: s.groupActive,
       scratchKey: s.scratchKey,
       scratchRect: s.scratchRect,
       tiles: s.tiles,

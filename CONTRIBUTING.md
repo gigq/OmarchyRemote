@@ -92,3 +92,10 @@ Formatting is automated so reviews and merges stay about behavior. Prettier (`.p
 - The shell template in `public/index.html` is a design-tool export on its own runtime; app code belongs in modules, not in the template.
 - Status text names the host from `HyprlandApps.host`, never a hardcoded machine name. Paths shown to users go through `HyprlandApps.tilde`.
 - Backend code refuses what it cannot verify: HOME confinement, bounded searches, no-replace writes, and no secrets in responses.
+
+Providers that safely support independent windows can set `multiple: true`.
+`create(root, bridge, spec)` and `close(instance, bridge, spec)` receive the window
+spec: `spec.key` is its unique window ID, and `spec.baseKey` identifies the installed
+app for additional instances. Namespace per-window state by `spec.key`. Keep host
+adapter IDs separate. Closing a not-yet-created window must only close sessions
+belonging to that window. Shared app preferences may still use the base app key.

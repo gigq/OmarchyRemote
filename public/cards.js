@@ -52,11 +52,37 @@
     apply(key) {
       this.paint(key, this.logic.layout());
     }
+    groupTabs(key, card, state) {
+      const members = state.desk ? HyprlandDesk.groupMembers(state, key) : [key];
+      const grouped = members.length > 1 && key !== state.scratchKey;
+      card.classList.toggle('desk-grouped', grouped);
+      const signature = grouped ? JSON.stringify(members) : '';
+      if (card.dataset.groupTabs === signature) return;
+      card.dataset.groupTabs = signature;
+      card.querySelector('.desk-window-tabs')?.remove();
+      if (!grouped) return;
+      const bar = document.createElement('nav');
+      bar.className = 'desk-window-tabs';
+      bar.setAttribute('aria-label', 'Window group');
+      for (const member of members) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = HyprlandApps.get(member)?.name || member;
+        button.setAttribute('aria-pressed', String(member === key));
+        button.onclick = e => {
+          e.stopPropagation();
+          this.logic.focusApp(member);
+        };
+        bar.append(button);
+      }
+      card.append(bar);
+    }
     paint(key, layout) {
       const card = this.cards[key],
         c = layout.cards[key],
         state = this.logic.state;
       if (!card || !c) return;
+      this.groupTabs(key, card, state);
       const s = card.style;
       s.zIndex = state.desk && key === state.scratchKey ? '20' : '';
       card.classList.toggle('desk-scratchpad', state.desk && key === state.scratchKey);

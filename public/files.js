@@ -68,8 +68,9 @@
     trash: '\uf1f8',
   };
   class FilesApp {
-    constructor(root, openTerminal) {
+    constructor(root, openTerminal, windowKey = 'files') {
       this.root = root;
+      this.pathKey = 'omarchy-' + windowKey + '-path';
       this.openTerminal = openTerminal;
       this.path = '';
       this.hidden = false;
@@ -85,7 +86,7 @@
       this.sensitive = false;
       this.regex = false;
       try {
-        this.path = localStorage.getItem('omarchy-files-path') || '';
+        this.path = localStorage.getItem(this.pathKey) || '';
       } catch {}
       root.classList.add('files-app');
       this.heading = node('div', 'files-heading');
@@ -297,7 +298,7 @@
         this.parent = data.parent;
         this.entries = data.entries;
         try {
-          localStorage.setItem('omarchy-files-path', this.path);
+          localStorage.setItem(this.pathKey, this.path);
         } catch {}
         this.remember({
           path: this.path,
@@ -1297,6 +1298,8 @@
   }
   window.HostFilesApp = FilesApp;
   window.HyprlandApps?.provide('files', {
-    create: (root, bridge) => new FilesApp(root, path => bridge.openTerminalAt(path)),
+    multiple: true,
+    create: (root, bridge, spec) =>
+      new FilesApp(root, path => bridge.openTerminalAt(path), spec?.key),
   });
 })();

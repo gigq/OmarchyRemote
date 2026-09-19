@@ -104,7 +104,7 @@ html.desk-mode {
 
 /* Apps sit inside their tile with a uniform margin; the system keyboard resizes the desk instead. */
 .desk-mode .remote-app,
-.desk-mode #remote-terminal-app,
+.desk-mode .terminal-window,
 .desk-mode #remote-herdr-app,
 .desk-mode .theme-settings,
 .desk-mode .browser-app,
@@ -112,7 +112,7 @@ html.desk-mode {
   inset: 7px 8px 7px !important;
 }
 .desk-mode .remote-app.with-keyboard,
-.desk-mode #remote-terminal-app.with-keyboard,
+.desk-mode .terminal-window.with-keyboard,
 .desk-mode #remote-herdr-app.with-keyboard,
 .desk-mode .browser-app:focus-within,
 .desk-mode .files-app:focus-within {
@@ -433,7 +433,7 @@ html.desk-mode {
 }
 
 /* Match top clearance to the horizontal content inset. */
-.desk-mode #touch-shell #remote-terminal-app {
+.desk-mode #touch-shell .terminal-window {
   top: 8px !important;
 }
 
@@ -616,4 +616,32 @@ html.desk-mode.vision-mode {
 
 .desk-mode .desk-scratchpad {
   box-shadow: 0 18px 65px #0009;
+}
+
+.desk-mode #touch-shell .desk-grouped > :first-child {
+  top: 45px !important;
+}
+.desk-window-tabs {
+  position: absolute;
+  top: 7px;
+  left: 10px;
+  right: 10px;
+  display: flex;
+  gap: 6px;
+  height: 32px;
+  overflow: auto;
+}
+.desk-window-tabs button {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  background: var(--theme-background);
+  color: var(--theme-muted);
+  font: inherit;
+  font-size: 12px;
+}
+.desk-window-tabs button[aria-pressed='true'] {
+  color: var(--theme-accent);
+  border-color: var(--theme-accent);
 }

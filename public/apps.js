@@ -171,6 +171,24 @@
       offline: true,
       mountClass: 'remote-app webapp-app',
     });
+  // Instance IDs are shell windows; baseKey remains the installed app/host adapter identity.
+  const createInstance = (baseKey, id = 'window-' + crypto.randomUUID()) => {
+    const base = catalog[baseKey];
+    if (!base?.provider?.multiple || !/^window-[a-f0-9-]{36}$/.test(id)) return null;
+    if (catalog[id]) return catalog[id];
+    let number = 2;
+    while (Object.values(catalog).some(a => a.name === base.name + ' ' + number)) number++;
+    return define(id, {
+      ...base,
+      key: id,
+      baseKey,
+      name: base.name + ' ' + number,
+      mount: 'remote-' + id + '-app',
+      deskKeys: [],
+      superKeys: [],
+      superLabel: null,
+    });
+  };
   const DEFAULT_PINS = [
     'terminal',
     'files',
@@ -199,6 +217,10 @@
     catalog,
     define,
     defineWebApp,
+    createInstance,
+    forgetInstance: key => {
+      if (catalog[key]?.baseKey) delete catalog[key];
+    },
     provide,
     get: key => catalog[key] || null,
     keys: () => Object.keys(catalog),

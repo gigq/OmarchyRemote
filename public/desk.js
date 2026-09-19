@@ -31,6 +31,22 @@
     return tiles;
   };
   const deskOf = (s, key) => desks(s).findIndex(d => d.includes(key));
+  const groupMembers = (s, key) => {
+    const apps = desks(s)[deskOf(s, key)] || [];
+    const group = s.groups?.[key];
+    return group ? apps.filter(k => s.groups?.[k] === group) : [key];
+  };
+  const tileMembers = (s, apps) => {
+    const result = [],
+      seen = new Set();
+    for (const key of apps) {
+      const id = s.groups?.[key] || key;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      result.push(s.groups?.[key] ? apps.filter(k => s.groups?.[k] === id) : [key]);
+    }
+    return result;
+  };
   const cur = s => {
     if (s.scratchVisible && s.open.includes(s.scratchKey)) return s.scratchKey;
     const d = desks(s)[s.ws] || ['home'];
@@ -107,7 +123,8 @@
   const MODES = { dwindle: 'Dwindle (Omarchy default)', master: 'Master and stack' };
   const mode = s => (Object.hasOwn(MODES, s.windowLayout) ? s.windowLayout : 'dwindle');
   // Split identities follow the ordered apps, not a workspace number that can be renumbered.
-  const splitID = (s, apps, index) => JSON.stringify([mode(s), apps, index]);
+  const splitID = (s, apps, index) =>
+    JSON.stringify([mode(s), apps.map(k => s.groups?.[k] || k), index]);
   const boundedRatio = (value, length) => {
     const min = Math.min(0.45, 120 / Math.max(1, length));
     return Math.max(min, Math.min(1 - min, Number.isFinite(value) ? value : 0.5));
@@ -159,12 +176,23 @@
       splits = [];
     desks(s).forEach((apps, desk) => {
       const full = apps.find(k => (s.full || []).includes(k));
-      const visible = full ? [full] : apps;
+      const visible = full
+        ? [full]
+        : tileMembers(s, apps).map(members =>
+            members.includes(s.focus)
+              ? s.focus
+              : members.includes(s.groupActive?.[s.groups?.[members[0]]])
+                ? s.groupActive[s.groups[members[0]]]
+                : members[0]
+          );
       const rs = desk === 0 ? [area] : tiled(s, visible, area, splits, desk);
       visible.forEach((k, i) => rects.set(k, { ...rs[i], desk }));
       apps
         .filter(k => !visible.includes(k))
-        .forEach(k => rects.set(k, { ...area, desk, hidden: true }));
+        .forEach(k => {
+          const selected = visible.find(v => groupMembers(s, k).includes(v));
+          rects.set(k, { ...(selected ? rects.get(selected) : area), desk, hidden: true });
+        });
     });
     if (s.open.includes(s.scratchKey)) {
       const saved = s.scratchRect || {};
@@ -298,7 +326,10 @@
         group: 'Apps',
         ...b,
         run: d => {
-          const front = d.logic.cur() === app.key && d.logic.remote?.app(app.key);
+          const current = d.logic.cur();
+          const front =
+            (HyprlandApps.get(current)?.baseKey || current) === app.key &&
+            d.logic.remote?.app(current);
           if (b.reopen && front?.reopen) front.reopen();
           else d.logic.openApp(app.key);
         },
@@ -608,6 +639,9 @@
       const oldApps = this.lastWorkspaceApps;
       const changed = this.lastWs != null && this.lastWs !== s.ws;
       this.lastWs = s.ws;
+      const group = s.groups?.[cur(s)];
+      if (group && s.groupActive?.[group] !== cur(s))
+        this.logic.set({ groupActive: { ...s.groupActive, [group]: cur(s) } });
       const anchor = apps.includes(cur(s)) ? cur(s) : apps[0];
       this.lastWorkspaceApps = [anchor, ...apps.filter(k => k !== anchor)];
       if (changed && oldApps) {
@@ -664,7 +698,20 @@
           });
         }
       }
-      const signatures = new Set(result.map(signature));
+      for (const app of Object.values(HyprlandApps.catalog).filter(
+        a => this.logic.state.desk && !a.baseKey && a.provider?.multiple
+      ))
+        result.push({
+          label: 'New ' + app.name + ' window',
+          group: 'Windows',
+          run: () => this.newWindow(app.key),
+        });
+      if (this.logic.state.desk)
+        result.push(
+          { label: 'Group window with next tile', group: 'Windows', run: () => this.groupWindow() },
+          { label: 'Remove window from group', group: 'Windows', run: () => this.ungroupWindow() }
+        );
+      const signatures = new Set(result.filter(a => a.code).map(signature));
       for (const action of this.logic.remote?.app(this.logic.cur())?.actions || []) {
         if (signatures.has(signature(action))) continue;
         signatures.add(signature(action));
@@ -675,7 +722,9 @@
     publishActions() {
       const bridge = window.webkit?.messageHandlers?.shellKeyboard;
       if (!bridge?.postMessage) return;
-      const actions = this.actions().map(({ run, ...a }) => a);
+      const actions = this.actions()
+        .filter(a => a.code)
+        .map(({ run, ...a }) => a);
       const text = JSON.stringify(actions);
       if (text === this.registeredActions) return;
       this.registeredActions = text;
@@ -1034,6 +1083,35 @@
     patch(p) {
       if (p) this.logic.set(p);
     }
+    groupWindow() {
+      const s = this.logic.state,
+        key = cur(s);
+      if (!s.desk || key === 'home' || key === s.scratchKey) return;
+      const apps = desks(s)[s.ws],
+        members = groupMembers(s, key);
+      const other = apps.find(k => !members.includes(k));
+      if (!other) return;
+      const group = s.groups?.[key] || crypto.randomUUID();
+      const groups = { ...s.groups };
+      for (const k of [...members, ...groupMembers(s, other)]) groups[k] = group;
+      this.logic.set({
+        groups,
+        groupActive: { ...s.groupActive, [group]: key },
+        full: (s.full || []).filter(k => !apps.includes(k)),
+      });
+    }
+    ungroupWindow() {
+      const s = this.logic.state,
+        key = cur(s),
+        groups = { ...s.groups };
+      delete groups[key];
+      this.logic.set({ groups });
+    }
+    newWindow(baseKey) {
+      if (!this.logic.state.desk || this.logic.state.open.length >= 10) return;
+      const app = HyprlandApps.createInstance(baseKey);
+      if (app) this.logic.openApp(app.key);
+    }
     toggleScratch() {
       const s = this.logic.state;
       if (!s.desk) return;
@@ -1251,10 +1329,11 @@
     MODES,
     isDesk,
     desks,
-    visible: s => [
-      ...(desks(s)[s.ws] || []),
-      ...(s.scratchVisible && s.open.includes(s.scratchKey) ? [s.scratchKey] : []),
-    ],
+    visible: s =>
+      [...layout(s, s.deskW, s.deskH).rects]
+        .filter(([, r]) => r.desk === s.ws && !r.hidden)
+        .map(([k]) => k),
+    groupMembers,
     deskOf,
     cur,
     go,
