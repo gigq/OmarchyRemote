@@ -292,3 +292,25 @@ test('scrolling layout reveals focused columns without squeezing them and saves 
   await p.waitForTimeout(650);
   await p.screenshot({ path: 'artifacts/browser/scrolling-expo.png' });
 });
+
+test('floating windows leave tiling, move and resize independently, and restore', async ({
+  page: p,
+}) => {
+  await boot(p);
+  await p.keyboard.press('Meta+Shift+O');
+  const floating = await rect(p, 'browser');
+  const tile = await rect(p, 'terminal');
+  expect(tile.width).toBeGreaterThan(1100);
+  expect(floating.width).toBeLessThan(tile.width);
+  await drag(p, floating.x + 30, floating.y + 80, 50, 30, 'left', true);
+  const moved = await rect(p, 'browser');
+  expect(moved.x).toBeGreaterThan(floating.x + 40);
+  await drag(p, moved.x + 30, moved.y + 80, -80, -50, 'right', true);
+  const resized = await rect(p, 'browser');
+  expect(resized.width).toBeLessThan(moved.width - 60);
+  await p.reload();
+  expect((await rect(p, 'browser')).width).toBeCloseTo(resized.width, 0);
+  await p.keyboard.press('Meta+Shift+O');
+  await expect(p.locator('.desk-divider')).toHaveCount(1);
+  expect((await rect(p, 'terminal')).width).toBeLessThan(tile.width - 200);
+});

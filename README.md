@@ -203,3 +203,7 @@ workspace width, matching Omarchy's configured scrolling width. Focus commands
 reveal their column, dividers resize individual columns, and the bottom scroll
 strip pans across the workspace with touch or a trackpad. Window content keeps its
 width while panning. Dwindle remains the default.
+
+**Command+Shift+O** toggles the active desk window between tiled and floating.
+Floating windows stay on their workspace, remember their bounds per device, and
+come forward when focused. Command-drag moves them; Command+right-drag resizes them.

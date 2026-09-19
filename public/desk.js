@@ -170,6 +170,28 @@
     });
     return [a, ...tiled(s, apps, b, splits, desk, index + 1)];
   };
+  const floatingRect = (area, saved = {}) => {
+    const w = Math.min(area.w, Math.max(240, Number.isFinite(saved.w) ? saved.w : area.w * 0.7));
+    const h = Math.min(area.h, Math.max(200, Number.isFinite(saved.h) ? saved.h : area.h * 0.7));
+    return {
+      x: Math.max(
+        area.x,
+        Math.min(
+          area.x + area.w - w,
+          Number.isFinite(saved.x) ? saved.x : area.x + (area.w - w) / 2
+        )
+      ),
+      y: Math.max(
+        area.y,
+        Math.min(
+          area.y + area.h - h,
+          Number.isFinite(saved.y) ? saved.y : area.y + (area.h - h) / 2
+        )
+      ),
+      w,
+      h,
+    };
+  };
   // Hidden siblings of a fullscreen window retain the full area.
   const layout = (s, W, H) => {
     const area = {
@@ -183,9 +205,11 @@
       columns = new Map();
     desks(s).forEach((apps, desk) => {
       const full = apps.find(k => (s.full || []).includes(k));
+      const floats = apps.filter(k => k !== 'home' && s.floating?.[k]);
+      const tiledApps = apps.filter(k => !floats.includes(k));
       const visible = full
         ? [full]
-        : tileMembers(s, apps).map(members =>
+        : tileMembers(s, tiledApps).map(members =>
             members.includes(s.focus)
               ? s.focus
               : members.includes(s.groupActive?.[s.groups?.[members[0]]])
@@ -224,8 +248,11 @@
         columns.set(desk, { anchor, total, offset, keys: visible, widths });
       } else rs = desk === 0 ? [area] : tiled(s, visible, area, splits, desk);
       visible.forEach((k, i) => rects.set(k, { ...rs[i], desk }));
+      if (!full)
+        for (const key of floats)
+          rects.set(key, { ...floatingRect(area, s.floating[key]), desk, floating: true });
       apps
-        .filter(k => !visible.includes(k))
+        .filter(k => !visible.includes(k) && (full || !floats.includes(k)))
         .forEach(k => {
           const selected = visible.find(v => groupMembers(s, k).includes(v));
           rects.set(k, { ...(selected ? rects.get(selected) : area), desk, hidden: true });
@@ -336,6 +363,8 @@
         bd:
           k === focused && r.desk === s.ws ? 'var(--theme-accent)' : 'var(--theme-window-inactive)',
         lab: s.ov ? 1 : 0,
+        z: r.scratch ? 30 : r.floating ? 10 + (s.floatOrder || []).indexOf(k) : 0,
+        floating: !!r.floating,
         visibility: mode(s) === 'scrolling' && !s.ov && r.desk !== s.ws ? 'hidden' : 'visible',
         op: r.hidden ? 0 : 1,
         pe: r.hidden ? 'none' : 'auto',
@@ -397,6 +426,15 @@
       desk: true,
       label: 'Return to previous workspace',
       run: d => d.previousWorkspace(),
+    },
+    {
+      group: 'Windows',
+      keys: '⇧ O',
+      shift: true,
+      code: /^KeyO$/,
+      desk: true,
+      label: 'Toggle floating window',
+      run: d => d.toggleFloating(),
     },
     {
       group: 'Windows',
@@ -709,7 +747,15 @@
       const oldApps = this.lastWorkspaceApps;
       const changed = this.lastWs != null && this.lastWs !== s.ws;
       this.lastWs = s.ws;
-      const group = s.groups?.[cur(s)];
+      const focused = cur(s);
+      if (s.floating?.[focused] && s.floatOrder?.at(-1) !== focused)
+        this.logic.set({
+          floatOrder: [
+            ...(s.floatOrder || []).filter(k => k !== focused && s.open.includes(k)),
+            focused,
+          ],
+        });
+      const group = s.groups?.[focused];
       if (group && s.groupActive?.[group] !== cur(s))
         this.logic.set({ groupActive: { ...s.groupActive, [group]: cur(s) } });
       const anchor = apps.includes(cur(s)) ? cur(s) : apps[0];
@@ -752,7 +798,7 @@
       const s = this.logic.state,
         geometry = layout(s, s.deskW, s.deskH),
         info = geometry.columns.get(s.ws);
-      const hidden = !s.desk || !info || !this.canDrag() || s.scratchVisible;
+      const hidden = !s.desk || !info?.keys.length || !this.canDrag() || s.scratchVisible;
       this.columnScroll.hidden = hidden;
       if (hidden) {
         this.columnMode = null;
@@ -1010,7 +1056,11 @@
         point = this.point(e);
       const geometry = layout(s, s.deskW, s.deskH);
       const key = [...geometry.rects]
-        .reverse()
+        .sort(([a, ar], [b, br]) => {
+          const z = (k, r) =>
+            r.scratch ? 30 : r.floating ? 10 + (s.floatOrder || []).indexOf(k) : 0;
+          return z(b, br) - z(a, ar);
+        })
         .find(
           ([, r]) =>
             r.desk === s.ws &&
@@ -1020,7 +1070,7 @@
             point.y >= r.y &&
             point.y <= r.y + r.h
         )?.[0];
-      const floating = key === s.scratchKey ? geometry.rects.get(key) : null;
+      const floating = key === s.scratchKey || s.floating?.[key] ? geometry.rects.get(key) : null;
       if (floating) {
         this.drag = {
           ws: s.ws,
@@ -1032,6 +1082,7 @@
           resize: e.button === 2,
         };
         this.shell.classList.add('desk-dragging');
+        this.logic.focusApp(key);
         return true;
       }
       const available = geometry.splits.filter(
@@ -1072,11 +1123,10 @@
         const r = drag.floating,
           dx = point.x - drag.start.x,
           dy = point.y - drag.start.y;
-        this.logic.set({
-          scratchRect: drag.resize
-            ? { ...r, w: r.w + dx, h: r.h + dy }
-            : { ...r, x: r.x + dx, y: r.y + dy },
-        });
+        this.setFloatingRect(
+          drag.key,
+          drag.resize ? { ...r, w: r.w + dx, h: r.h + dy } : { ...r, x: r.x + dx, y: r.y + dy }
+        );
       } else if (drag.split) {
         const split = drag.split;
         this.resizeSplit(split, split.position + point[split.axis] - drag.start[split.axis]);
@@ -1221,9 +1271,10 @@
       if (!s.desk || key === 'home' || key === s.scratchKey) return;
       const apps = desks(s)[s.ws],
         members = groupMembers(s, key);
-      const other = apps.find(k => !members.includes(k));
+      const other = apps.find(k => !members.includes(k) && !s.floating?.[k]);
       if (!other) return;
       const group = s.groups?.[key] || crypto.randomUUID();
+      if (s.floating?.[key] || s.floating?.[other]) return;
       const groups = { ...s.groups };
       for (const k of [...members, ...groupMembers(s, other)]) groups[k] = group;
       this.logic.set({
@@ -1238,6 +1289,48 @@
         groups = { ...s.groups };
       delete groups[key];
       this.logic.set({ groups });
+    }
+    setFloatingRect(key, rect) {
+      const s = this.logic.state;
+      const bounded = floatingRect(layout(s, s.deskW, s.deskH).area, rect);
+      this.logic.set(
+        key === s.scratchKey
+          ? { scratchRect: bounded }
+          : { floating: { ...s.floating, [key]: bounded } }
+      );
+    }
+    toggleFloating() {
+      const s = this.logic.state,
+        key = cur(s);
+      if (!s.desk || key === 'home' || key === s.scratchKey) return;
+      const floating = { ...s.floating },
+        groups = { ...s.groups };
+      if (floating[key]) delete floating[key];
+      else {
+        floating[key] = floatingRect(layout(s, s.deskW, s.deskH).area);
+        delete groups[key];
+      }
+      this.logic.set({ floating, groups, full: (s.full || []).filter(k => k !== key) });
+    }
+    covered(key) {
+      const s = this.logic.state;
+      if (!s.desk || s.ov) return false;
+      const rects = layout(s, s.deskW, s.deskH).rects;
+      const r = rects.get(key);
+      if (!r || r.hidden) return false;
+      const z = k =>
+        k === s.scratchKey ? 30 : s.floating?.[k] ? 10 + (s.floatOrder || []).indexOf(k) : 0;
+      return [...rects].some(
+        ([k, other]) =>
+          k !== key &&
+          !other.hidden &&
+          other.desk === s.ws &&
+          z(k) > z(key) &&
+          r.x < other.x + other.w &&
+          r.x + r.w > other.x &&
+          r.y < other.y + other.h &&
+          r.y + r.h > other.y
+      );
     }
     newWindow(baseKey) {
       if (!this.logic.state.desk || this.logic.state.open.length >= 10) return;

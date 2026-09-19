@@ -147,3 +147,14 @@ strip uses native horizontal overflow scrolling for touch/trackpad panning, acce
 wheel input, and has named buttons to focus columns. This does not intercept
 scrolling inside app content. Expo scales the complete row into its workspace
 preview. Scratchpad remains floating above the workspace; phone geometry is unchanged.
+
+### Floating windows
+
+Command+Shift+O (also in Search actions) toggles a regular desk window between tiled
+and floating. Floating removes that window from its tile group and lets the remaining
+tiles fill the space. Floating windows retain workspace membership, saved position
+and size, and come forward when focused. Command-drag moves; Command+right-drag
+resizes. Bounds remain inside the desk when its dimensions change. Fullscreen and
+Expo continue to work. An overlapping foreground window covers native web surfaces
+behind it with their preview so native content cannot paint over the front window.
+The scratchpad remains a separate slot that can follow you between workspaces.

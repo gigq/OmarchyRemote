@@ -196,6 +196,18 @@
       )
     );
     return {
+      floating: Object.fromEntries(
+        Object.entries(saved.floating || {}).filter(
+          ([key, rect]) =>
+            key !== 'home' &&
+            open.includes(key) &&
+            rect &&
+            ['x', 'y', 'w', 'h'].every(p => Number.isFinite(rect[p]))
+        )
+      ),
+      floatOrder: Array.isArray(saved.floatOrder)
+        ? [...new Set(saved.floatOrder.filter(k => open.includes(k)))]
+        : [],
       columnWidths: Object.fromEntries(
         Object.entries(saved.columnWidths || {}).filter(
           ([k, v]) => k.length <= 100 && Number.isFinite(v) && v >= 0.25 && v <= 1
@@ -257,6 +269,8 @@
       instances: Object.fromEntries(
         s.open.filter(k => HyprlandApps.get(k)?.baseKey).map(k => [k, HyprlandApps.get(k).baseKey])
       ),
+      floating: s.floating,
+      floatOrder: s.floatOrder,
       columnWidths: s.columnWidths,
       columnOffsets: s.columnOffsets,
       groups: s.groups,

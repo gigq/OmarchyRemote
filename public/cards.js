@@ -84,8 +84,11 @@
       if (!card || !c) return;
       this.groupTabs(key, card, state);
       const s = card.style;
-      s.zIndex = state.desk && key === state.scratchKey ? '20' : '';
-      card.classList.toggle('desk-scratchpad', state.desk && key === state.scratchKey);
+      s.zIndex = state.desk ? String(c.z || 0) : '';
+      card.classList.toggle(
+        'desk-scratchpad',
+        state.desk && (key === state.scratchKey || c.floating)
+      );
       s.visibility = c.visibility || 'visible';
       s.width = c.w;
       s.height = c.h;

@@ -1405,6 +1405,7 @@
             s.shade ||
             s.map ||
             this.logic.desk?.sheet ||
+            this.logic.desk?.covered(key) ||
             (s.scratchVisible && key !== s.scratchKey)
           ),
         });
