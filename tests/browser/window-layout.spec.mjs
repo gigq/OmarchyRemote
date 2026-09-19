@@ -86,3 +86,29 @@ test('previous workspace follows actual navigation and silent moves keep the sou
   await p.keyboard.press('Meta+Digit2');
   await expect(p.locator('.desk-divider')).toHaveCount(1);
 });
+test('action palette filters and executes without losing window focus; registry has no conflicts', async ({
+  page: p,
+}) => {
+  await boot(p);
+  await p.keyboard.press('Meta+Shift+K');
+  const search = p.getByRole('textbox', { name: 'Search actions', exact: true });
+  await p.screenshot({ path: 'artifacts/browser/action-palette.png' });
+  await search.fill('toggle split');
+  await expect(p.locator('.desk-action-row')).toHaveCount(1);
+  await search.press('Enter');
+  await expect(p.getByRole('dialog', { name: 'Actions', exact: true })).toHaveCount(0);
+  const a = await rect(p, 'terminal'),
+    b = await rect(p, 'browser');
+  expect(a.y + a.height).toBeLessThan(b.y);
+  const duplicates = await p.evaluate(() => {
+    const keys = HyprlandDesk.actions().map(a =>
+      JSON.stringify([a.code, a.meta, a.ctrl, a.alt, a.shift])
+    );
+    return keys.length - new Set(keys).size;
+  });
+  expect(duplicates).toBe(0);
+  await p.keyboard.press('Meta+Shift+K');
+  await search.fill('workspace 3 without following');
+  await search.press('Enter');
+  await expect(p.locator('.desk-ws-label:visible')).toHaveText('terminal');
+});

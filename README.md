@@ -183,3 +183,8 @@ a split to equal sizes. Embedded website modifier drags require native build 30.
 In desk mode, Command+Shift+P returns to the previous workspace, Command+Shift+X
 moves the active window to the next workspace without following it,
 Command+Shift+Y toggles the active Dwindle split, and Command+Shift+U cycles layouts.
+
+Command+Shift+K opens a searchable action palette. Type an action name, use arrows
+to select, and press Return. The shared registry supplies native keyboard commands,
+shell actions, and Browser shortcuts; the existing Command+/ help remains available.
+Native build 31 is required for registry-driven hardware shortcuts.

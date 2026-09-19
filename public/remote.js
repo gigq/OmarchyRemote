@@ -1390,7 +1390,9 @@
       }
       for (const [key, app] of Object.entries(this.apps)) {
         const focused = key === current && !ov;
-        app.show?.(visible.includes(key) && !ov, { covered: !!(s.launch || s.shade || s.map) });
+        app.show?.(visible.includes(key) && !ov, {
+          covered: !!(s.launch || s.shade || s.map || this.logic.desk?.sheet),
+        });
         if (!focused) {
           app.stopTouchScroll?.cancel();
           app.blur?.();

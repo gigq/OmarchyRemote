@@ -69,7 +69,9 @@
               this.darkButton.hidden = !v?.darkMode;
               this.dark = !!v?.dark;
               this.darkButton.setAttribute('aria-pressed', String(this.dark));
-              return (this.embedded = v?.embedded === true);
+              this.embedded = v?.embedded === true;
+              this.host?.logic?.desk?.publishActions();
+              return this.embedded;
             })
             .catch(() => false)
         : Promise.resolve(false);
@@ -684,101 +686,142 @@
       this.zoom = Math.max(0.25, Math.min(5, value));
       this.command('zoom', { value: this.zoom });
     }
-    // Listed in the desk shortcut sheet while the browser is in front; shortcut() below takes
-    // app-specific events after the desk reserves its shell bindings.
-    static shortcuts = [
-      ['⌘L', 'Focus the address bar (⇧ opens the tab manager)'],
-      ['Ctrl+T', 'New tab (⇧ reopens the last closed tab)'],
-      ['⌘N', 'New window'],
-      ['⌘⇧W', 'Close browser tab (⌘W closes the window)'],
-      ['⌘R / F5', 'Reload (⇧ bypasses the cache)'],
-      ['Ctrl+F / F3', 'Find in page'],
-      ['⌘G / ⇧⌘G', 'Next / previous match'],
-      ['Ctrl+[ / Ctrl+]', 'Back / forward'],
-      ['Ctrl+1 … Ctrl+9', 'Switch to a numbered tab'],
-      ['⌘⌥← / →', 'Previous / next tab (also Ctrl+Tab, Ctrl+PageUp/Down)'],
-      ['Ctrl++ / Ctrl+− / Ctrl+0', 'Zoom in / out / reset'],
-      ['F2', 'Tab manager'],
-      ['Esc', 'Close the dialog, options, or page view'],
-    ];
-    // Only the embedded (native) browser takes these keys, so the sheet lists them only then.
+    // One list supplies DOM handling, native registrations, help, and the action palette.
+    get actions() {
+      if (!this.embedded) return [];
+      const result = [];
+      const add = (code, label, run, mods = {}) =>
+        result.push({
+          code,
+          label,
+          run,
+          group: 'Browser',
+          meta: !mods.ctrl && !mods.plain,
+          ctrl: false,
+          alt: false,
+          shift: false,
+          ...mods,
+        });
+      add('KeyL', 'Focus browser address', () => this.focusAddress());
+      add('KeyL', 'Open browser tab manager', () => this.showManager(true), { shift: true });
+      add(
+        'KeyT',
+        'New browser tab',
+        () => {
+          const t = this.current();
+          if (this.pageOpen) this.showManager();
+          this.newTab(t?.instance, t?.window);
+        },
+        { ctrl: true }
+      );
+      add('KeyT', 'Reopen browser tab', () => this.reopenTab(), { ctrl: true, shift: true });
+      add('KeyN', 'New desktop browser window', () => {
+        const t = this.current();
+        this.showManager();
+        this.newTab(t?.instance, null, true);
+      });
+      add('KeyW', 'Close browser tab', () => this.closeTab(), { shift: true });
+      for (const shift of [false, true]) {
+        const reload = () =>
+          this.pageOpen ? this.command('reload', { bypassCache: shift }) : this.refresh();
+        add('KeyR', shift ? 'Reload browser from origin' : 'Reload browser', reload, { shift });
+        add('F5', shift ? 'Reload browser from origin' : 'Reload browser', reload, {
+          plain: true,
+          shift,
+        });
+        add('F2', 'Open browser tab manager', () => this.showManager(true), { plain: true, shift });
+        if (this.nativeFind) {
+          add('KeyG', shift ? 'Previous match' : 'Next match', () => this.find(shift), { shift });
+          add('F3', shift ? 'Previous match' : 'Next match', () => this.find(shift), {
+            plain: true,
+            shift,
+          });
+        }
+        add(
+          'Tab',
+          shift ? 'Previous browser tab' : 'Next browser tab',
+          () => this.cycleTab(shift ? -1 : 1),
+          { ctrl: true, shift }
+        );
+      }
+      if (this.nativeFind)
+        add('KeyF', 'Find in browser page', () => this.openFind(), { ctrl: true });
+      for (const [code, direction] of [
+        ['BracketLeft', 'back'],
+        ['BracketRight', 'forward'],
+      ])
+        add(
+          code,
+          direction === 'back' ? 'Browser back' : 'Browser forward',
+          () => this.pageOpen && this.command(direction),
+          { ctrl: true }
+        );
+      for (let number = 1; number <= 9; number++)
+        add('Digit' + number, 'Browser tab ' + number, () => this.numberedTab(number), {
+          ctrl: true,
+        });
+      for (const [code, step, mods] of [
+        ['ArrowLeft', -1, { alt: true }],
+        ['ArrowRight', 1, { alt: true }],
+        ['PageUp', -1, { ctrl: true }],
+        ['PageDown', 1, { ctrl: true }],
+      ])
+        add(
+          code,
+          step < 0 ? 'Previous browser tab' : 'Next browser tab',
+          () => this.cycleTab(step),
+          mods
+        );
+      if (this.nativeShortcuts)
+        for (const [code, delta] of [
+          ['Equal', 0.1],
+          ['NumpadAdd', 0.1],
+          ['Minus', -0.1],
+          ['NumpadSubtract', -0.1],
+          ['Digit0', 0],
+        ]) {
+          for (const shift of [false, true])
+            add(
+              code,
+              delta === 0
+                ? 'Reset browser zoom'
+                : delta > 0
+                  ? 'Zoom browser in'
+                  : 'Zoom browser out',
+              () => this.setZoom(delta === 0 ? 1 : this.zoom + delta),
+              { ctrl: true, shift }
+            );
+        }
+      add(
+        'Escape',
+        'Dismiss browser controls',
+        () => {
+          if (this.dialog) this.dismiss();
+          else if (this.optionsOpen) this.showOptions(false);
+          else if (this.pageOpen) this.escapePage();
+        },
+        { plain: true }
+      );
+      return result;
+    }
     get shortcuts() {
-      return this.embedded ? BrowserApp.shortcuts : [];
+      return this.actions.map(a => [window.HyprlandDesk?.actionKeys(a) || a.code, a.label]);
     }
     shortcut(e) {
-      if (!this.embedded || !this.active || this.covered || e.repeat) return false;
-      const cmd = e.metaKey && !e.ctrlKey,
-        ctrl = e.ctrlKey && !e.metaKey && !e.altKey,
-        plain = !e.metaKey && !e.ctrlKey && !e.altKey,
-        c = e.code,
-        shift = e.shiftKey;
-      let run;
-      if (plain && c === 'Escape') {
-        if (this.dialog) run = () => this.dismiss();
-        else if (this.optionsOpen) run = () => this.showOptions(false);
-        else if (this.pageOpen) run = () => this.escapePage();
-      } else if (ctrl && c === 'Tab') run = () => this.cycleTab(shift ? -1 : 1);
-      else if (ctrl && /^Page(Up|Down)$/.test(c))
-        run = () => this.cycleTab(c === 'PageUp' ? -1 : 1);
-      else if (plain && c === 'F2') run = () => this.showManager(true);
-      else if (plain && c === 'F3' && this.nativeFind) run = () => this.find(shift);
-      else if (plain && c === 'F5') run = () => this.command('reload', { bypassCache: shift });
-      else if (cmd && e.altKey && /^Arrow(Left|Right)$/.test(c))
-        run = () => this.cycleTab(c === 'ArrowLeft' ? -1 : 1);
-      else if ((cmd || ctrl) && !e.altKey) {
-        const browserControl =
-          [
-            'KeyT',
-            'KeyF',
-            'BracketLeft',
-            'BracketRight',
-            'Equal',
-            'Minus',
-            'NumpadAdd',
-            'NumpadSubtract',
-          ].includes(c) || /^Digit[0-9]$/.test(c);
-        if (browserControl !== ctrl) return false;
-        if (c === 'KeyL') run = () => (shift ? this.showManager(true) : this.focusAddress());
-        else if (c === 'KeyT')
-          run = () => {
-            if (shift) this.reopenTab();
-            else {
-              const t = this.current();
-              if (this.pageOpen) this.showManager();
-              this.newTab(t?.instance, t?.window);
-            }
-          };
-        else if (c === 'KeyN' && !shift)
-          run = () => {
-            const t = this.current();
-            this.showManager();
-            this.newTab(t?.instance, null, true);
-          };
-        else if (c === 'KeyW' && shift) run = () => this.closeTab();
-        else if (c === 'KeyF' && !shift && this.nativeFind) run = () => this.openFind();
-        else if (c === 'KeyR')
-          run = () =>
-            this.pageOpen ? this.command('reload', { bypassCache: shift }) : this.refresh();
-        else if (c === 'KeyG' && this.nativeFind) run = () => this.find(shift);
-        else if (!shift && /^Bracket(Left|Right)$/.test(c))
-          run = () => this.pageOpen && this.command(c === 'BracketLeft' ? 'back' : 'forward');
-        else if (!shift && /^Digit[1-9]$/.test(c)) run = () => this.numberedTab(Number(c.slice(5)));
-        else if (
-          this.nativeShortcuts &&
-          ['Equal', 'Minus', 'Digit0', 'NumpadAdd', 'NumpadSubtract'].includes(c)
-        )
-          run = () =>
-            this.setZoom(
-              c === 'Digit0'
-                ? 1
-                : this.zoom + (['Minus', 'NumpadSubtract'].includes(c) ? -0.1 : 0.1)
-            );
-      }
-      if (!run) return false;
+      if (!this.active || this.covered || e.repeat) return false;
+      const action = this.actions.find(
+        a =>
+          a.code === e.code &&
+          a.meta === e.metaKey &&
+          a.ctrl === e.ctrlKey &&
+          a.alt === e.altKey &&
+          a.shift === e.shiftKey
+      );
+      if (!action) return false;
       e.preventDefault();
       e.stopImmediatePropagation();
-      if (this.optionsOpen && c !== 'Escape') this.showOptions(false);
-      run();
+      if (this.optionsOpen && e.code !== 'Escape') this.showOptions(false);
+      action.run();
       return true;
     }
     rgb(variable) {

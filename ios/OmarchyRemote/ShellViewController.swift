@@ -98,10 +98,13 @@ private final class ShellKeyboardStateBridge: NSObject, WKScriptMessageHandler {
     weak var owner: ShellViewController?
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame,
-            ShellSource.trusts(message.frameInfo.securityOrigin) || message.frameInfo.request.url?.isFileURL == true,
-            let editing = message.body as? Bool
+            ShellSource.trusts(message.frameInfo.securityOrigin) || message.frameInfo.request.url?.isFileURL == true
         else { return }
-        owner?.updateKeyboardEditing(editing)
+        if let editing = message.body as? Bool {
+            owner?.updateKeyboardEditing(editing)
+        } else if let body = message.body as? [String: Any], let commands = body["commands"] as? [[String: Any]] {
+            owner?.updateCommands(commands)
+        }
     }
 }
 
@@ -667,109 +670,66 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
             traitCollection.userInterfaceIdiom == .pad || traitCollection.userInterfaceIdiom == .vision
                 || (browserDevice.shortcutsActive && GCKeyboard.coalesced != nil)
         else { return super.keyCommands }
-        var bindings: [(String, String, Bool, String)] =
-            [
-                ("j", "KeyJ", false, "Next window in workspace"),
-                ("j", "KeyJ", true, "Previous window in workspace"),
-                ("w", "KeyW", false, "Close shell window"),
-                ("k", "KeyK", false, "Open launcher"),
-                ("t", "KeyT", false, "Open Terminal"),
-                ("f", "KeyF", false, "Toggle window fullscreen"),
-                ("e", "KeyE", false, "Show Expo"),
-                ("/", "Slash", false, "Keyboard shortcuts"),
-                (",", "Comma", false, "Open Settings"),
-                ("b", "KeyB", true, "Open Browser"),
-                ("f", "KeyF", true, "Open Files"),
-                ("a", "KeyA", true, "Open Herd"),
-                ("d", "KeyD", true, "Open lazydocker"),
-                ("[", "BracketLeft", false, "Previous workspace"),
-                ("]", "BracketRight", false, "Next workspace"),
-                ("[", "BracketLeft", true, "Move window to previous workspace"),
-                ("]", "BracketRight", true, "Move window to next workspace"),
+        var used = Set<String>()
+        return registeredCommands.flatMap { row -> [UIKeyCommand] in
+            guard let code = row["code"] as? String, let title = row["label"] as? String else { return [] }
+            if row["editing"] as? Bool == true && (shellEditing || browserDevice.ownsKeyboardFocus) { return [] }
+            let special: [String: String] = [
+                "ArrowLeft": UIKeyCommand.inputLeftArrow, "ArrowRight": UIKeyCommand.inputRightArrow,
+                "ArrowUp": UIKeyCommand.inputUpArrow, "ArrowDown": UIKeyCommand.inputDownArrow,
+                "PageUp": UIKeyCommand.inputPageUp, "PageDown": UIKeyCommand.inputPageDown,
+                "Escape": UIKeyCommand.inputEscape, "Tab": "\t", "Enter": "\r", "NumpadEnter": "\r",
+                "Backspace": "\u{8}", "BracketLeft": "[", "BracketRight": "]", "Slash": "/", "Comma": ",",
+                "Equal": "=", "Minus": "-", "NumpadAdd": "+", "NumpadSubtract": "-",
+                "F2": UIKeyCommand.f2, "F3": UIKeyCommand.f3, "F5": UIKeyCommand.f5,
             ]
-            + (0...9).flatMap { number in
-                [
-                    (String(number), "Digit\(number)", false, "Workspace \(number == 0 ? 10 : number)"),
-                    (String(number), "Digit\(number)", true, "Move window to workspace \(number == 0 ? 10 : number)"),
-                ]
+            let input: String
+            if let value = special[code] {
+                input = value
+            } else if code.hasPrefix("Key") {
+                input = String(code.dropFirst(3)).lowercased()
+            } else if code.hasPrefix("Digit") {
+                input = String(code.dropFirst(5))
+            } else {
+                return []
             }
-        bindings += [
-            ("{", "BracketLeft", true, "Move window to previous workspace"),
-            ("}", "BracketRight", true, "Move window to next workspace"),
-        ]
-        if !shellEditing && !browserDevice.ownsKeyboardFocus {
-            bindings += [
-                (UIKeyCommand.inputLeftArrow, "ArrowLeft", false, "Focus window left"),
-                (UIKeyCommand.inputRightArrow, "ArrowRight", false, "Focus window right"),
-                (UIKeyCommand.inputUpArrow, "ArrowUp", false, "Focus window above"),
-                (UIKeyCommand.inputDownArrow, "ArrowDown", false, "Focus window below"),
-                (UIKeyCommand.inputLeftArrow, "ArrowLeft", true, "Swap window left"),
-                (UIKeyCommand.inputRightArrow, "ArrowRight", true, "Swap window right"),
-                (UIKeyCommand.inputUpArrow, "ArrowUp", true, "Swap window above"),
-                (UIKeyCommand.inputDownArrow, "ArrowDown", true, "Swap window below"),
-            ]
-        }
-        var commands = bindings.map { input, code, shift, title in
-            // Shift-Command-3/4 belong to iPadOS screenshots; use Option for numbered moves.
-            let option = shift && code.hasPrefix("Digit")
-            let modifiers: UIKeyModifierFlags =
-                option ? [.command, .alternate] : shift ? [.command, .shift] : [.command]
-            let command = UIKeyCommand(
-                title: title, action: #selector(handleShellKey(_:)),
-                input: input, modifierFlags: modifiers,
-                propertyList: ["code": code, "shift": shift && !option, "alt": option])
-            command.wantsPriorityOverSystemBehavior = true
-            return command
-        }
-        if browserDevice.shortcutsActive {
-            func add(_ input: String, _ code: String, _ flags: UIKeyModifierFlags = .command, _ title: String) {
-                // Browser commands must never shadow a shell workspace/window command.
-                guard !commands.contains(where: { $0.input == input && $0.modifierFlags == flags }) else {
-                    assertionFailure("Browser shortcut collides with a shell shortcut")
-                    return
-                }
+            var flags: UIKeyModifierFlags = []
+            if row["meta"] as? Bool == true { flags.insert(.command) }
+            if row["ctrl"] as? Bool == true { flags.insert(.control) }
+            if row["alt"] as? Bool == true { flags.insert(.alternate) }
+            if row["shift"] as? Bool == true { flags.insert(.shift) }
+            var inputs = [input]
+            if flags.contains(.shift) {
+                if code == "BracketLeft" { inputs.append("{") }
+                if code == "BracketRight" { inputs.append("}") }
+                if code == "Equal" { inputs.append("+") }
+            }
+            return inputs.compactMap { candidate in
+                let identity = "\(candidate):\(flags.rawValue)"
+                guard used.insert(identity).inserted else { return nil }
                 let command = UIKeyCommand(
-                    title: title, action: #selector(handleShellKey(_:)), input: input,
-                    modifierFlags: flags,
+                    title: title, action: #selector(handleShellKey(_:)), input: candidate, modifierFlags: flags,
                     propertyList: [
-                        "code": code, "shift": flags.contains(.shift),
-                        "alt": flags.contains(.alternate), "ctrl": flags.contains(.control),
+                        "code": code, "shift": flags.contains(.shift), "alt": flags.contains(.alternate),
+                        "ctrl": flags.contains(.control),
                         "plain": !flags.contains(.command) && !flags.contains(.control),
                     ])
                 command.wantsPriorityOverSystemBehavior = true
-                commands.append(command)
-            }
-            for (input, code, title) in [
-                ("l", "KeyL", "Address"), ("n", "KeyN", "New desktop window"),
-                ("r", "KeyR", "Reload"), ("g", "KeyG", "Find next"),
-            ] { add(input, code, .command, title) }
-            for (input, code, title) in [
-                ("t", "KeyT", "New tab"), ("f", "KeyF", "Find"),
-                ("=", "Equal", "Zoom in"), ("+", "Equal", "Zoom in"), ("-", "Minus", "Zoom out"),
-                ("[", "BracketLeft", "Back"), ("]", "BracketRight", "Forward"),
-            ] { add(input, code, .control, title) }
-            for number in 0...9 {
-                add(String(number), "Digit\(number)", .control, number == 0 ? "Reset zoom" : "Select tab")
-            }
-            for (input, code, title) in [
-                ("r", "KeyR", "Reload from origin"), ("g", "KeyG", "Find previous"),
-                ("w", "KeyW", "Close tab"), ("l", "KeyL", "Tab manager"),
-            ] { add(input, code, [.command, .shift], title) }
-            add("t", "KeyT", [.control, .shift], "Reopen tab")
-            add("+", "Equal", [.control, .shift], "Zoom in")
-            add(UIKeyCommand.inputLeftArrow, "ArrowLeft", [.command, .alternate], "Previous tab")
-            add(UIKeyCommand.inputRightArrow, "ArrowRight", [.command, .alternate], "Next tab")
-            add(UIKeyCommand.inputPageUp, "PageUp", .control, "Previous tab")
-            add(UIKeyCommand.inputPageDown, "PageDown", .control, "Next tab")
-            add("\t", "Tab", .control, "Next tab")
-            add("\t", "Tab", [.control, .shift], "Previous tab")
-            add(UIKeyCommand.inputEscape, "Escape", [], "Dismiss Browser controls")
-            for (input, code) in [(UIKeyCommand.f2, "F2"), (UIKeyCommand.f3, "F3"), (UIKeyCommand.f5, "F5")] {
-                add(input, code, [], "Browser action")
-                add(input, code, .shift, "Browser alternate action")
+                return command
             }
         }
-        return commands
+    }
+
+    private var registeredCommands: [[String: Any]] = []
+    fileprivate func updateCommands(_ commands: [[String: Any]]) {
+        guard commands.count <= 256,
+            commands.allSatisfy({ row in
+                guard let code = row["code"] as? String, let label = row["label"] as? String else { return false }
+                return code.count <= 32 && label.count <= 160
+            })
+        else { return }
+        registeredCommands = commands
+        UIMenuSystem.main.setNeedsRebuild()
     }
 
     fileprivate func updateKeyboardEditing(_ editing: Bool) {

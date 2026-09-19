@@ -404,6 +404,14 @@
     },
     {
       group: 'Shell',
+      keys: '⇧ K',
+      shift: true,
+      code: /^KeyK$/,
+      label: 'Search actions',
+      run: d => d.openPalette(),
+    },
+    {
+      group: 'Shell',
       keys: 'K',
       code: /^KeyK$/,
       label: 'Launcher',
@@ -435,6 +443,44 @@
   const editable = el =>
     !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
 
+  const KEY_CODES = [
+    ...Array.from({ length: 26 }, (_, i) => 'Key' + String.fromCharCode(65 + i)),
+    ...Array.from({ length: 10 }, (_, i) => 'Digit' + i),
+    'BracketLeft',
+    'BracketRight',
+    'ArrowLeft',
+    'ArrowRight',
+    'ArrowUp',
+    'ArrowDown',
+    'Enter',
+    'NumpadEnter',
+    'Backspace',
+    'Comma',
+    'Slash',
+  ];
+  const keyName = code =>
+    ({
+      Enter: '↩',
+      NumpadEnter: '↩',
+      Backspace: '⌫',
+      Comma: ',',
+      Slash: '/',
+      BracketLeft: '[',
+      BracketRight: ']',
+      ArrowLeft: '←',
+      ArrowRight: '→',
+      ArrowUp: '↑',
+      ArrowDown: '↓',
+      Equal: '+',
+      Minus: '−',
+      NumpadAdd: '+',
+      NumpadSubtract: '−',
+      Tab: 'Tab',
+      Escape: 'Esc',
+    })[code] || code.replace(/^(Key|Digit)/, '');
+  const actionKeys = a =>
+    `${a.meta ? MOD + ' ' : ''}${a.ctrl ? 'Ctrl+' : ''}${a.alt ? '⌥ ' : ''}${a.shift ? '⇧ ' : ''}${keyName(a.code)}`;
+  const signature = a => [a.code, !!a.meta, !!a.ctrl, !!a.alt, !!a.shift].join(':');
   const superPressed = e => e.metaKey || (e.ctrlKey && e.altKey);
 
   class Desk {
@@ -518,6 +564,7 @@
       )
         this.cancelDrag();
       this.updateDividers();
+      this.publishActions();
     }
     pointerdown(e) {
       const s = this.logic.state;
@@ -534,6 +581,115 @@
       if (e.button > 0) return;
       const key = e.target.closest('[data-workspace]')?.dataset.workspace;
       if (key && key !== this.logic.cur() && deskOf(s, key) === s.ws) this.logic.focusApp(key);
+    }
+    actions() {
+      const result = [];
+      for (const b of bindings()) {
+        if ((b.desk && !this.logic.state.desk) || (b.browserOnly && NATIVE)) continue;
+        for (const code of KEY_CODES.filter(code => b.code.test(code))) {
+          let label = b.label;
+          if (code.startsWith('Digit')) label += ' ' + (Number(code.slice(5)) || 10);
+          else if (code.startsWith('Arrow') || code.startsWith('Bracket'))
+            label += ' · ' + keyName(code);
+          result.push({
+            code,
+            label,
+            group: b.group,
+            meta: true,
+            ctrl: false,
+            alt: !!b.alt,
+            shift: !!b.shift,
+            editing: code.startsWith('Arrow'),
+            run: () => b.run(this, { code }),
+          });
+        }
+      }
+      const signatures = new Set(result.map(signature));
+      for (const action of this.logic.remote?.app(this.logic.cur())?.actions || []) {
+        if (signatures.has(signature(action))) continue;
+        signatures.add(signature(action));
+        result.push(action);
+      }
+      return result;
+    }
+    publishActions() {
+      const bridge = window.webkit?.messageHandlers?.shellKeyboard;
+      if (!bridge?.postMessage) return;
+      const actions = this.actions().map(({ run, ...a }) => a);
+      const text = JSON.stringify(actions);
+      if (text === this.registeredActions) return;
+      this.registeredActions = text;
+      bridge.postMessage({ commands: actions });
+    }
+    openPalette() {
+      this.closeSheet();
+      const sheet = node('div', 'desk-sheet desk-palette');
+      sheet.setAttribute('role', 'dialog');
+      sheet.setAttribute('aria-label', 'Actions');
+      const search = node('input', 'desk-action-search');
+      search.placeholder = 'Search actions…';
+      search.setAttribute('aria-label', 'Search actions');
+      const done = node('button', 'desk-sheet-close', 'Done');
+      done.onclick = () => this.closeSheet();
+      const head = node('div', 'desk-sheet-head');
+      head.append(search, done);
+      const list = node('div', 'desk-action-results');
+      const actions = this.actions().filter(
+        (a, i, all) => a.code !== 'NumpadEnter' && all.findIndex(b => b.label === a.label) === i
+      );
+      if (this.logic.state.desk) {
+        for (let ws = 1; ws <= Math.min(9, desks(this.logic.state).length); ws++)
+          actions.push({
+            label: `Move window to workspace ${ws + 1} without following`,
+            group: 'Windows',
+            run: () => this.moveWindow(ws, false),
+          });
+      }
+      let selected = 0,
+        shown = [];
+      const render = () => {
+        const query = search.value.trim().toLowerCase();
+        shown = actions.filter(a => `${a.group} ${a.label}`.toLowerCase().includes(query));
+        selected = Math.max(0, Math.min(selected, shown.length - 1));
+        list.replaceChildren(
+          ...shown.map((a, i) => {
+            const row = node('button', 'desk-action-row');
+            row.classList.toggle('selected', i === selected);
+            row.append(node('span', '', a.label), node('kbd', '', a.code ? actionKeys(a) : ''));
+            row.onclick = () => {
+              this.closeSheet();
+              a.run();
+            };
+            return row;
+          })
+        );
+        if (!shown.length) list.append(node('p', 'widget-muted', 'No matching actions'));
+      };
+      search.oninput = () => {
+        selected = 0;
+        render();
+      };
+      search.onkeydown = e => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          selected += e.key === 'ArrowDown' ? 1 : -1;
+          render();
+          list.children[selected]?.scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'Enter' && shown[selected]) {
+          e.preventDefault();
+          const a = shown[selected];
+          this.closeSheet();
+          a.run();
+        }
+      };
+      sheet.append(head, list);
+      this.returnFocus = document.activeElement;
+      this.sheet = sheet;
+      this.shell.append(sheet);
+      render();
+      search.focus();
+      this.logic.remote?.update?.();
+      this.updateDividers();
     }
     canDrag() {
       const s = this.logic.state;
@@ -907,6 +1063,8 @@
       this.returnFocus = document.activeElement;
       this.shell.append(sheet);
       this.sheet = sheet;
+      this.logic.remote?.update?.();
+      this.updateDividers();
       close.focus({ preventScroll: true });
     }
     closeSheet() {
@@ -915,6 +1073,8 @@
       this.sheet = null;
       if (this.returnFocus?.matches('button')) this.returnFocus.focus({ preventScroll: true });
       this.returnFocus = null;
+      this.logic.remote?.update?.();
+      this.updateDividers();
     }
     dispose() {
       this.cancelDrag();
@@ -947,6 +1107,8 @@
   window.HyprlandDesk = {
     attach: logic => (activeDesk = new Desk(logic)),
     nativeKey,
+    actionKeys,
+    actions: () => activeDesk?.actions() || [],
     nativePointer: event => {
       if (!activeDesk) return;
       const e = { clientX: event.x, clientY: event.y, button: event.button };

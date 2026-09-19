@@ -559,3 +559,57 @@ html.desk-mode.vision-mode {
   padding: 8px;
   font: inherit;
 }
+
+.desk-palette {
+  justify-content: flex-start;
+  padding-top: max(54px, 8vh);
+}
+.desk-palette .desk-sheet-head,
+.desk-action-results {
+  width: min(100%, 760px);
+}
+.desk-action-results {
+  box-sizing: border-box;
+  padding: 12px;
+  max-height: 70vh;
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+  border-radius: 16px;
+}
+.desk-action-search {
+  flex: 1;
+  min-width: 0;
+  padding: 12px;
+  color: var(--theme-foreground);
+  background: var(--theme-background);
+  border: 1px solid var(--theme-muted);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 16px;
+}
+.desk-action-results {
+  overflow: auto;
+  min-height: 0;
+}
+.desk-action-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  min-height: 44px;
+  padding: 12px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--theme-foreground);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+}
+.desk-action-row.selected,
+.desk-action-row:hover {
+  background: color-mix(in srgb, var(--theme-accent) 15%, var(--theme-background));
+}
+.desk-action-row kbd {
+  flex-shrink: 0;
+  color: var(--theme-muted);
+}

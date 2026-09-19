@@ -92,3 +92,17 @@ Command+Shift+P returns there. Command+Shift+X moves to the next workspace witho
 following; if the source becomes empty, focus returns Home. Moves into an already
 full four-tile workspace are ignored. Command+Shift+Y changes Dwindle split direction
 and Command+Shift+U cycles layouts. Native hardware registration follows in the shared-registry step.
+
+### Action palette and shared keyboard registry
+
+Command+Shift+K opens Search actions. Results include concrete workspace numbers,
+window actions, app launchers, active Browser actions, and moving to a chosen
+workspace without following. Type to filter, use arrows and Return, or click an
+action. Escape dismisses the palette. Native websites are covered while it is open.
+
+The shell binding definitions and provider action descriptors are combined into
+one registry, with shell bindings reserved before app shortcuts. Browser uses its
+action descriptors for handling and help. Native build 31 receives the registry
+from the trusted shell, rather than maintaining a separate hard-coded list in
+Swift. Text-editing arrows remain with text fields. Existing Command+/ help is
+retained; new actions can be added without another Swift key-list edit.
