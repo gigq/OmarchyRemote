@@ -1,4 +1,5 @@
 import UIKit
+import UIKit.UIGestureRecognizerSubclass
 import WebKit
 import OSLog
 import CoreLocation
@@ -19,6 +20,44 @@ enum ShellSource {
         guard let live = liveURL, let scheme = live.scheme, let host = live.host else { return false }
         let port = live.port ?? (scheme == "https" ? 443 : 80)
         return origin.protocol == scheme && origin.host == host && origin.port == port
+    }
+}
+
+// Recognize modifier-button drags immediately; ordinary scrolling fails immediately as well,
+// so a trackpad never has to travel through a pan threshold before the website can scroll.
+@MainActor
+private final class WindowDragGesture: UIGestureRecognizer {
+    var permitted: (() -> Bool)?
+    var changed: ((String, CGPoint, Int) -> Void)?
+    weak var coordinateView: UIView?
+    private var secondary = false
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard state == .possible, touches.count == 1,
+            let touch = touches.first, touch.type == .indirectPointer,
+            event.modifierFlags.contains(.command), !event.buttonMask.isEmpty,
+            permitted?() == true
+        else {
+            state = .failed
+            return
+        }
+        secondary = event.buttonMask.contains(.secondary)
+        state = .began
+        changed?("begin", touch.location(in: coordinateView), secondary ? 2 : 0)
+    }
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard state == .began || state == .changed, let touch = touches.first else { return }
+        state = .changed
+        changed?("move", touch.location(in: coordinateView), secondary ? 2 : 0)
+    }
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard state == .began || state == .changed, let touch = touches.first else { return }
+        changed?("end", touch.location(in: coordinateView), secondary ? 2 : 0)
+        state = .ended
+    }
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard state == .began || state == .changed else { return }
+        changed?("cancel", .zero, 0)
+        state = .cancelled
     }
 }
 
@@ -270,6 +309,26 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
             hover.delegate = self
             browser.addGestureRecognizer(hover)
         #endif
+        let drag = WindowDragGesture()
+        drag.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirectPointer.rawValue)]
+        drag.delaysTouchesBegan = false
+        drag.delaysTouchesEnded = false
+        drag.coordinateView = shell
+        drag.permitted = { [weak self] in
+            guard let self, let shell = self.shell else { return false }
+            #if os(visionOS)
+                return self.requestedVisible
+            #else
+                return self.requestedVisible && min(shell.bounds.width, shell.bounds.height) >= 600
+            #endif
+        }
+        drag.changed = { [weak self] phase, location, button in
+            self?.shell?.callAsyncJavaScript(
+                "window.HyprlandDesk?.nativePointer(event)",
+                arguments: ["event": ["phase": phase, "x": location.x, "y": location.y, "button": button]],
+                in: nil, in: .page, completionHandler: nil)
+        }
+        browser.addGestureRecognizer(drag)
         presenter.view.addSubview(browser)
         page = browser
         observations = [

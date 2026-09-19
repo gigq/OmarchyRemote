@@ -195,6 +195,21 @@
     return {
       open,
       tiles,
+      windowLayout: Object.hasOwn(HyprlandDesk.MODES, saved.windowLayout)
+        ? saved.windowLayout
+        : 'dwindle',
+      splitAxes: Object.fromEntries(
+        Object.entries(saved.splitAxes || {})
+          .filter(([key, value]) => key.length < 512 && ['x', 'y'].includes(value))
+          .slice(-64)
+      ),
+      splits: Object.fromEntries(
+        Object.entries(saved.splits || {})
+          .filter(
+            ([key, value]) => key.length < 512 && Number.isFinite(value) && value > 0 && value < 1
+          )
+          .slice(-64)
+      ),
       ws,
       focus: open.includes(saved.focus) ? saved.focus : null,
       full: Array.isArray(saved.full) ? saved.full.filter(k => open.includes(k)) : [],
@@ -211,6 +226,9 @@
     storage.write(s.desk ? 'omarchy-layout-desk' : 'omarchy-layout-phone', {
       open: s.open,
       tiles: s.tiles,
+      windowLayout: s.windowLayout,
+      splitAxes: s.splitAxes,
+      splits: s.splits,
       ws: s.ws,
       focus: s.focus,
       full: s.full,
@@ -331,8 +349,26 @@
     focusInput.onchange = () =>
       storage.set('omarchy-focus-follows-pointer', String(focusInput.checked));
     focusRow.append(focusInput, node('span', '', 'Focus follows pointer'));
+    const layoutRow = node('label', 'device-focus-option');
+    const layoutInput = node('select');
+    layoutInput.setAttribute('aria-label', 'Window layout');
+    for (const [value, title] of Object.entries(HyprlandDesk.MODES)) {
+      const option = node('option', '', title);
+      option.value = value;
+      layoutInput.append(option);
+    }
+    layoutInput.value = logic.state.windowLayout || 'dwindle';
+    layoutInput.onchange = () => logic.set({ windowLayout: layoutInput.value });
+    layoutRow.append(node('span', '', 'Window layout'), layoutInput);
     section.append(
       row,
+      layoutRow,
+      key('Toggle active split', () => logic.desk?.toggleSplit(), 'Toggle active split direction'),
+      node(
+        'p',
+        'theme-note',
+        'Tiling on iPad and larger screens. Drag dividers to resize. Saved for this device.'
+      ),
       focusRow,
       node(
         'p',

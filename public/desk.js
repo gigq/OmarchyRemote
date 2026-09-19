@@ -88,22 +88,50 @@
     [open[a], open[b]] = [open[b], open[a]];
     return { open, focus: key };
   };
-  const dwindle = (rect, n, gap) => {
-    if (n <= 1) return [rect];
+  const MODES = { dwindle: 'Dwindle (Omarchy default)', master: 'Master and stack' };
+  const mode = s => (Object.hasOwn(MODES, s.windowLayout) ? s.windowLayout : 'dwindle');
+  // Split identities follow the ordered apps, not a workspace number that can be renumbered.
+  const splitID = (s, apps, index) => JSON.stringify([mode(s), apps, index]);
+  const boundedRatio = (value, length) => {
+    const min = Math.min(0.45, 120 / Math.max(1, length));
+    return Math.max(min, Math.min(1 - min, Number.isFinite(value) ? value : 0.5));
+  };
+  const tiled = (s, apps, rect, splits, desk, index = 0) => {
+    if (apps.length - index <= 1) return [rect];
+    const master = mode(s) === 'master';
+    const id = splitID(s, apps, index);
+    const override = s.splitAxes?.[id];
+    const axis =
+      !master && ['x', 'y'].includes(override)
+        ? override
+        : master
+          ? index === 0
+            ? 'x'
+            : 'y'
+          : rect.w >= rect.h
+            ? 'x'
+            : 'y';
+    const dimension = axis === 'x' ? 'w' : 'h';
+    const length = rect[dimension] - CHROME.gap;
+    const fallback = master && index > 0 ? 1 / (apps.length - index) : 0.5;
+    const ratio = boundedRatio(s.splits?.[id] ?? fallback, length);
     const a = { ...rect },
       b = { ...rect };
-    if (rect.w >= rect.h) {
-      a.w = Math.round((rect.w - gap) / 2);
-      b.x = rect.x + a.w + gap;
-      b.w = rect.w - a.w - gap;
-    } else {
-      a.h = Math.round((rect.h - gap) / 2);
-      b.y = rect.y + a.h + gap;
-      b.h = rect.h - a.h - gap;
-    }
-    return [a, ...dwindle(b, n - 1, gap)];
+    a[dimension] = Math.round(length * ratio);
+    b[axis] += a[dimension] + CHROME.gap;
+    b[dimension] = length - a[dimension];
+    splits.push({
+      id,
+      desk,
+      axis,
+      rect,
+      length,
+      position: rect[axis] + a[dimension] + CHROME.gap / 2,
+      apps: apps.slice(index),
+    });
+    return [a, ...tiled(s, apps, b, splits, desk, index + 1)];
   };
-  // Every open app gets a rectangle inside its desk; hidden siblings of a fullscreen window keep the full area.
+  // Hidden siblings of a fullscreen window retain the full area.
   const layout = (s, W, H) => {
     const area = {
       x: CHROME.side,
@@ -111,17 +139,18 @@
       w: Math.max(0, W - CHROME.side * 2),
       h: Math.max(0, H - CHROME.top - CHROME.bottom),
     };
-    const rects = new Map();
+    const rects = new Map(),
+      splits = [];
     desks(s).forEach((apps, desk) => {
       const full = apps.find(k => (s.full || []).includes(k));
       const visible = full ? [full] : apps;
-      const rs = desk === 0 ? [area] : dwindle(area, visible.length, CHROME.gap);
+      const rs = desk === 0 ? [area] : tiled(s, visible, area, splits, desk);
       visible.forEach((k, i) => rects.set(k, { ...rs[i], desk }));
       apps
         .filter(k => !visible.includes(k))
         .forEach(k => rects.set(k, { ...area, desk, hidden: true }));
     });
-    return { area, rects };
+    return { area, rects, splits };
   };
   const neighbor = (s, W, H, key, dir) => {
     const { rects } = layout(s, W, H),
@@ -368,6 +397,8 @@
   const editable = el =>
     !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
 
+  const superPressed = e => e.metaKey || (e.ctrlKey && e.altKey);
+
   class Desk {
     constructor(logic) {
       this.logic = logic;
@@ -391,7 +422,31 @@
         { capture: true, signal }
       );
       window.addEventListener('hyprland-layout', e => this.measure(e.detail), { signal });
+      window.addEventListener('pointermove', e => this.dragMove(e), { capture: true, signal });
+      window.addEventListener('pointerup', e => this.dragEnd(e), { capture: true, signal });
+      window.addEventListener('pointercancel', () => this.cancelDrag(), { signal });
+      window.addEventListener('blur', () => this.cancelDrag(), { signal });
+      this.shell?.addEventListener(
+        'contextmenu',
+        e => {
+          if (this.drag || (superPressed(e) && this.logic.state.desk)) e.preventDefault();
+        },
+        { capture: true, signal }
+      );
+      this.shell?.addEventListener(
+        'click',
+        e => {
+          if (performance.now() < (this.suppressClickUntil || 0)) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+          }
+        },
+        { capture: true, signal }
+      );
+      this.dividers = node('div', 'desk-dividers');
+      this.shell?.append(this.dividers);
       this.measure();
+      this.update();
     }
     measure(detail) {
       const viewport = mount('phone-viewport');
@@ -407,13 +462,191 @@
         this.logic.set({ desk, deskW: W, deskH: H });
     }
     update() {
-      if (!this.logic.state.desk && this.sheet) this.closeSheet();
+      const s = this.logic.state;
+      if (!s.desk && this.sheet) this.closeSheet();
+      if (
+        this.drag &&
+        (!this.canDrag() || s.ws !== this.drag.ws || !s.open.includes(this.drag.key))
+      )
+        this.cancelDrag();
+      this.updateDividers();
     }
     pointerdown(e) {
       const s = this.logic.state;
-      if (!s.desk || s.ov || e.button > 0) return;
+      if (!s.desk || s.ov) return;
+      const divider = e.target.closest('[data-desk-split]');
+      if (divider || (superPressed(e) && [0, 2].includes(e.button))) {
+        if (this.startDrag(e, divider?.dataset.deskSplit)) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          this.shell.setPointerCapture?.(e.pointerId);
+          return;
+        }
+      }
+      if (e.button > 0) return;
       const key = e.target.closest('[data-workspace]')?.dataset.workspace;
       if (key && key !== this.logic.cur() && deskOf(s, key) === s.ws) this.logic.focusApp(key);
+    }
+    canDrag() {
+      const s = this.logic.state;
+      return (
+        s.desk &&
+        !s.ov &&
+        !s.launch &&
+        !s.shade &&
+        !this.sheet &&
+        ![...document.querySelectorAll('[role="dialog"], [aria-modal="true"], [role="menu"]')].some(
+          el => el.getClientRects().length
+        )
+      );
+    }
+    point(e) {
+      const r = this.shell.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    }
+    updateDividers() {
+      if (!this.dividers) return;
+      const s = this.logic.state;
+      const splits = this.canDrag()
+        ? layout(s, s.deskW, s.deskH).splits.filter(v => v.desk === s.ws)
+        : [];
+      this.dividers.replaceChildren(
+        ...splits.map(split => {
+          const el = node('div', 'desk-divider');
+          el.dataset.deskSplit = split.id;
+          el.dataset.axis = split.axis;
+          el.setAttribute('role', 'separator');
+          el.setAttribute('aria-label', 'Resize windows');
+          el.setAttribute('aria-orientation', split.axis === 'x' ? 'vertical' : 'horizontal');
+          el.tabIndex = 0;
+          el.style.cssText =
+            split.axis === 'x'
+              ? `left:${split.position - 6}px;top:${split.rect.y + 20}px;width:12px;height:${Math.max(0, split.rect.h - 40)}px`
+              : `left:${split.rect.x + 20}px;top:${split.position - 6}px;width:${Math.max(0, split.rect.w - 40)}px;height:12px`;
+          el.onkeydown = e => {
+            const direction =
+              split.axis === 'x' ? ['ArrowLeft', 'ArrowRight'] : ['ArrowUp', 'ArrowDown'];
+            if (!direction.includes(e.key) || e.metaKey || e.ctrlKey || e.altKey) return;
+            e.preventDefault();
+            e.stopPropagation();
+            this.resizeSplit(split, split.position + (e.key === direction[0] ? -25 : 25));
+            [...this.dividers.children].find(v => v.dataset.deskSplit === split.id)?.focus();
+          };
+          el.ondblclick = () =>
+            this.resizeSplit(split, split.rect[split.axis] + split.length / 2 + CHROME.gap / 2);
+          return el;
+        })
+      );
+    }
+    toggleSplit() {
+      const s = this.logic.state;
+      if (!s.desk || mode(s) !== 'dwindle') return;
+      const split = layout(s, s.deskW, s.deskH)
+        .splits.filter(v => v.desk === s.ws && v.apps.includes(cur(s)))
+        .at(-1);
+      if (!split) return;
+      this.logic.set({ splitAxes: { ...s.splitAxes, [split.id]: split.axis === 'x' ? 'y' : 'x' } });
+    }
+    resizeSplit(split, position) {
+      const s = this.logic.state;
+      const ratio = boundedRatio(
+        (position - split.rect[split.axis] - CHROME.gap / 2) / split.length,
+        split.length
+      );
+      const entries = Object.entries(s.splits || {})
+        .filter(([key]) => key !== split.id)
+        .slice(-63);
+      const splitAxes = { ...s.splitAxes };
+      if (mode(s) === 'dwindle') {
+        for (const item of layout(s, s.deskW, s.deskH).splits) splitAxes[item.id] = item.axis;
+      }
+      this.logic.set({ splits: { ...Object.fromEntries(entries), [split.id]: ratio }, splitAxes });
+    }
+    startDrag(e, splitID) {
+      if (!this.canDrag() || this.drag) return false;
+      const s = this.logic.state,
+        point = this.point(e);
+      const geometry = layout(s, s.deskW, s.deskH);
+      const key = [...geometry.rects].find(
+        ([, r]) =>
+          r.desk === s.ws &&
+          !r.hidden &&
+          point.x >= r.x &&
+          point.x <= r.x + r.w &&
+          point.y >= r.y &&
+          point.y <= r.y + r.h
+      )?.[0];
+      const available = geometry.splits.filter(v => v.desk === s.ws);
+      let split = available.find(v => v.id === splitID);
+      const resizing = !!split || e.button === 2;
+      if (resizing && !split)
+        split = available
+          .filter(v => v.apps.includes(key))
+          .sort(
+            (a, b) => Math.abs(point[a.axis] - a.position) - Math.abs(point[b.axis] - b.position)
+          )[0];
+      if (resizing ? !split : !key || key === 'home' || (s.full || []).includes(key)) return false;
+      this.drag = {
+        ws: s.ws,
+        key: key || split.apps[0],
+        split,
+        start: point,
+        pointerId: e.pointerId,
+        moved: false,
+      };
+      this.shell.classList.add('desk-dragging');
+      if (key) this.logic.focusApp(key);
+      return true;
+    }
+    dragMove(e) {
+      const drag = this.drag;
+      if (!drag || (drag.pointerId != null && e.pointerId !== drag.pointerId)) return;
+      const point = this.point(e);
+      if (Math.hypot(point.x - drag.start.x, point.y - drag.start.y) < 4 && !drag.moved) return;
+      drag.moved = true;
+      e.preventDefault?.();
+      e.stopImmediatePropagation?.();
+      if (drag.split) {
+        const split = drag.split;
+        this.resizeSplit(split, split.position + point[split.axis] - drag.start[split.axis]);
+      } else {
+        const s = this.logic.state;
+        drag.target = [...layout(s, s.deskW, s.deskH).rects].find(
+          ([key, r]) =>
+            key !== drag.key &&
+            r.desk === s.ws &&
+            !r.hidden &&
+            point.x >= r.x &&
+            point.x <= r.x + r.w &&
+            point.y >= r.y &&
+            point.y <= r.y + r.h
+        )?.[0];
+        this.shell
+          .querySelectorAll('[data-workspace]')
+          .forEach(el =>
+            el.classList.toggle('desk-drop-target', el.dataset.workspace === drag.target)
+          );
+      }
+    }
+    dragEnd(e) {
+      const drag = this.drag;
+      if (!drag || (drag.pointerId != null && e.pointerId !== drag.pointerId)) return;
+      if (drag.moved) {
+        this.suppressClickUntil = performance.now() + 250;
+        e.preventDefault?.();
+        e.stopImmediatePropagation?.();
+        if (!drag.split && drag.target) this.patch(swap(this.logic.state, drag.key, drag.target));
+      }
+      this.cancelDrag();
+    }
+    cancelDrag() {
+      const id = this.drag?.pointerId;
+      this.drag = null;
+      if (id != null && this.shell.hasPointerCapture?.(id)) this.shell.releasePointerCapture(id);
+      this.shell.classList.remove('desk-dragging');
+      this.shell
+        .querySelectorAll('.desk-drop-target')
+        .forEach(el => el.classList.remove('desk-drop-target'));
     }
     hoverFocus(key) {
       const s = this.logic.state;
@@ -607,7 +840,7 @@
         node(
           'p',
           'widget-muted desk-sheet-foot',
-          '0 selects workspace 10. J needs two or more tiled windows in the same workspace. Use [ / ] to switch workspaces. Text editing keys stay with the focused field. ⌘Space and ⌘` are left to iPadOS. Esc or Done closes this list.'
+          'Drag a divider to resize. Hold Command (Ctrl+Alt on Linux) and left-drag to swap tiled windows, or right-drag to resize. 0 selects workspace 10. J needs two or more tiled windows in the same workspace. Use [ / ] to switch workspaces. Text editing keys stay with the focused field. ⌘Space and ⌘` are left to iPadOS. Esc or Done closes this list.'
         )
       );
       sheet.addEventListener('pointerdown', e => {
@@ -627,6 +860,8 @@
       this.returnFocus = null;
     }
     dispose() {
+      this.cancelDrag();
+      this.dividers.remove();
       this.closeSheet();
       this.abort.abort();
     }
@@ -655,6 +890,15 @@
   window.HyprlandDesk = {
     attach: logic => (activeDesk = new Desk(logic)),
     nativeKey,
+    nativePointer: event => {
+      if (!activeDesk) return;
+      const e = { clientX: event.x, clientY: event.y, button: event.button };
+      if (event.phase === 'begin') activeDesk.startDrag(e);
+      else if (event.phase === 'move') activeDesk.dragMove(e);
+      else if (event.phase === 'end') activeDesk.dragEnd(e);
+      else activeDesk.cancelDrag();
+    },
+    MODES,
     isDesk,
     desks,
     deskOf,

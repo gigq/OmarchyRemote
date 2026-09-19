@@ -172,3 +172,10 @@ To remove the setup: `systemctl --user disable --now omarchy-remote-dev.service 
 ## License
 
 [MIT](LICENSE).
+
+Desk windows support draggable dividers, Command + left-drag to swap tiles, and
+Command + right-drag to resize (Ctrl+Alt in a Linux/Windows browser). Settings →
+This device → Window layout selects Dwindle, the Omarchy default, or Master and
+stack. Layout and split sizes are saved per device. Toggle active split changes
+Dwindle's split direction; focused dividers accept arrow keys and double-click resets
+a split to equal sizes. Embedded website modifier drags require native build 30.

@@ -69,3 +69,19 @@ Theme selection lives in Settings and persists on the device (`omarchy-theme`). 
 The standalone build's service worker caches only known app files, rejects redirected install responses, and activates a new version after old app windows close. Close all app windows and reopen to pick up an update. A PWA cannot defer iOS system gestures; the native app can.
 
 Development views reload after source changes, including atomic file replacements. The host checks sources every 750 ms and publishes a reload only after native assets regenerate successfully; a failed regeneration is retried once, then waits for the next source change.
+
+### Adjustable desk tiling
+
+Settings → This device offers Dwindle (Omarchy's default) and Master and stack.
+Dwindle recursively splits the available area; Master keeps the first window on
+the left with the others stacked on the right. Resize with a divider (touch or
+pointer), or hold Command and right-drag inside a window. Command + left-drag
+onto another tile swaps them. Linux/Windows web clients use Ctrl+Alt. Touch-only
+phone workspaces keep their existing geometry.
+
+Split sizes, direction overrides, and layout choice are part of the existing
+per-device layout backup. Settings has a Toggle active split direction action.
+A keyboard-focused divider accepts arrows in 25-point steps; double-click resets
+its size. Fullscreen and Expo hide dividers. Browser and saved website content
+forward modifier drags through a native gesture bridge starting with build 30;
+ordinary website touches and scrolling retain their normal behavior.
