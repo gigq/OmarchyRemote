@@ -314,3 +314,22 @@ test('floating windows leave tiling, move and resize independently, and restore'
   await expect(p.locator('.desk-divider')).toHaveCount(1);
   expect((await rect(p, 'terminal')).width).toBeLessThan(tile.width - 200);
 });
+
+test('direct resize keys grow the active tile from either side and resize floating windows', async ({
+  page: p,
+}) => {
+  await boot(p);
+  const right = await rect(p, 'browser');
+  await p.keyboard.press('Meta+Alt+Shift+ArrowRight');
+  expect((await rect(p, 'browser')).width).toBeGreaterThan(right.width + 20);
+  await p.keyboard.press('Meta+J');
+  const left = await rect(p, 'terminal');
+  await p.keyboard.press('Meta+Alt+Shift+ArrowRight');
+  expect((await rect(p, 'terminal')).width).toBeGreaterThan(left.width + 20);
+  await p.keyboard.press('Meta+Shift+O');
+  const floating = await rect(p, 'terminal');
+  await p.keyboard.press('Meta+Alt+Shift+ArrowDown');
+  expect((await rect(p, 'terminal')).height).toBeGreaterThan(floating.height + 20);
+  await p.keyboard.press('Meta+Alt+Shift+ArrowLeft');
+  expect((await rect(p, 'terminal')).width).toBeLessThan(floating.width - 20);
+});

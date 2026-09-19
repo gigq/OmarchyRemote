@@ -211,3 +211,7 @@ come forward when focused. Command-drag moves them; Command+right-drag resizes t
 **New browser window** in Search actions creates another independent Browser pane
 (native build 33 or later). Each remembers its own desktop tab and navigation;
 website logins remain shared on the device.
+
+**Command+Option+Shift+arrow** resizes the active window in 25-point steps: left/up
+shrink width/height, right/down grow them. No divider focus is needed. These actions
+also appear in Search actions and work with tiles, floating windows, and scratchpad.

@@ -429,6 +429,16 @@
     },
     {
       group: 'Windows',
+      keys: '⌥ ⇧ ← ↑ ↓ →',
+      alt: true,
+      shift: true,
+      code: /^Arrow/,
+      desk: true,
+      label: 'Resize active window',
+      run: (d, e) => d.resizeActive(e.code.slice(5).toLowerCase()),
+    },
+    {
+      group: 'Windows',
       keys: '⇧ O',
       shift: true,
       code: /^KeyO$/,
@@ -849,7 +859,7 @@
             ctrl: false,
             alt: !!b.alt,
             shift: !!b.shift,
-            editing: code.startsWith('Arrow'),
+            editing: code.startsWith('Arrow') && !b.alt,
             focusShell: !!b.focusShell,
             run: () => b.run(this, { code }),
           });
@@ -1194,7 +1204,7 @@
       this.logic.focusApp(key);
     }
     isShellShortcut(e) {
-      const apple = e.metaKey && !e.ctrlKey && (!e.altKey || NATIVE);
+      const apple = e.metaKey && !e.ctrlKey;
       const combo = !apple && e.ctrlKey && e.altKey && !e.metaKey;
       return (
         (apple || combo) &&
@@ -1236,14 +1246,15 @@
         return;
       }
       // ⌘ works everywhere it reaches the page; Ctrl+Alt is the Windows/Linux spelling.
-      const apple = e.metaKey && !e.ctrlKey && (!e.altKey || NATIVE),
+      const apple = e.metaKey && !e.ctrlKey,
         combo = !apple && e.ctrlKey && e.altKey && !e.metaKey;
       if (!(apple || combo) || e.repeat) return;
       const inField = editable(e.target);
       if (
         inField &&
         (apple
-          ? (!e.shiftKey && EDITING.has(e.code)) || (e.shiftKey && /^Arrow|^KeyZ$/.test(e.code))
+          ? (!e.shiftKey && EDITING.has(e.code)) ||
+            (e.shiftKey && !e.altKey && /^Arrow|^KeyZ$/.test(e.code))
           : !/^(Arrow|Enter|Backspace|Escape)/.test(e.code))
       )
         return;
@@ -1298,6 +1309,30 @@
           ? { scratchRect: bounded }
           : { floating: { ...s.floating, [key]: bounded } }
       );
+    }
+    resizeActive(direction) {
+      const s = this.logic.state,
+        key = cur(s);
+      if (!s.desk || key === 'home' || (s.full || []).includes(key)) return;
+      const geometry = layout(s, s.deskW, s.deskH),
+        rect = geometry.rects.get(key);
+      if (!rect || rect.hidden) return;
+      const axis = ['left', 'right'].includes(direction) ? 'x' : 'y';
+      const amount = ['left', 'up'].includes(direction) ? -25 : 25;
+      if (rect.floating || rect.scratch) {
+        this.setFloatingRect(key, {
+          ...rect,
+          [axis === 'x' ? 'w' : 'h']: rect[axis === 'x' ? 'w' : 'h'] + amount,
+        });
+        return;
+      }
+      const selected = groupMembers(s, key);
+      const split = geometry.splits
+        .filter(v => v.desk === s.ws && v.axis === axis && v.apps.some(k => selected.includes(k)))
+        .sort((a, b) => a.apps.length - b.apps.length)[0];
+      if (!split) return;
+      const sign = split.column || selected.includes(split.apps[0]) ? 1 : -1;
+      this.resizeSplit(split, split.position + sign * amount);
     }
     toggleFloating() {
       const s = this.logic.state,

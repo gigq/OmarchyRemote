@@ -169,3 +169,13 @@ windows share the native website data store, including logins. Choosing the same
 desktop tab in two panes still targets the same desktop tab when syncing URLs.
 Additional embedded Browser surfaces require native build 33; the PWA continues to
 open websites externally. Layout backups preserve the additional window identities.
+
+### Direct keyboard resizing
+
+Command+Option+Shift+arrow resizes the active window without first focusing a divider.
+Left/right shrink/grow width; up/down shrink/grow height, by 25 points per press.
+For tiles, the nearest containing split on that axis adjusts while respecting
+minimum pane sizes; grouped tabs resize their shared tile. Scrolling columns resize
+horizontally. Floating windows and scratchpad resize within the desk bounds.
+Fullscreen ignores resizing. Browser tab navigation keeps Command+Option+left/right.
+Search actions also exposes all four resize operations for clients without this chord.
