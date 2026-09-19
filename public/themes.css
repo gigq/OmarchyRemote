@@ -287,3 +287,14 @@ html:not(.desk-mode) #touch-shell:not(.expo-mode) [data-workspace]::before {
   flex: 1;
   height: 32px;
 }
+
+.device-focus-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.device-focus-option input {
+  accent-color: var(--theme-accent);
+}

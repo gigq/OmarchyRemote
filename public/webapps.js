@@ -51,6 +51,7 @@
       this.state = e => {
         const v = e.detail || {};
         if (v.appID !== app.id || this.disposed) return;
+        if (v.hovered && this.active && !this.covered) host.logic.desk?.hoverFocus(app.id);
         if (v.focused && this.active && !this.covered && host.logic.state.desk)
           host.logic.focusApp(app.id);
         if (v.preview?.startsWith('data:image/jpeg;base64,')) {

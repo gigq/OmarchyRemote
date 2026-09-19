@@ -216,6 +216,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         }
     }
 
+    private var lastHoverLocation: CGPoint?
     private var panY: CGFloat = 0
     private var scrollTravel: CGFloat = 0
 
@@ -225,6 +226,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         reset()
     }
     func reset() {
+        lastHoverLocation = nil
         shortcutsActive = false
         updateFocus(false)
         observations.removeAll()
@@ -258,6 +260,16 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         focus.delaysTouchesBegan = false
         focus.delaysTouchesEnded = false
         browser.addGestureRecognizer(focus)
+        #if !os(visionOS)
+            // visionOS hover can represent gaze rather than intentional pointer movement.
+            let hover = UIHoverGestureRecognizer(target: self, action: #selector(pageHovered(_:)))
+            hover.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirectPointer.rawValue)]
+            hover.cancelsTouchesInView = false
+            hover.delaysTouchesBegan = false
+            hover.delaysTouchesEnded = false
+            hover.delegate = self
+            browser.addGestureRecognizer(hover)
+        #endif
         presenter.view.addSubview(browser)
         page = browser
         observations = [
@@ -293,11 +305,32 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
             showControls(true)
         }
     }
+    @objc private func pageHovered(_ hover: UIHoverGestureRecognizer) {
+        guard hover.state == .began || hover.state == .changed else {
+            lastHoverLocation = nil
+            return
+        }
+        guard let page, !page.isHidden, page.window != nil else { return }
+        let location = hover.location(in: page)
+        guard page.bounds.contains(location), lastHoverLocation != location else { return }
+        lastHoverLocation = location
+        // Only a hint: the shell owns the opt-in setting and overlay/workspace checks.
+        publish(hovered: true)
+    }
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        gestureRecognizer is UIHoverGestureRecognizer || otherGestureRecognizer is UIHoverGestureRecognizer
+    }
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive event: UIEvent) -> Bool {
+        // Hover must not change window focus while a mouse button is held.
+        if gestureRecognizer is UIHoverGestureRecognizer, !event.buttonMask.isEmpty { return false }
         // Focus observation must never participate in trackpad wheel recognition.
-        event.type != .scroll
+        return event.type != .scroll
     }
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        if gestureRecognizer is UIHoverGestureRecognizer { return touch.type == .indirectPointer }
         guard let page, let touched = touch.view, touched === page || touched.isDescendant(of: page) else {
             return false
         }
@@ -305,7 +338,8 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         return false  // Observe focus without recognizing or cancelling website touches.
     }
     private func publish(
-        error: String? = nil, preview: String? = nil, focused: Bool = false, controlsHidden: Bool? = nil
+        error: String? = nil, preview: String? = nil, focused: Bool = false, hovered: Bool = false,
+        controlsHidden: Bool? = nil
     ) {
         guard let page else { return }
         var state: [String: Any] = [
@@ -315,6 +349,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         if let appID { state["appID"] = appID }
         if let controlsHidden { state["controlsHidden"] = controlsHidden }
         if focused { state["focused"] = true }
+        if hovered { state["hovered"] = true }
         if let error { state["error"] = error }
         if let preview { state["preview"] = preview }
         shell?.callAsyncJavaScript(
@@ -378,6 +413,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
             guard let page, let presenter else { replyHandler(["visible": false], nil); return }
             let visible = body["visible"] as? Bool == true
             if !visible {
+                lastHoverLocation = nil
                 page.findInteraction?.dismissFindNavigator()
                 requestedVisible = false
                 updateFocus(false)

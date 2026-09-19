@@ -379,6 +379,17 @@
         capture: true,
         signal,
       });
+      this.shell?.addEventListener(
+        'pointermove',
+        e => {
+          if (e.pointerType !== 'mouse' || e.buttons) return;
+          const position = `${e.clientX},${e.clientY}`;
+          if (position === this.pointerPosition) return;
+          this.pointerPosition = position;
+          this.hoverFocus(e.target.closest('[data-workspace]')?.dataset.workspace);
+        },
+        { capture: true, signal }
+      );
       window.addEventListener('hyprland-layout', e => this.measure(e.detail), { signal });
       this.measure();
     }
@@ -403,6 +414,29 @@
       if (!s.desk || s.ov || e.button > 0) return;
       const key = e.target.closest('[data-workspace]')?.dataset.workspace;
       if (key && key !== this.logic.cur() && deskOf(s, key) === s.ws) this.logic.focusApp(key);
+    }
+    hoverFocus(key) {
+      const s = this.logic.state;
+      if (
+        HyprlandUtil.storage.get('omarchy-focus-follows-pointer') !== 'true' ||
+        !s.desk ||
+        s.ov ||
+        s.launch ||
+        s.shade ||
+        this.sheet ||
+        !key ||
+        !s.open.includes(key) ||
+        key === this.logic.cur() ||
+        deskOf(s, key) !== s.ws
+      )
+        return;
+      if (
+        [...document.querySelectorAll('[role="dialog"], [aria-modal="true"], [role="menu"]')].some(
+          el => el.getClientRects().length
+        )
+      )
+        return;
+      this.logic.focusApp(key);
     }
     isShellShortcut(e) {
       const apple = e.metaKey && !e.ctrlKey && (!e.altKey || NATIVE);

@@ -163,6 +163,7 @@
         if (this.disposed) return;
         const v = e.detail || {};
         if (v.appID) return;
+        if (v.hovered && this.active && !this.covered) this.host.logic.desk?.hoverFocus('browser');
         if (v.focused && this.root.contains(document.activeElement)) document.activeElement.blur();
         this.navigationState(v);
         if (typeof v.controlsHidden === 'boolean' && document.activeElement !== this.address)

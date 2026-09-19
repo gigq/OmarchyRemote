@@ -16,6 +16,7 @@
     'omarchy-inbox-muted',
     'omarchy-layout-phone',
     'omarchy-layout-desk',
+    'omarchy-focus-follows-pointer',
   ];
   const snapshot = () =>
     Object.fromEntries(keys.map(k => [k, storage.get(k)]).filter(([, v]) => v !== null));
@@ -323,7 +324,25 @@
       );
       backups.append(choice);
     }
-    section.append(row, problem, actions, backups);
+    const focusRow = node('label', 'device-focus-option');
+    const focusInput = node('input');
+    focusInput.type = 'checkbox';
+    focusInput.checked = storage.get('omarchy-focus-follows-pointer') === 'true';
+    focusInput.onchange = () =>
+      storage.set('omarchy-focus-follows-pointer', String(focusInput.checked));
+    focusRow.append(focusInput, node('span', '', 'Focus follows pointer'));
+    section.append(
+      row,
+      focusRow,
+      node(
+        'p',
+        'theme-note',
+        'Mouse or trackpad movement focuses the window underneath in desk mode. Saved for this device.'
+      ),
+      problem,
+      actions,
+      backups
+    );
     root.append(section);
   }
   window.HyprlandPreferences = {

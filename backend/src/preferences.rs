@@ -30,6 +30,7 @@ pub const KEYS: &[&str] = &[
     "omarchy-inbox-muted",
     "omarchy-layout-phone",
     "omarchy-layout-desk",
+    "omarchy-focus-follows-pointer",
 ];
 pub type Shared = Arc<Mutex<Store>>;
 pub struct Store {

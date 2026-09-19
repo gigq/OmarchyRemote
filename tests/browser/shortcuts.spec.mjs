@@ -363,3 +363,73 @@ test('app handlers cannot consume reserved shell shortcuts', async ({ page: p })
   });
   expect(results).toEqual([]);
 });
+
+test('pointer focus is opt-in, desk-only and ignores dragging, touch and overlays', async ({
+  page: p,
+}) => {
+  await p.evaluate(() => {
+    reset(true);
+    const shell = document.querySelector('#touch-shell');
+    for (const key of ['terminal', 'browser', 'files']) {
+      const tile = document.createElement('div');
+      tile.dataset.workspace = key;
+      shell.append(tile);
+    }
+    window.hover = (key, options = {}) => {
+      document.querySelector(`[data-workspace="${key}"]`).dispatchEvent(
+        new PointerEvent('pointermove', {
+          bubbles: true,
+          pointerType: 'mouse',
+          clientX: Math.random() * 1000,
+          ...options,
+        })
+      );
+    };
+    HyprlandUtil.storage.set('omarchy-focus-follows-pointer', null);
+    hover('browser');
+  });
+  expect((await state(p)).focus).toBe('terminal');
+  await p.evaluate(() => {
+    HyprlandUtil.storage.set('omarchy-focus-follows-pointer', 'true');
+    hover('browser');
+  });
+  expect((await state(p)).focus).toBe('browser');
+  for (const options of [{ buttons: 1 }, { pointerType: 'touch' }, { pointerType: 'pen' }]) {
+    await p.evaluate(options => hover('files', options), options);
+    expect((await state(p)).focus).toBe('browser');
+  }
+  for (const flag of ['ov', 'launch', 'shade']) {
+    await p.evaluate(flag => {
+      logic.state[flag] = true;
+      hover('files');
+    }, flag);
+    expect((await state(p)).focus).toBe('browser');
+    await p.evaluate(flag => {
+      logic.state[flag] = false;
+    }, flag);
+  }
+  await p.evaluate(() => {
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    dialog.textContent = 'Dialog';
+    document.body.append(dialog);
+    hover('files');
+  });
+  expect((await state(p)).focus).toBe('browser');
+  await p.evaluate(() => {
+    document.querySelector('[role="dialog"]').remove();
+    logic.state.desk = false;
+    hover('files');
+  });
+  expect((await state(p)).focus).toBe('browser');
+  await p.evaluate(() => {
+    logic.state.desk = true;
+    hover('files');
+  });
+  expect((await state(p)).focus).toBe('files');
+  await p.evaluate(() => {
+    HyprlandUtil.storage.set('omarchy-focus-follows-pointer', 'false');
+    hover('terminal');
+  });
+  expect((await state(p)).focus).toBe('files');
+});
