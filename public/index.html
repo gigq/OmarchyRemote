@@ -467,13 +467,15 @@ class Component extends DCLogic {
     const s = this.state;
     if (s.desk && window.HyprlandDesk) {
       const D = window.HyprlandDesk;
+      if (key === s.scratchKey) return this.set({ scratchVisible: true, focus: key, ov: false });
       this.set({ ...D.go(s, D.deskOf(s, key)), focus: key, ...this.reset() });
     } else this.go(s.open.indexOf(key));
   }
   focusApp(key) {
     const s = this.state;
     if (!s.desk || !window.HyprlandDesk || !s.open.includes(key)) return this.openApp(key);
-    this.set({ ws: window.HyprlandDesk.deskOf(s, key), focus: key });
+    if (key === s.scratchKey) this.set({ scratchVisible: true, focus: key });
+    else this.set({ ws: window.HyprlandDesk.deskOf(s, key), focus: key, scratchVisible: false });
   }
   openLauncher() {
     const show = () => this.set({ launch: true, kb: true, sup: false, ov: false, shade: null });

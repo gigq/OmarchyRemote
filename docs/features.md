@@ -106,3 +106,14 @@ action descriptors for handling and help. Native build 31 receives the registry
 from the trusted shell, rather than maintaining a separate hard-coded list in
 Swift. Text-editing arrows remain with text fields. Existing Command+/ help is
 retained; new actions can be added without another Swift key-list edit.
+
+### Scratchpad
+
+Send any non-Home desk window to the scratchpad with Command+Shift+S, then use
+Command+S to show or hide it on any workspace. Hiding preserves the app and its
+running session. Command+Shift+S while it is shown returns it to tiling. There is
+one scratchpad slot; an occupied slot is never silently replaced. Its window and
+floating geometry persist per device, and it starts hidden after a reload.
+Command-drag moves it and Command+right-drag resizes it within the desktop bounds.
+These actions also appear in the palette and require native build 31 for hardware
+key registration. Phone layouts are unchanged.

@@ -613,3 +613,7 @@ html.desk-mode.vision-mode {
   flex-shrink: 0;
   color: var(--theme-muted);
 }
+
+.desk-mode .desk-scratchpad {
+  box-shadow: 0 18px 65px #0009;
+}

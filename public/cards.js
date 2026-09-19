@@ -58,6 +58,8 @@
         state = this.logic.state;
       if (!card || !c) return;
       const s = card.style;
+      s.zIndex = state.desk && key === state.scratchKey ? '20' : '';
+      card.classList.toggle('desk-scratchpad', state.desk && key === state.scratchKey);
       s.width = c.w;
       s.height = c.h;
       s.transform = c.tf;

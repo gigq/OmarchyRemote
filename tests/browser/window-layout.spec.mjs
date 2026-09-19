@@ -2,7 +2,7 @@ import { test, expect } from './fixtures.mjs';
 test.use({ viewport: { width: 1194, height: 834 }, isMobile: false, hasTouch: false });
 const frame = (p, key) => p.locator(`[data-workspace="${key}"]`).last();
 const rect = async (p, key) => {
-  await p.waitForTimeout(400);
+  await p.waitForTimeout(650);
   return frame(p, key).boundingBox();
 };
 const boot = async p => {
@@ -111,4 +111,28 @@ test('action palette filters and executes without losing window focus; registry 
   await search.fill('workspace 3 without following');
   await search.press('Enter');
   await expect(p.locator('.desk-ws-label:visible')).toHaveText('terminal');
+});
+test('scratchpad hides without closing, follows workspace, and returns to tiling', async ({
+  page: p,
+}) => {
+  await boot(p);
+  await p.keyboard.press('Meta+Shift+S');
+  await expect(p.locator('.desk-ws-label:visible')).toHaveText('terminal');
+  await expect(frame(p, 'browser')).toHaveCSS('opacity', '0');
+  await p.keyboard.press('Meta+Digit1');
+  await p.keyboard.press('Meta+S');
+  await expect(p.locator('.desk-ws-label:visible')).toHaveText('browser');
+  const floating = await rect(p, 'browser');
+  expect(floating.width).toBeLessThan(1100);
+  expect(floating.x).toBeGreaterThan(50);
+  await drag(p, floating.x + 50, floating.y + 100, 30, 25, 'left', true);
+  expect((await rect(p, 'browser')).x).toBeCloseTo(floating.x + 30, 0);
+  await p.keyboard.press('Meta+S');
+  await expect(p.locator('.desk-ws-label:visible')).toHaveText('home');
+  await p.reload();
+  await p.keyboard.press('Meta+S');
+  await expect(p.locator('.desk-ws-label:visible')).toHaveText('browser');
+  await p.keyboard.press('Meta+Shift+S');
+  await expect(frame(p, 'browser')).not.toHaveClass(/desk-scratchpad/);
+  expect((await rect(p, 'browser')).width).toBeGreaterThan(1100);
 });

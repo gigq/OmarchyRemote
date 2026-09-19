@@ -193,6 +193,11 @@
       )
     );
     return {
+      scratchKey:
+        open.includes(saved.scratchKey) && saved.scratchKey !== 'home' ? saved.scratchKey : null,
+      scratchVisible: false,
+      scratchRect:
+        saved.scratchRect && typeof saved.scratchRect === 'object' ? saved.scratchRect : null,
       open,
       tiles,
       previousWindow: open.includes(saved.previousWindow) ? saved.previousWindow : null,
@@ -226,6 +231,8 @@
     const s = value.state;
     storage.write(s.desk ? 'omarchy-layout-desk' : 'omarchy-layout-phone', {
       open: s.open,
+      scratchKey: s.scratchKey,
+      scratchRect: s.scratchRect,
       tiles: s.tiles,
       previousWindow: s.previousWindow,
       windowLayout: s.windowLayout,

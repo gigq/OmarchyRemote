@@ -188,3 +188,7 @@ Command+Shift+K opens a searchable action palette. Type an action name, use arro
 to select, and press Return. The shared registry supplies native keyboard commands,
 shell actions, and Browser shortcuts; the existing Command+/ help remains available.
 Native build 31 is required for registry-driven hardware shortcuts.
+
+Command+Shift+S sends the active desk window to the scratchpad. Command+S shows or
+hides it on the current workspace without closing it; Command+Shift+S returns it to
+tiling. Command-drag moves the floating scratchpad, and Command+right-drag resizes it.

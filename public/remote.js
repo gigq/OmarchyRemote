@@ -1376,8 +1376,7 @@
             root.append(node('p', 'remote-empty', 'Connect to the host to use this app.'));
         }
       }
-      const visible =
-        s.desk && window.HyprlandDesk ? window.HyprlandDesk.desks(s)[s.ws] || [current] : [current];
+      const visible = s.desk && window.HyprlandDesk ? window.HyprlandDesk.visible(s) : [current];
       for (const key of visible) {
         const spec = HyprlandApps.get(key);
         if (!spec?.provider || this.apps[key] || (location.protocol === 'file:' && !spec.offline))
@@ -1391,7 +1390,13 @@
       for (const [key, app] of Object.entries(this.apps)) {
         const focused = key === current && !ov;
         app.show?.(visible.includes(key) && !ov, {
-          covered: !!(s.launch || s.shade || s.map || this.logic.desk?.sheet),
+          covered: !!(
+            s.launch ||
+            s.shade ||
+            s.map ||
+            this.logic.desk?.sheet ||
+            (s.scratchVisible && key !== s.scratchKey)
+          ),
         });
         if (!focused) {
           app.stopTouchScroll?.cancel();

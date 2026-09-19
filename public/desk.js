@@ -18,7 +18,7 @@
   const desks = s => {
     const t = s.tiles || {};
     const rows = s.open
-      .filter(k => k !== 'home')
+      .filter(k => k !== 'home' && k !== s.scratchKey)
       .map((k, i) => [k, Number.isInteger(t[k]) && t[k] > 0 ? t[k] : 1e6 + i]);
     const ids = [...new Set(rows.map(r => r[1]))].sort((a, b) => a - b);
     return [['home'], ...ids.map(id => rows.filter(r => r[1] === id).map(r => r[0]))];
@@ -32,15 +32,22 @@
   };
   const deskOf = (s, key) => desks(s).findIndex(d => d.includes(key));
   const cur = s => {
+    if (s.scratchVisible && s.open.includes(s.scratchKey)) return s.scratchKey;
     const d = desks(s)[s.ws] || ['home'];
     return d.includes(s.focus) ? s.focus : d[0];
   };
   const clamp = (s, i) => Math.max(0, Math.min(desks(s).length - 1, i));
   const go = (s, i) => {
     const ws = clamp(s, i);
-    return { ws, focus: desks(s)[ws].includes(s.focus) ? s.focus : null, tiles: normalize(s) };
+    return {
+      ws,
+      focus: desks(s)[ws].includes(s.focus) ? s.focus : null,
+      tiles: normalize(s),
+      scratchVisible: false,
+    };
   };
   const open = (s, key) => {
+    if (key === s.scratchKey) return { scratchVisible: true, focus: key };
     if (s.open.includes(key)) return { ws: deskOf(s, key), focus: key, tiles: normalize(s) };
     const d = desks(s);
     const target = s.ws === 0 || (d[s.ws] || []).length >= MAX_TILES ? d.length : s.ws;
@@ -48,6 +55,13 @@
     return { open: ns.open, tiles: normalize(ns), ws: deskOf(ns, key), focus: key };
   };
   const close = (s, key) => {
+    if (key === s.scratchKey)
+      return {
+        open: s.open.filter(k => k !== key),
+        scratchKey: null,
+        scratchVisible: false,
+        focus: null,
+      };
     const before = desks(s),
       pos = before.findIndex(d => d.includes(key)),
       current = before[s.ws] || ['home'];
@@ -67,7 +81,7 @@
     };
   };
   const move = (s, key, target, follow = true) => {
-    if (!key || key === 'home' || !s.open.includes(key)) return null;
+    if (!key || key === 'home' || key === s.scratchKey || !s.open.includes(key)) return null;
     const d = desks(s);
     target = Math.max(1, Math.min(d.length, target));
     if (deskOf(s, key) === target || (d[target]?.length || 0) >= MAX_TILES) return null;
@@ -152,6 +166,32 @@
         .filter(k => !visible.includes(k))
         .forEach(k => rects.set(k, { ...area, desk, hidden: true }));
     });
+    if (s.open.includes(s.scratchKey)) {
+      const saved = s.scratchRect || {};
+      const w = Math.max(240, Math.min(area.w, Number.isFinite(saved.w) ? saved.w : area.w * 0.8));
+      const h = Math.max(200, Math.min(area.h, Number.isFinite(saved.h) ? saved.h : area.h * 0.75));
+      rects.set(s.scratchKey, {
+        x: Math.max(
+          area.x,
+          Math.min(
+            area.x + area.w - w,
+            Number.isFinite(saved.x) ? saved.x : area.x + (area.w - w) / 2
+          )
+        ),
+        y: Math.max(
+          area.y,
+          Math.min(
+            area.y + area.h - h,
+            Number.isFinite(saved.y) ? saved.y : area.y + (area.h - h) / 2
+          )
+        ),
+        w,
+        h,
+        desk: s.ws,
+        hidden: s.ov || !s.scratchVisible,
+        scratch: true,
+      });
+    }
     return { area, rects, splits };
   };
   const neighbor = (s, W, H, key, dir) => {
@@ -284,6 +324,23 @@
       desk: true,
       label: 'Return to previous workspace',
       run: d => d.previousWorkspace(),
+    },
+    {
+      group: 'Windows',
+      keys: 'S',
+      code: /^KeyS$/,
+      desk: true,
+      label: 'Show or hide scratchpad',
+      run: d => d.toggleScratch(),
+    },
+    {
+      group: 'Windows',
+      keys: '⇧ S',
+      code: /^KeyS$/,
+      shift: true,
+      desk: true,
+      label: 'Send window to scratchpad or return it',
+      run: d => d.stashWindow(),
     },
     {
       group: 'Windows',
@@ -551,7 +608,8 @@
       const oldApps = this.lastWorkspaceApps;
       const changed = this.lastWs != null && this.lastWs !== s.ws;
       this.lastWs = s.ws;
-      this.lastWorkspaceApps = [cur(s), ...apps.filter(k => k !== cur(s))];
+      const anchor = apps.includes(cur(s)) ? cur(s) : apps[0];
+      this.lastWorkspaceApps = [anchor, ...apps.filter(k => k !== anchor)];
       if (changed && oldApps) {
         const previousWindow = oldApps.find(k => s.open.includes(k) && !apps.includes(k));
         if (previousWindow && s.previousWindow !== previousWindow)
@@ -580,6 +638,8 @@
       }
       if (e.button > 0) return;
       const key = e.target.closest('[data-workspace]')?.dataset.workspace;
+      if (key && key !== s.scratchKey && s.scratchVisible)
+        this.logic.set({ scratchVisible: false });
       if (key && key !== this.logic.cur() && deskOf(s, key) === s.ws) this.logic.focusApp(key);
     }
     actions() {
@@ -711,9 +771,10 @@
     updateDividers() {
       if (!this.dividers) return;
       const s = this.logic.state;
-      const splits = this.canDrag()
-        ? layout(s, s.deskW, s.deskH).splits.filter(v => v.desk === s.ws)
-        : [];
+      const splits =
+        this.canDrag() && !s.scratchVisible
+          ? layout(s, s.deskW, s.deskH).splits.filter(v => v.desk === s.ws)
+          : [];
       this.dividers.replaceChildren(
         ...splits.map(split => {
           const el = node('div', 'desk-divider');
@@ -771,15 +832,31 @@
       const s = this.logic.state,
         point = this.point(e);
       const geometry = layout(s, s.deskW, s.deskH);
-      const key = [...geometry.rects].find(
-        ([, r]) =>
-          r.desk === s.ws &&
-          !r.hidden &&
-          point.x >= r.x &&
-          point.x <= r.x + r.w &&
-          point.y >= r.y &&
-          point.y <= r.y + r.h
-      )?.[0];
+      const key = [...geometry.rects]
+        .reverse()
+        .find(
+          ([, r]) =>
+            r.desk === s.ws &&
+            !r.hidden &&
+            point.x >= r.x &&
+            point.x <= r.x + r.w &&
+            point.y >= r.y &&
+            point.y <= r.y + r.h
+        )?.[0];
+      const floating = key === s.scratchKey ? geometry.rects.get(key) : null;
+      if (floating) {
+        this.drag = {
+          ws: s.ws,
+          key,
+          start: point,
+          pointerId: e.pointerId,
+          moved: false,
+          floating,
+          resize: e.button === 2,
+        };
+        this.shell.classList.add('desk-dragging');
+        return true;
+      }
       const available = geometry.splits.filter(v => v.desk === s.ws);
       let split = available.find(v => v.id === splitID);
       const resizing = !!split || e.button === 2;
@@ -810,7 +887,16 @@
       drag.moved = true;
       e.preventDefault?.();
       e.stopImmediatePropagation?.();
-      if (drag.split) {
+      if (drag.floating) {
+        const r = drag.floating,
+          dx = point.x - drag.start.x,
+          dy = point.y - drag.start.y;
+        this.logic.set({
+          scratchRect: drag.resize
+            ? { ...r, w: r.w + dx, h: r.h + dy }
+            : { ...r, x: r.x + dx, y: r.y + dy },
+        });
+      } else if (drag.split) {
         const split = drag.split;
         this.resizeSplit(split, split.position + point[split.axis] - drag.start[split.axis]);
       } else {
@@ -839,7 +925,8 @@
         this.suppressClickUntil = performance.now() + 250;
         e.preventDefault?.();
         e.stopImmediatePropagation?.();
-        if (!drag.split && drag.target) this.patch(swap(this.logic.state, drag.key, drag.target));
+        if (!drag.split && !drag.floating && drag.target)
+          this.patch(swap(this.logic.state, drag.key, drag.target));
       }
       this.cancelDrag();
     }
@@ -946,6 +1033,50 @@
     // Window operations only make sense on the desk; the phone keeps one app per workspace.
     patch(p) {
       if (p) this.logic.set(p);
+    }
+    toggleScratch() {
+      const s = this.logic.state;
+      if (!s.desk) return;
+      if (!s.scratchKey || !s.open.includes(s.scratchKey)) {
+        this.logic.expo?.error('Send a window to the scratchpad with Command+Shift+S first.');
+        return;
+      }
+      this.logic.set({
+        scratchVisible: !s.scratchVisible,
+        focus: s.scratchVisible ? null : s.scratchKey,
+        kb: false,
+        ov: false,
+      });
+    }
+    stashWindow() {
+      const s = this.logic.state,
+        key = cur(s);
+      if (!s.desk || key === 'home') return;
+      if (key === s.scratchKey) {
+        const target = s.ws === 0 || desks(s)[s.ws].length >= MAX_TILES ? desks(s).length : s.ws;
+        const ns = { ...s, scratchKey: null, tiles: { ...normalize(s), [key]: target } };
+        this.logic.set({
+          scratchKey: null,
+          scratchVisible: false,
+          tiles: normalize(ns),
+          ws: deskOf(ns, key),
+          focus: key,
+        });
+        return;
+      }
+      if (s.scratchKey) {
+        this.logic.expo?.error('Return the existing scratchpad window before sending another.');
+        return;
+      }
+      const others = desks(s)[s.ws].filter(k => k !== key);
+      const ns = { ...s, scratchKey: key };
+      this.logic.set({
+        scratchKey: key,
+        scratchVisible: false,
+        full: (s.full || []).filter(k => k !== key),
+        ws: Math.max(0, deskOf(ns, others[0] || 'home')),
+        focus: others[0] || 'home',
+      });
     }
     previousWorkspace() {
       const s = this.logic.state;
@@ -1120,6 +1251,10 @@
     MODES,
     isDesk,
     desks,
+    visible: s => [
+      ...(desks(s)[s.ws] || []),
+      ...(s.scratchVisible && s.open.includes(s.scratchKey) ? [s.scratchKey] : []),
+    ],
     deskOf,
     cur,
     go,
