@@ -604,6 +604,7 @@
       keys: '/',
       code: /^Slash$/,
       label: 'Show these shortcuts',
+      keepSheet: true,
       run: d => d.toggleSheet(),
     },
   ];
@@ -842,7 +843,7 @@
       if (Math.abs(this.columnScroll.scrollLeft - info.offset) > 1)
         this.columnScroll.scrollLeft = info.offset;
     }
-    actions() {
+    actions(allProviders = false, defaults = false) {
       const result = [];
       for (const b of bindings()) {
         if ((b.desk && !this.logic.state.desk) || (b.browserOnly && NATIVE)) continue;
@@ -852,6 +853,8 @@
           else if (code.startsWith('Arrow') || code.startsWith('Bracket'))
             label += ' · ' + keyName(code);
           result.push({
+            id: `shell:${b.label}:${code === 'NumpadEnter' ? 'Enter' : code}`,
+            owner: 'shell',
             code,
             label,
             group: b.group,
@@ -861,6 +864,7 @@
             shift: !!b.shift,
             editing: code.startsWith('Arrow') && !b.alt,
             focusShell: !!b.focusShell,
+            keepSheet: !!b.keepSheet,
             run: () => b.run(this, { code }),
           });
         }
@@ -878,20 +882,39 @@
           { label: 'Group window with next tile', group: 'Windows', run: () => this.groupWindow() },
           { label: 'Remove window from group', group: 'Windows', run: () => this.ungroupWindow() }
         );
-      const signatures = new Set(result.filter(a => a.code).map(signature));
-      for (const action of this.logic.remote?.app(this.logic.cur())?.actions || []) {
-        if (signatures.has(signature(action))) continue;
-        signatures.add(signature(action));
-        result.push(action);
+      const providers = allProviders
+        ? Object.entries(this.logic.remote?.apps || {})
+        : [[this.logic.cur(), this.logic.remote?.app(this.logic.cur())]];
+      const seen = new Set();
+      for (const [key, app] of providers) {
+        const owner = HyprlandApps.get(key)?.baseKey || key;
+        for (const action of app?.actions || []) {
+          const id = `app:${owner}:${signature(action)}`;
+          if (seen.has(id)) continue;
+          seen.add(id);
+          result.push({ ...action, id, owner });
+        }
       }
-      return result;
+      if (allProviders) {
+        for (const spec of Object.values(HyprlandApps.catalog).filter(a => !a.baseKey)) {
+          for (const action of spec.provider?.shortcutDefinitions || []) {
+            const id = `app:${spec.key}:${signature(action)}`;
+            if (seen.has(id)) continue;
+            seen.add(id);
+            result.push({ ...action, id, owner: spec.key });
+          }
+        }
+      }
+      return defaults ? result : HyprlandKeymap.resolve(result, this.logic.state.keyBindings);
     }
     publishActions() {
       const bridge = window.webkit?.messageHandlers?.shellKeyboard;
       if (!bridge?.postMessage) return;
       const actions = this.actions()
         .filter(a => a.code)
-        .map(({ run, ...a }) => a);
+        .map(({ run, ...a }) =>
+          this.keyRecorder ? { ...a, focusShell: true, editing: false } : a
+        );
       const text = JSON.stringify(actions);
       if (text === this.registeredActions) return;
       this.registeredActions = text;
@@ -1204,73 +1227,53 @@
       this.logic.focusApp(key);
     }
     isShellShortcut(e) {
-      const apple = e.metaKey && !e.ctrlKey;
-      const combo = !apple && e.ctrlKey && e.altKey && !e.metaKey;
-      return (
-        (apple || combo) &&
-        bindings().some(
-          b =>
-            b.code.test(e.code) &&
-            !!b.shift === e.shiftKey &&
-            !!b.alt === !!(apple && e.altKey) &&
-            (!b.desk || this.logic.state.desk) &&
-            (!b.browserOnly || !NATIVE)
-        )
-      );
+      return this.actions().some(a => a.owner === 'shell' && HyprlandKeymap.matches(a, e));
     }
     keydown(e) {
+      if (this.keyRecorder) {
+        this.keyRecorder(e);
+        return;
+      }
       const s = this.logic.state,
         logic = this.logic;
+      const match = this.actions().find(a => HyprlandKeymap.matches(a, e));
+      const blocked = this.sheet || s.ov || s.shade || s.launch;
       if (
-        !this.sheet &&
-        !s.ov &&
-        !s.shade &&
-        !s.launch &&
-        !this.isShellShortcut(e) &&
-        logic.remote?.app(logic.cur())?.shortcut?.(e)
-      )
-        return;
-      if (e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        if (this.sheet) {
-          this.closeSheet();
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          return;
-        }
-        if (editable(e.target)) return;
-        if (s.ov) logic.set({ ov: false });
+        e.key === 'Escape' &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        (blocked || match?.owner === 'shell')
+      ) {
+        if (this.sheet) this.closeSheet();
+        else if (editable(e.target)) return;
+        else if (s.ov) logic.set({ ov: false });
         else if (s.shade) logic.set({ shade: null });
         else return;
         e.preventDefault();
         e.stopImmediatePropagation();
         return;
       }
-      // ⌘ works everywhere it reaches the page; Ctrl+Alt is the Windows/Linux spelling.
-      const apple = e.metaKey && !e.ctrlKey,
-        combo = !apple && e.ctrlKey && e.altKey && !e.metaKey;
-      if (!(apple || combo) || e.repeat) return;
-      const inField = editable(e.target);
-      if (
-        inField &&
-        (apple
-          ? (!e.shiftKey && EDITING.has(e.code)) ||
-            (e.shiftKey && !e.altKey && /^Arrow|^KeyZ$/.test(e.code))
-          : !/^(Arrow|Enter|Backspace|Escape)/.test(e.code))
-      )
+      if (!match) {
+        const app = logic.remote?.app(logic.cur());
+        if (!blocked && !app?.actions?.length) app?.shortcut?.(e);
         return;
-      const binding = bindings().find(
-        b =>
-          b.code.test(e.code) &&
-          !!b.shift === e.shiftKey &&
-          !!b.alt === !!(apple && e.altKey) &&
-          (!b.desk || s.desk) &&
-          (!b.browserOnly || !NATIVE)
-      );
-      if (!binding) return;
+      }
+      if (e.repeat || (match.owner !== 'shell' && blocked)) return;
+      if (match.owner === 'shell' && editable(e.target)) {
+        const apple = e.metaKey && !e.ctrlKey;
+        if (
+          apple
+            ? (!e.shiftKey && !e.altKey && EDITING.has(e.code)) ||
+              (e.shiftKey && !e.altKey && /^(Arrow|KeyZ$)/.test(e.code))
+            : !e.metaKey && !/^(Arrow|Enter|Backspace|Escape)/.test(e.code)
+        )
+          return;
+      }
       e.preventDefault();
       e.stopImmediatePropagation();
-      if (this.sheet && !/Slash/.test(e.code)) this.closeSheet();
-      binding.run(this, e);
+      if (this.sheet && !match.keepSheet) this.closeSheet();
+      match.run();
     }
     // Window operations only make sense on the desk; the phone keeps one app per workspace.
     patch(p) {
@@ -1489,33 +1492,16 @@
       );
       sheet.append(head);
       const grid = node('div', 'desk-sheet-grid');
-      const all = bindings();
-      for (const group of [...new Set(all.map(b => b.group))]) {
+      const all = this.actions().filter(a => a.code && a.code !== 'NumpadEnter');
+      for (const group of [...new Set(all.map(a => a.group))]) {
         const section = node('section', 'desk-sheet-group');
         section.append(node('h3', '', group));
-        for (const b of all.filter(
-          b =>
-            b.group === group && (!b.desk || this.logic.state.desk) && (!b.browserOnly || !NATIVE)
-        )) {
+        for (const action of all.filter(a => a.group === group)) {
           const row = node('div', 'desk-sheet-row');
-          row.append(node('kbd', '', `${MOD} ${b.keys}`), node('span', '', b.label));
+          row.append(node('kbd', '', actionKeys(action)), node('span', '', action.label));
           section.append(row);
         }
         grid.append(section);
-      }
-      const front = this.logic.remote?.app(this.logic.cur()),
-        frontName = window.HyprlandApps?.get(this.logic.cur())?.name || '';
-      if (front?.shortcuts?.length) {
-        const section = node('section', 'desk-sheet-group');
-        section.append(
-          node('h3', '', `${frontName[0].toUpperCase()}${frontName.slice(1)} (app shortcuts)`)
-        );
-        for (const [keys, text] of front.shortcuts) {
-          const row = node('div', 'desk-sheet-row');
-          row.append(node('kbd', '', keys), node('span', '', text));
-          section.append(row);
-        }
-        grid.prepend(section);
       }
       sheet.append(
         grid,
@@ -1538,8 +1524,10 @@
     }
     closeSheet() {
       if (!this.sheet) return;
+      this.keyRecorder = null;
       this.sheet.remove();
       this.sheet = null;
+      this.publishActions();
       if (this.returnFocus?.matches('button')) this.returnFocus.focus({ preventScroll: true });
       this.returnFocus = null;
       this.logic.remote?.update?.();
@@ -1555,13 +1543,20 @@
     }
   }
   let activeDesk;
-  const nativeKey = ({ code, shift = false, alt = false, ctrl = false, plain = false }) => {
+  const nativeKey = ({
+    code,
+    shift = false,
+    alt = false,
+    ctrl = false,
+    plain = false,
+    meta = !ctrl && !plain,
+  }) => {
     if (!activeDesk) return false;
     const event = {
       code,
       key: code === 'Slash' ? '/' : code === 'Escape' ? 'Escape' : code,
       shiftKey: shift,
-      metaKey: !ctrl && !plain,
+      metaKey: meta,
       ctrlKey: ctrl,
       altKey: alt,
       repeat: false,

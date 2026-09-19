@@ -684,6 +684,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
                 "Escape": UIKeyCommand.inputEscape, "Tab": "\t", "Enter": "\r", "NumpadEnter": "\r",
                 "Backspace": "\u{8}", "BracketLeft": "[", "BracketRight": "]", "Slash": "/", "Comma": ",",
                 "Equal": "=", "Minus": "-", "NumpadAdd": "+", "NumpadSubtract": "-",
+                "Space": " ", "Period": ".", "Semicolon": ";", "Quote": "'", "Backquote": "`", "Backslash": "\\",
                 "F2": UIKeyCommand.f2, "F3": UIKeyCommand.f3, "F5": UIKeyCommand.f5,
             ]
             let input: String
@@ -706,6 +707,11 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
                 if code == "BracketLeft" { inputs.append("{") }
                 if code == "BracketRight" { inputs.append("}") }
                 if code == "Equal" { inputs.append("+") }
+                let shifted = [
+                    "Period": ">", "Comma": "<", "Slash": "?", "Semicolon": ":", "Quote": "\"", "Backquote": "~",
+                    "Backslash": "|", "Minus": "_",
+                ]
+                if let character = shifted[code] { inputs.append(character) }
             }
             return inputs.compactMap { candidate in
                 let identity = "\(candidate):\(flags.rawValue)"
@@ -715,6 +721,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
                     propertyList: [
                         "code": code, "shift": flags.contains(.shift), "alt": flags.contains(.alternate),
                         "ctrl": flags.contains(.control),
+                        "meta": flags.contains(.command),
                         "plain": !flags.contains(.command) && !flags.contains(.control),
                         "focusShell": row["focusShell"] as? Bool == true,
                     ])
@@ -788,6 +795,12 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
                 configuration.userContentController.addUserScript(
                     WKUserScript(
                         source: """
+                            let fixtureUtil;
+                            Object.defineProperty(window, 'HyprlandUtil', {configurable:true,
+                                get:()=>fixtureUtil, set:value=>{fixtureUtil=value;
+                                    value.storage.set('omarchy-layout-desk', null);
+                                    value.storage.set('omarchy-layout-phone', null);
+                                }});
                             let fixtureApps;
                             Object.defineProperty(window, 'HyprlandApps', {configurable:true,
                                 get:()=>fixtureApps, set:value=>{fixtureApps=value; value.catalog.browser.offline=true;}});

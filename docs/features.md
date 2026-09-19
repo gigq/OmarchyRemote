@@ -179,3 +179,20 @@ minimum pane sizes; grouped tabs resize their shared tile. Scrolling columns res
 horizontally. Floating windows and scratchpad resize within the desk bounds.
 Fullscreen ignores resizing. Browser tab navigation keeps Command+Option+left/right.
 Search actions also exposes all four resize operations for clients without this chord.
+
+### Custom shortcuts
+
+Settings → Keyboard shortcuts opens the searchable per-device editor. Choose a
+shortcut, then press Command/Control plus a key to record a replacement. Escape
+cancels recording. Disable removes only its key binding; the action remains in
+Search actions. Reset restores one default; Restore defaults clears all overrides.
+
+The shell, Browser, shortcut help, palette and native registrations resolve the
+same registry. Remapping removes the old chord, including Return's numeric-keypad
+alias. The editor checks Browser's definitions even when Browser is closed,
+rejects duplicate bindings (including the Ctrl+Alt web aliases), and protects common
+system and text-editing chords. Native iPadOS can still reserve additional keys;
+use a different chord if the system consumes one. Overrides are included in the
+existing per-device layout backup. Browser custom bindings apply to all Browser
+windows. Native build 33 also supports punctuation and combined Command+Control
+bindings. Phone workspaces retain their existing geometry.

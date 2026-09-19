@@ -333,3 +333,49 @@ test('direct resize keys grow the active tile from either side and resize floati
   await p.keyboard.press('Meta+Alt+Shift+ArrowLeft');
   expect((await rect(p, 'terminal')).width).toBeLessThan(floating.width - 20);
 });
+
+test('shortcut editor rejects conflicts, remaps dispatch and help, persists, disables and resets', async ({
+  page: p,
+}) => {
+  await boot(p);
+  await p.keyboard.press('Meta+Comma');
+  await p.getByRole('button', { name: 'Customize keyboard shortcuts', exact: true }).click();
+  const editor = p.getByRole('dialog', { name: 'Customize keyboard shortcuts', exact: true });
+  await editor.getByRole('searchbox', { name: 'Find shortcut' }).fill('floating');
+  const change = editor.getByRole('button', {
+    name: 'Change shortcut for Toggle floating window',
+    exact: true,
+  });
+  await change.click();
+  await p.keyboard.press('Meta+Shift+P');
+  await expect(editor.getByRole('status')).toContainText('Already assigned');
+  await p.keyboard.press('Meta+Space');
+  await expect(editor.getByRole('status')).toContainText('reserved');
+  await p.keyboard.press('Meta+Shift+I');
+  await expect(editor.getByRole('status')).toHaveText('Shortcut saved.');
+  await editor.getByRole('button', { name: 'Done', exact: true }).click();
+  const before = await rect(p, 'settings');
+  await p.keyboard.press('Meta+Shift+O');
+  expect((await rect(p, 'settings')).width).toBeCloseTo(before.width, 0);
+  await p.keyboard.press('Meta+Shift+I');
+  expect((await rect(p, 'settings')).width).toBeGreaterThan(before.width + 200);
+  await p.keyboard.press('Meta+Slash');
+  await expect(
+    p.locator('.desk-sheet-row').filter({ hasText: 'Toggle floating window' })
+  ).toContainText('I');
+  await p.keyboard.press('Escape');
+  await p.reload();
+  await p.keyboard.press('Meta+Shift+I');
+  await expect(p.locator('[data-workspace="settings"]')).not.toHaveClass(/desk-scratchpad/);
+  await p.getByRole('button', { name: 'Customize keyboard shortcuts', exact: true }).click();
+  await editor.getByRole('searchbox', { name: 'Find shortcut' }).fill('floating');
+  await editor
+    .getByRole('button', { name: 'Disable shortcut for Toggle floating window', exact: true })
+    .click();
+  await expect(change).toHaveText('Disabled');
+  await editor
+    .getByRole('button', { name: 'Reset shortcut for Toggle floating window', exact: true })
+    .click();
+  await expect(change).toContainText('O');
+  await p.screenshot({ path: 'artifacts/browser/shortcut-editor.png' });
+});

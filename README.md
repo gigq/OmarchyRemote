@@ -215,3 +215,8 @@ website logins remain shared on the device.
 **Command+Option+Shift+arrow** resizes the active window in 25-point steps: left/up
 shrink width/height, right/down grow them. No divider focus is needed. These actions
 also appear in Search actions and work with tiles, floating windows, and scratchpad.
+
+**Settings → Keyboard shortcuts** lets you search actions, record a replacement
+shortcut, disable a binding, or restore defaults. Shell and Browser bindings are
+checked together for conflicts. Changes save per device and update keyboard help,
+the action palette, and native registrations immediately (build 33 recommended).

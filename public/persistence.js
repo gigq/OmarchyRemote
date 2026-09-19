@@ -196,6 +196,7 @@
       )
     );
     return {
+      keyBindings: HyprlandKeymap.clean(saved.keyBindings),
       floating: Object.fromEntries(
         Object.entries(saved.floating || {}).filter(
           ([key, rect]) =>
@@ -269,6 +270,7 @@
       instances: Object.fromEntries(
         s.open.filter(k => HyprlandApps.get(k)?.baseKey).map(k => [k, HyprlandApps.get(k).baseKey])
       ),
+      keyBindings: s.keyBindings,
       floating: s.floating,
       floatOrder: s.floatOrder,
       columnWidths: s.columnWidths,
@@ -416,6 +418,11 @@
     section.append(
       row,
       layoutRow,
+      key(
+        'Keyboard shortcuts',
+        () => HyprlandKeymap.open(logic.desk),
+        'Customize keyboard shortcuts'
+      ),
       key('Toggle active split', () => logic.desk?.toggleSplit(), 'Toggle active split direction'),
       node(
         'p',

@@ -69,7 +69,9 @@ test.describe('landscape iPad', () => {
     await expect(p.locator('#touch-shell')).not.toHaveClass(/expo-mode/);
     await p.keyboard.press('Meta+Slash');
     await expect(p.locator('.desk-sheet')).toBeVisible();
-    await expect(p.locator('.desk-sheet-row kbd').first()).toContainText('1…9');
+    await expect(
+      p.locator('.desk-sheet-row').filter({ hasText: 'Switch to workspace 10' })
+    ).toBeVisible();
     await p.keyboard.press('Escape');
     await expect(p.locator('.desk-sheet')).toHaveCount(0);
     await p.keyboard.press('Meta+ArrowRight');

@@ -48,6 +48,109 @@ final class HardwareShortcutTests: XCTestCase {
         expectWorkspace("home")
     }
 
+    func testIndependentBrowserWindowsAndFloating() {
+        app.terminate()
+        app.launchArguments = ["--bundled", "--browser-shortcuts-test"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["terminal"].firstMatch.waitForExistence(timeout: 20))
+        app.typeKey("b", modifierFlags: [.command, .shift])
+        app.typeKey("l", modifierFlags: [.command, .shift])
+        let firstLink = app.links["Open Example Domain on phone"].firstMatch
+        XCTAssertTrue(firstLink.waitForExistence(timeout: 10))
+        firstLink.tap()
+        let original = app.webViews["hyprland.browser.page"]
+        XCTAssertTrue(original.staticTexts["Example Domain"].waitForExistence(timeout: 15))
+        app.typeKey("k", modifierFlags: [.command, .shift])
+        let palette = app.searchFields["Search actions"]
+        XCTAssertTrue(palette.waitForExistence(timeout: 5))
+        app.typeText("New browser window")
+        let newBrowser = app.buttons["New browser window"]
+        XCTAssertTrue(newBrowser.waitForExistence(timeout: 5))
+        newBrowser.tap()
+        let visibleOther = app.links.matching(identifier: "Open Other Example on phone").allElementsBoundByIndex.last {
+            $0.isHittable
+        }
+        XCTAssertNotNil(visibleOther)
+        visibleOther?.staticTexts["Other Example"].tap()
+        let second = app.webViews.matching(NSPredicate(format: "identifier BEGINSWITH %@", "hyprland.browser.window-"))
+            .firstMatch
+        XCTAssertTrue(second.waitForExistence(timeout: 10))
+        XCTAssertTrue(second.staticTexts["Example Domain"].waitForExistence(timeout: 15))
+        XCTAssertTrue(original.exists)
+        XCTAssertFalse(original.frame.intersects(second.frame))
+        app.typeKey("l", modifierFlags: .command)
+        let address = app.textFields.matching(identifier: "Page address").allElementsBoundByIndex.last {
+            $0.isHittable
+        }
+        XCTAssertNotNil(address)
+        XCTAssertTrue((address?.value as? String)?.contains("example.org") == true)
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        app.typeKey("o", modifierFlags: [.command, .shift])
+        XCTAssertTrue(second.waitForExistence(timeout: 5))
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "Independent Browser windows and floating"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        app.typeKey("o", modifierFlags: [.command, .shift])
+        app.typeKey("j", modifierFlags: .command)
+        app.typeKey("l", modifierFlags: .command)
+        let firstAddress = app.textFields.matching(identifier: "Page address").allElementsBoundByIndex.first {
+            $0.isHittable
+        }
+        XCTAssertTrue((firstAddress?.value as? String)?.contains("example.com") == true)
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        app.typeKey("w", modifierFlags: .command)
+        app.typeKey("w", modifierFlags: .command)
+        expectWorkspace("home")
+    }
+
+    func testCustomFloatingShortcut() {
+        app.terminate()
+        app.launchArguments = ["--bundled", "--browser-shortcuts-test"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["terminal"].firstMatch.waitForExistence(timeout: 20))
+        app.typeKey("b", modifierFlags: [.command, .shift])
+        app.typeKey("l", modifierFlags: [.command, .shift])
+        let example = app.links["Open Example Domain on phone"].firstMatch
+        XCTAssertTrue(example.waitForExistence(timeout: 10))
+        example.staticTexts["Example Domain"].tap()
+        let page = app.webViews["hyprland.browser.page"]
+        XCTAssertTrue(page.waitForExistence(timeout: 10))
+        app.typeKey(",", modifierFlags: .command)
+        let customize = app.buttons["Customize keyboard shortcuts"]
+        XCTAssertTrue(customize.waitForExistence(timeout: 5))
+        customize.tap()
+        let filter = app.searchFields["Find shortcut"]
+        XCTAssertTrue(filter.waitForExistence(timeout: 5))
+        filter.tap()
+        filter.typeText("floating")
+        XCTAssertEqual(filter.value as? String, "floating")
+        app.buttons["Change shortcut for Toggle floating window"].tap()
+        app.typeKey("o", modifierFlags: [.command, .alternate, .shift])
+        XCTAssertTrue(app.staticTexts["Shortcut saved."].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        app.typeKey("w", modifierFlags: .command)
+        expectWorkspace("browser")
+        let tiledWidth = page.frame.width
+        app.typeKey("o", modifierFlags: [.command, .alternate, .shift])
+        let floated = NSPredicate { _, _ in page.frame.width < tiledWidth - 20 }
+        expectation(for: floated, evaluatedWith: page)
+        waitForExpectations(timeout: 5)
+        let floatingWidth = page.frame.width
+        app.typeKey(XCUIKeyboardKey.rightArrow, modifierFlags: [.command, .alternate, .shift])
+        expectation(for: NSPredicate { _, _ in page.frame.width > floatingWidth + 10 }, evaluatedWith: page)
+        waitForExpectations(timeout: 5)
+        app.typeKey("o", modifierFlags: [.command, .alternate, .shift])
+        app.typeKey(",", modifierFlags: .command)
+        customize.tap()
+        filter.tap()
+        filter.typeText("floating")
+        XCTAssertEqual(filter.value as? String, "floating")
+        app.buttons["Reset shortcut for Toggle floating window"].tap()
+        XCTAssertTrue(app.staticTexts["Default restored."].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+    }
+
     func testBrowserPhysicalShortcuts() {
         app.terminate()
         app.launchArguments = ["--bundled", "--browser-shortcuts-test"]

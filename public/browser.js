@@ -9,6 +9,121 @@
       return null;
     }
   };
+  const browserActions = app => {
+    if (!app.embedded) return [];
+    const result = [];
+    const add = (code, label, run, mods = {}) =>
+      result.push({
+        code,
+        label,
+        run: () => {
+          if (app.optionsOpen && code !== 'Escape') app.showOptions(false);
+          run();
+        },
+        group: 'Browser',
+        meta: !mods.ctrl && !mods.plain,
+        ctrl: false,
+        alt: false,
+        shift: false,
+        ...mods,
+      });
+    add('KeyL', 'Focus browser address', () => app.focusAddress());
+    add('KeyL', 'Open browser tab manager', () => app.showManager(true), { shift: true });
+    add(
+      'KeyT',
+      'New browser tab',
+      () => {
+        const t = app.current();
+        if (app.pageOpen) app.showManager();
+        app.newTab(t?.instance, t?.window);
+      },
+      { ctrl: true }
+    );
+    add('KeyT', 'Reopen browser tab', () => app.reopenTab(), { ctrl: true, shift: true });
+    add('KeyN', 'New desktop browser window', () => {
+      const t = app.current();
+      app.showManager();
+      app.newTab(t?.instance, null, true);
+    });
+    add('KeyW', 'Close browser tab', () => app.closeTab(), { shift: true });
+    for (const shift of [false, true]) {
+      const reload = () =>
+        app.pageOpen ? app.command('reload', { bypassCache: shift }) : app.refresh();
+      add('KeyR', shift ? 'Reload browser from origin' : 'Reload browser', reload, { shift });
+      add('F5', shift ? 'Reload browser from origin' : 'Reload browser', reload, {
+        plain: true,
+        shift,
+      });
+      add('F2', 'Open browser tab manager', () => app.showManager(true), { plain: true, shift });
+      if (app.nativeFind) {
+        add('KeyG', shift ? 'Previous match' : 'Next match', () => app.find(shift), { shift });
+        add('F3', shift ? 'Previous match' : 'Next match', () => app.find(shift), {
+          plain: true,
+          shift,
+        });
+      }
+      add(
+        'Tab',
+        shift ? 'Previous browser tab' : 'Next browser tab',
+        () => app.cycleTab(shift ? -1 : 1),
+        { ctrl: true, shift }
+      );
+    }
+    if (app.nativeFind) add('KeyF', 'Find in browser page', () => app.openFind(), { ctrl: true });
+    for (const [code, direction] of [
+      ['BracketLeft', 'back'],
+      ['BracketRight', 'forward'],
+    ])
+      add(
+        code,
+        direction === 'back' ? 'Browser back' : 'Browser forward',
+        () => app.pageOpen && app.command(direction),
+        { ctrl: true }
+      );
+    for (let number = 1; number <= 9; number++)
+      add('Digit' + number, 'Browser tab ' + number, () => app.numberedTab(number), {
+        ctrl: true,
+      });
+    for (const [code, step, mods] of [
+      ['ArrowLeft', -1, { alt: true }],
+      ['ArrowRight', 1, { alt: true }],
+      ['PageUp', -1, { ctrl: true }],
+      ['PageDown', 1, { ctrl: true }],
+    ])
+      add(
+        code,
+        step < 0 ? 'Previous browser tab' : 'Next browser tab',
+        () => app.cycleTab(step),
+        mods
+      );
+    if (app.nativeShortcuts)
+      for (const [code, delta] of [
+        ['Equal', 0.1],
+        ['NumpadAdd', 0.1],
+        ['Minus', -0.1],
+        ['NumpadSubtract', -0.1],
+        ['Digit0', 0],
+      ]) {
+        for (const shift of [false, true])
+          add(
+            code,
+            delta === 0 ? 'Reset browser zoom' : delta > 0 ? 'Zoom browser in' : 'Zoom browser out',
+            () => app.setZoom(delta === 0 ? 1 : app.zoom + delta),
+            { ctrl: true, shift }
+          );
+      }
+    add(
+      'Escape',
+      'Dismiss browser controls',
+      () => {
+        if (app.dialog) app.dismiss();
+        else if (app.optionsOpen) app.showOptions(false);
+        else if (app.pageOpen) app.escapePage();
+      },
+      { plain: true }
+    );
+    return result;
+  };
   class BrowserApp {
     constructor(root, host, spec = { key: 'browser' }) {
       this.windowKey = spec.key;
@@ -698,121 +813,7 @@
     }
     // One list supplies DOM handling, native registrations, help, and the action palette.
     get actions() {
-      if (!this.embedded) return [];
-      const result = [];
-      const add = (code, label, run, mods = {}) =>
-        result.push({
-          code,
-          label,
-          run,
-          group: 'Browser',
-          meta: !mods.ctrl && !mods.plain,
-          ctrl: false,
-          alt: false,
-          shift: false,
-          ...mods,
-        });
-      add('KeyL', 'Focus browser address', () => this.focusAddress());
-      add('KeyL', 'Open browser tab manager', () => this.showManager(true), { shift: true });
-      add(
-        'KeyT',
-        'New browser tab',
-        () => {
-          const t = this.current();
-          if (this.pageOpen) this.showManager();
-          this.newTab(t?.instance, t?.window);
-        },
-        { ctrl: true }
-      );
-      add('KeyT', 'Reopen browser tab', () => this.reopenTab(), { ctrl: true, shift: true });
-      add('KeyN', 'New desktop browser window', () => {
-        const t = this.current();
-        this.showManager();
-        this.newTab(t?.instance, null, true);
-      });
-      add('KeyW', 'Close browser tab', () => this.closeTab(), { shift: true });
-      for (const shift of [false, true]) {
-        const reload = () =>
-          this.pageOpen ? this.command('reload', { bypassCache: shift }) : this.refresh();
-        add('KeyR', shift ? 'Reload browser from origin' : 'Reload browser', reload, { shift });
-        add('F5', shift ? 'Reload browser from origin' : 'Reload browser', reload, {
-          plain: true,
-          shift,
-        });
-        add('F2', 'Open browser tab manager', () => this.showManager(true), { plain: true, shift });
-        if (this.nativeFind) {
-          add('KeyG', shift ? 'Previous match' : 'Next match', () => this.find(shift), { shift });
-          add('F3', shift ? 'Previous match' : 'Next match', () => this.find(shift), {
-            plain: true,
-            shift,
-          });
-        }
-        add(
-          'Tab',
-          shift ? 'Previous browser tab' : 'Next browser tab',
-          () => this.cycleTab(shift ? -1 : 1),
-          { ctrl: true, shift }
-        );
-      }
-      if (this.nativeFind)
-        add('KeyF', 'Find in browser page', () => this.openFind(), { ctrl: true });
-      for (const [code, direction] of [
-        ['BracketLeft', 'back'],
-        ['BracketRight', 'forward'],
-      ])
-        add(
-          code,
-          direction === 'back' ? 'Browser back' : 'Browser forward',
-          () => this.pageOpen && this.command(direction),
-          { ctrl: true }
-        );
-      for (let number = 1; number <= 9; number++)
-        add('Digit' + number, 'Browser tab ' + number, () => this.numberedTab(number), {
-          ctrl: true,
-        });
-      for (const [code, step, mods] of [
-        ['ArrowLeft', -1, { alt: true }],
-        ['ArrowRight', 1, { alt: true }],
-        ['PageUp', -1, { ctrl: true }],
-        ['PageDown', 1, { ctrl: true }],
-      ])
-        add(
-          code,
-          step < 0 ? 'Previous browser tab' : 'Next browser tab',
-          () => this.cycleTab(step),
-          mods
-        );
-      if (this.nativeShortcuts)
-        for (const [code, delta] of [
-          ['Equal', 0.1],
-          ['NumpadAdd', 0.1],
-          ['Minus', -0.1],
-          ['NumpadSubtract', -0.1],
-          ['Digit0', 0],
-        ]) {
-          for (const shift of [false, true])
-            add(
-              code,
-              delta === 0
-                ? 'Reset browser zoom'
-                : delta > 0
-                  ? 'Zoom browser in'
-                  : 'Zoom browser out',
-              () => this.setZoom(delta === 0 ? 1 : this.zoom + delta),
-              { ctrl: true, shift }
-            );
-        }
-      add(
-        'Escape',
-        'Dismiss browser controls',
-        () => {
-          if (this.dialog) this.dismiss();
-          else if (this.optionsOpen) this.showOptions(false);
-          else if (this.pageOpen) this.escapePage();
-        },
-        { plain: true }
-      );
-      return result;
+      return browserActions(this);
     }
     get shortcuts() {
       return this.actions.map(a => [window.HyprlandDesk?.actionKeys(a) || a.code, a.label]);
@@ -1236,6 +1237,11 @@
   window.HostBrowserApp = BrowserApp;
   window.HyprlandApps?.provide('browser', {
     multiple: true,
+    shortcutDefinitions: browserActions({
+      embedded: true,
+      nativeFind: true,
+      nativeShortcuts: true,
+    }).map(({ run, ...action }) => action),
     create: (root, host, spec) => new BrowserApp(root, host, spec),
   });
 })();

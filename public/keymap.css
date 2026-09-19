@@ -1,0 +1,68 @@
+.desk-sheet.desk-keymap {
+  justify-content: flex-start;
+  gap: 12px;
+  padding-top: max(54px, 8vh);
+}
+.desk-keymap > * {
+  width: min(100%, 960px);
+  box-sizing: border-box;
+}
+.desk-keymap > .desk-action-search {
+  flex: 0 0 auto;
+  height: 44px;
+}
+.desk-keymap > .desk-sheet-close {
+  align-self: center;
+  width: auto;
+  margin-left: 0;
+}
+.desk-keymap-list {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--theme-border);
+  border-radius: 16px;
+  background: var(--theme-surface);
+}
+.desk-keymap-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--theme-border);
+}
+.desk-keymap-row:last-child {
+  border-bottom: 0;
+}
+.desk-keymap-label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.desk-keymap-row button {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  background: var(--theme-background);
+  color: var(--theme-foreground);
+  font: inherit;
+  cursor: pointer;
+}
+.desk-keymap-row button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.desk-keymap-change {
+  min-width: 140px;
+}
+@media (max-width: 700px) {
+  .desk-keymap-row {
+    flex-wrap: wrap;
+  }
+  .desk-keymap-label {
+    flex-basis: 100%;
+  }
+}

@@ -101,3 +101,9 @@ spec: `spec.key` is its unique window ID, and `spec.baseKey` identifies the inst
 app for additional instances. Namespace per-window state by `spec.key`. Keep host
 adapter IDs separate. Closing a not-yet-created window must only close sessions
 belonging to that window. Shared app preferences may still use the base app key.
+
+Providers with app-specific key bindings can expose `shortcutDefinitions` (the same
+action descriptors without `run`) so Settings detects conflicts even when the app
+is closed. Keep this derived from the same action factory as the instance's
+`actions`; Browser is the reference. Overrides live in the device layout, and desk
+handling, native registrations and help use the resolved action registry.

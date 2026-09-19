@@ -9,6 +9,7 @@ test.beforeEach(async ({ page: p }) => {
   );
   await p.addScriptTag({ url: '/util.js' });
   await p.addScriptTag({ url: '/apps.js' }); // app bindings come from the catalog
+  await p.addScriptTag({ url: '/keymap.js' });
   await p.addScriptTag({ url: '/desk.js' });
   await p.evaluate(() => {
     const D = HyprlandDesk;
@@ -276,6 +277,7 @@ test('native list restores Return and omits the browser-only Delete alias', asyn
     desk.dispose();
     window.webkit = { messageHandlers: { shellKeyboard: {} } };
   });
+  await p.addScriptTag({ url: '/keymap.js' });
   await p.addScriptTag({ url: '/desk.js' });
   await p.evaluate(() => {
     window.desk = HyprlandDesk.attach(logic);

@@ -517,3 +517,51 @@ test('independent Browser windows isolate native surfaces, navigation events and
     await p.evaluate(() => window.browserCalls.some(v => !v.appID && v.action === 'close'))
   ).toBe(false);
 });
+
+test('Browser custom bindings replace defaults in native registrations and dispatch', async ({
+  page: p,
+}) => {
+  await p.setViewportSize({ width: 1194, height: 834 });
+  await p.route('**/api/**', r => r.fulfill({ json: {} }));
+  await p.route('**/api/browser/snapshot', r => r.fulfill({ json: data() }));
+  await p.addInitScript(() => {
+    window.registeredKeys = [];
+    window.webkit = {
+      messageHandlers: {
+        shellKeyboard: {
+          postMessage: v => {
+            if (v.commands) window.registeredKeys = v.commands;
+          },
+        },
+        browserDevice: {
+          postMessage: async v =>
+            v.action === 'capabilities' ? { embedded: true, shortcuts: true } : {},
+        },
+      },
+    };
+  });
+  await p.goto('/native/');
+  await p.keyboard.press('Meta+Shift+B');
+  await p.getByRole('link', { name: 'Open Example Domain on phone' }).click();
+  await p.keyboard.press('Meta+Comma');
+  await p.getByRole('button', { name: 'Customize keyboard shortcuts', exact: true }).click();
+  const editor = p.getByRole('dialog', { name: 'Customize keyboard shortcuts', exact: true });
+  await editor.getByRole('searchbox', { name: 'Find shortcut' }).fill('Focus browser address');
+  await editor
+    .getByRole('button', { name: 'Change shortcut for Focus browser address', exact: true })
+    .click();
+  await p.keyboard.press('Meta+Shift+I');
+  await expect(editor.getByRole('status')).toHaveText('Shortcut saved.');
+  await editor.getByRole('button', { name: 'Done', exact: true }).click();
+  await p.keyboard.press('Meta+W');
+  await expect
+    .poll(() =>
+      p.evaluate(() => window.registeredKeys.find(a => a.label === 'Focus browser address')?.code)
+    )
+    .toBe('KeyI');
+  const address = p.getByRole('textbox', { name: 'Page address' });
+  await p.keyboard.press('Meta+L');
+  await expect(address).not.toBeFocused();
+  await p.keyboard.press('Meta+Shift+I');
+  await expect(address).toBeFocused();
+});

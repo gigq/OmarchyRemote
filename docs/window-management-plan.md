@@ -10,3 +10,10 @@ Approved order (September 19, 2026):
 6. **Completed (bundled in build 32):** Scrolling columns, saved widths, native scroll strip, and focus-driven reveal.
 
 Keep phone behavior intact, preserve per-device state, test the affected UI, and commit each completed feature separately. Command is Super on Apple; Ctrl+Alt is the web fallback on Linux/Windows. Preserve existing shortcuts when adapting Omarchy actions.
+
+Follow-up set (September 19, 2026):
+
+- Completed: regular floating windows with saved bounds and stacking.
+- Completed: independent Browser windows (native build 33).
+- Completed: direct active-window keyboard resizing.
+- Completed: per-device shortcut editor with shared dispatch, help, native registration, conflict checks, and reset.
