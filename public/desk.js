@@ -50,7 +50,9 @@
   const cur = s => {
     if (s.scratchVisible && s.open.includes(s.scratchKey)) return s.scratchKey;
     const d = desks(s)[s.ws] || ['home'];
-    return d.includes(s.focus) ? s.focus : d[0];
+    if (d.includes(s.focus)) return s.focus;
+    const selected = s.groupActive?.[s.groups?.[d[0]]];
+    return d.includes(selected) && s.groups?.[selected] === s.groups?.[d[0]] ? selected : d[0];
   };
   const clamp = (s, i) => Math.max(0, Math.min(desks(s).length - 1, i));
   const go = (s, i) => {
@@ -120,7 +122,11 @@
     [open[a], open[b]] = [open[b], open[a]];
     return { open, focus: key };
   };
-  const MODES = { dwindle: 'Dwindle (Omarchy default)', master: 'Master and stack' };
+  const MODES = {
+    dwindle: 'Dwindle (Omarchy default)',
+    master: 'Master and stack',
+    scrolling: 'Scrolling columns',
+  };
   const mode = s => (Object.hasOwn(MODES, s.windowLayout) ? s.windowLayout : 'dwindle');
   // Split identities follow the ordered apps, not a workspace number that can be renumbered.
   const splitID = (s, apps, index) =>
@@ -173,7 +179,8 @@
       h: Math.max(0, H - CHROME.top - CHROME.bottom),
     };
     const rects = new Map(),
-      splits = [];
+      splits = [],
+      columns = new Map();
     desks(s).forEach((apps, desk) => {
       const full = apps.find(k => (s.full || []).includes(k));
       const visible = full
@@ -185,7 +192,37 @@
                 ? s.groupActive[s.groups[members[0]]]
                 : members[0]
           );
-      const rs = desk === 0 ? [area] : tiled(s, visible, area, splits, desk);
+      let rs;
+      if (desk > 0 && !full && mode(s) === 'scrolling') {
+        const anchor = apps[0],
+          height = Math.max(0, area.h - 30);
+        const widths = visible.map(
+          k => area.w * Math.max(0.25, Math.min(1, s.columnWidths?.[s.groups?.[k] || k] || 0.49))
+        );
+        const total =
+          widths.reduce((a, b) => a + b, 0) + CHROME.gap * Math.max(0, widths.length - 1);
+        const offset = Math.max(
+          0,
+          Math.min(Math.max(0, total - area.w), s.columnOffsets?.[anchor] || 0)
+        );
+        let x = area.x;
+        rs = visible.map((key, i) => {
+          const rect = { x: x - offset, y: area.y, w: widths[i], h: height };
+          splits.push({
+            id: s.groups?.[key] || key,
+            desk,
+            axis: 'x',
+            rect: { ...rect, w: area.w },
+            length: area.w,
+            position: rect.x + rect.w + CHROME.gap / 2,
+            apps: [key],
+            column: true,
+          });
+          x += widths[i] + CHROME.gap;
+          return rect;
+        });
+        columns.set(desk, { anchor, total, offset, keys: visible, widths });
+      } else rs = desk === 0 ? [area] : tiled(s, visible, area, splits, desk);
       visible.forEach((k, i) => rects.set(k, { ...rs[i], desk }));
       apps
         .filter(k => !visible.includes(k))
@@ -220,7 +257,7 @@
         scratch: true,
       });
     }
-    return { area, rects, splits };
+    return { area, rects, splits, columns };
   };
   const neighbor = (s, W, H, key, dir) => {
     const { rects } = layout(s, W, H),
@@ -250,7 +287,7 @@
     const A = logic.APPS,
       d = desks(s),
       focused = cur(s),
-      { area, rects } = layout(s, W, H);
+      { area, rects, columns } = layout(s, W, H);
     const n = d.length,
       cols = Math.min(n, Math.max(1, Math.round(Math.sqrt((n * W) / Math.max(1, H))))),
       rows = Math.ceil(n / cols);
@@ -285,8 +322,12 @@
         };
         continue;
       }
+      const column = columns.get(r.desk);
+      const previewScale = s.ov && column ? Math.min(1, area.w / column.total) : 1;
+      const previewX = column ? area.x + (r.x + column.offset - area.x) * previewScale : r.x;
+      const previewY = area.y + (r.y - area.y) * previewScale;
       const tf = s.ov
-        ? `translate(${Math.round(gx + (r.desk % cols) * (W * sc + eg) + r.x * sc)}px,${Math.round(gy + Math.floor(r.desk / cols) * (H * sc + eg) + r.y * sc)}px) scale(${sc.toFixed(4)})`
+        ? `translate(${Math.round(gx + (r.desk % cols) * (W * sc + eg) + previewX * sc)}px,${Math.round(gy + Math.floor(r.desk / cols) * (H * sc + eg) + previewY * sc)}px) scale(${(sc * previewScale).toFixed(4)})`
         : `translate(${r.x + (r.desk - s.ws) * W}px,${r.y}px) scale(1)`;
       cards[k] = {
         tf,
@@ -295,6 +336,7 @@
         bd:
           k === focused && r.desk === s.ws ? 'var(--theme-accent)' : 'var(--theme-window-inactive)',
         lab: s.ov ? 1 : 0,
+        visibility: mode(s) === 'scrolling' && !s.ov && r.desk !== s.ws ? 'hidden' : 'visible',
         op: r.hidden ? 0 : 1,
         pe: r.hidden ? 'none' : 'auto',
         tap: () => {
@@ -496,6 +538,7 @@
       shift: true,
       code: /^KeyK$/,
       label: 'Search actions',
+      focusShell: true,
       run: d => d.openPalette(),
     },
     {
@@ -615,6 +658,33 @@
         },
         { capture: true, signal }
       );
+      this.columnScroll = node('div', 'desk-column-scroll');
+      this.columnScroll.setAttribute('aria-label', 'Scroll workspace windows');
+      this.columnScroll.tabIndex = 0;
+      this.columnTrack = node('div', 'desk-column-track');
+      this.columnScroll.append(this.columnTrack);
+      this.shell?.append(this.columnScroll);
+      this.columnScroll.addEventListener(
+        'wheel',
+        e => {
+          if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+            e.preventDefault();
+            this.columnScroll.scrollLeft += e.deltaY;
+          }
+        },
+        { passive: false, signal }
+      );
+      this.columnScroll.onscroll = () => {
+        const s = this.logic.state,
+          info = layout(s, s.deskW, s.deskH).columns.get(s.ws);
+        if (!info || Math.abs(this.columnScroll.scrollLeft - info.offset) < 1) return;
+        this.shell.classList.add('desk-scrolling');
+        clearTimeout(this.scrollEnd);
+        this.scrollEnd = setTimeout(() => this.shell.classList.remove('desk-scrolling'), 150);
+        this.logic.set({
+          columnOffsets: { ...s.columnOffsets, [info.anchor]: this.columnScroll.scrollLeft },
+        });
+      };
       this.dividers = node('div', 'desk-dividers');
       this.shell?.append(this.dividers);
       this.measure();
@@ -655,6 +725,7 @@
         (!this.canDrag() || s.ws !== this.drag.ws || !s.open.includes(this.drag.key))
       )
         this.cancelDrag();
+      this.updateColumns();
       this.updateDividers();
       this.publishActions();
     }
@@ -676,6 +747,45 @@
         this.logic.set({ scratchVisible: false });
       if (key && key !== this.logic.cur() && deskOf(s, key) === s.ws) this.logic.focusApp(key);
     }
+    updateColumns() {
+      if (!this.columnScroll) return;
+      const s = this.logic.state,
+        geometry = layout(s, s.deskW, s.deskH),
+        info = geometry.columns.get(s.ws);
+      const hidden = !s.desk || !info || !this.canDrag() || s.scratchVisible;
+      this.columnScroll.hidden = hidden;
+      if (hidden) {
+        this.columnMode = null;
+        return;
+      }
+      const focused = cur(s),
+        rect = geometry.rects.get(focused);
+      if ((this.columnFocus !== focused || this.columnMode !== mode(s)) && rect) {
+        let offset = info.offset;
+        if (rect.x < geometry.area.x) offset += rect.x - geometry.area.x;
+        else if (rect.x + rect.w > geometry.area.x + geometry.area.w)
+          offset += rect.x + rect.w - geometry.area.x - geometry.area.w;
+        this.columnFocus = focused;
+        this.columnMode = mode(s);
+        if (Math.abs(offset - info.offset) > 1)
+          this.logic.set({ columnOffsets: { ...s.columnOffsets, [info.anchor]: offset } });
+      }
+      this.columnScroll.style.cssText = `left:${geometry.area.x}px;top:${geometry.area.y + geometry.area.h - 24}px;width:${geometry.area.w}px`;
+      const signature = JSON.stringify([info.keys, info.widths]);
+      if (this.columnSignature !== signature) {
+        this.columnSignature = signature;
+        this.columnTrack.replaceChildren(
+          ...info.keys.map((key, i) => {
+            const button = node('button', '', HyprlandApps.get(key)?.name || key);
+            button.style.width = info.widths[i] + 'px';
+            button.onclick = () => this.logic.focusApp(key);
+            return button;
+          })
+        );
+      }
+      if (Math.abs(this.columnScroll.scrollLeft - info.offset) > 1)
+        this.columnScroll.scrollLeft = info.offset;
+    }
     actions() {
       const result = [];
       for (const b of bindings()) {
@@ -694,6 +804,7 @@
             alt: !!b.alt,
             shift: !!b.shift,
             editing: code.startsWith('Arrow'),
+            focusShell: !!b.focusShell,
             run: () => b.run(this, { code }),
           });
         }
@@ -736,6 +847,11 @@
       sheet.setAttribute('role', 'dialog');
       sheet.setAttribute('aria-label', 'Actions');
       const search = node('input', 'desk-action-search');
+      search.type = 'search';
+      search.autocapitalize = 'none';
+      search.autocomplete = 'off';
+      search.spellcheck = false;
+      search.setAttribute('autocorrect', 'off');
       search.placeholder = 'Search actions…';
       search.setAttribute('aria-label', 'Search actions');
       const done = node('button', 'desk-sheet-close', 'Done');
@@ -796,9 +912,9 @@
       this.sheet = sheet;
       this.shell.append(sheet);
       render();
-      search.focus();
       this.logic.remote?.update?.();
       this.updateDividers();
+      search.focus({ preventScroll: true });
     }
     canDrag() {
       const s = this.logic.state;
@@ -822,7 +938,11 @@
       const s = this.logic.state;
       const splits =
         this.canDrag() && !s.scratchVisible
-          ? layout(s, s.deskW, s.deskH).splits.filter(v => v.desk === s.ws)
+          ? layout(s, s.deskW, s.deskH).splits.filter(
+              v =>
+                v.desk === s.ws &&
+                (!v.column || (v.position > CHROME.side && v.position < s.deskW - CHROME.side))
+            )
           : [];
       this.dividers.replaceChildren(
         ...splits.map(split => {
@@ -863,6 +983,14 @@
     }
     resizeSplit(split, position) {
       const s = this.logic.state;
+      if (split.column) {
+        const ratio = Math.max(
+          0.25,
+          Math.min(1, (position - split.rect.x - CHROME.gap / 2) / split.length)
+        );
+        this.logic.set({ columnWidths: { ...s.columnWidths, [split.id]: ratio } });
+        return;
+      }
       const ratio = boundedRatio(
         (position - split.rect[split.axis] - CHROME.gap / 2) / split.length,
         split.length
@@ -906,7 +1034,11 @@
         this.shell.classList.add('desk-dragging');
         return true;
       }
-      const available = geometry.splits.filter(v => v.desk === s.ws);
+      const available = geometry.splits.filter(
+        v =>
+          v.desk === s.ws &&
+          (!v.column || (v.position > CHROME.side && v.position < s.deskW - CHROME.side))
+      );
       let split = available.find(v => v.id === splitID);
       const resizing = !!split || e.button === 2;
       if (resizing && !split)
@@ -1287,6 +1419,8 @@
     }
     dispose() {
       this.cancelDrag();
+      clearTimeout(this.scrollEnd);
+      this.columnScroll.remove();
       this.dividers.remove();
       this.closeSheet();
       this.abort.abort();

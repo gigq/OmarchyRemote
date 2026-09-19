@@ -20,6 +20,34 @@ final class HardwareShortcutTests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground, file: file, line: line)
     }
 
+    func testScratchpadAndActionPalette() {
+        app.typeKey("f", modifierFlags: [.command, .shift])
+        expectWorkspace("files")
+        app.typeKey("s", modifierFlags: [.command, .shift])
+        expectWorkspace("home")
+        app.typeKey("s", modifierFlags: .command)
+        expectWorkspace("files")
+        app.typeKey("s", modifierFlags: .command)
+        expectWorkspace("home")
+        app.typeKey("s", modifierFlags: .command)
+        expectWorkspace("files")
+        app.typeKey("s", modifierFlags: [.command, .shift])
+        expectWorkspace("files")
+        app.typeKey("k", modifierFlags: [.command, .shift])
+        let search = app.searchFields["Search actions"]
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        app.typeText("group")
+        XCTAssertEqual(search.value as? String, "group")
+        XCTAssertTrue(app.buttons["Group window with next tile"].waitForExistence(timeout: 5))
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "Scratchpad and action palette"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        app.buttons["Done"].tap()
+        app.typeKey("w", modifierFlags: .command)
+        expectWorkspace("home")
+    }
+
     func testBrowserPhysicalShortcuts() {
         app.terminate()
         app.launchArguments = ["--bundled", "--browser-shortcuts-test"]

@@ -86,6 +86,7 @@
       const s = card.style;
       s.zIndex = state.desk && key === state.scratchKey ? '20' : '';
       card.classList.toggle('desk-scratchpad', state.desk && key === state.scratchKey);
+      s.visibility = c.visibility || 'visible';
       s.width = c.w;
       s.height = c.h;
       s.transform = c.tf;

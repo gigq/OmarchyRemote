@@ -91,9 +91,10 @@ test('action palette filters and executes without losing window focus; registry 
 }) => {
   await boot(p);
   await p.keyboard.press('Meta+Shift+K');
-  const search = p.getByRole('textbox', { name: 'Search actions', exact: true });
+  const search = p.getByRole('searchbox', { name: 'Search actions', exact: true });
+  await expect(search).toBeFocused();
   await p.screenshot({ path: 'artifacts/browser/action-palette.png' });
-  await search.fill('toggle split');
+  await p.keyboard.type('toggle split');
   await expect(p.locator('.desk-action-row')).toHaveCount(1);
   await search.press('Enter');
   await expect(p.getByRole('dialog', { name: 'Actions', exact: true })).toHaveCount(0);
@@ -138,7 +139,7 @@ test('scratchpad hides without closing, follows workspace, and returns to tiling
 });
 async function action(p, label) {
   await p.keyboard.press('Meta+Shift+K');
-  const search = p.getByRole('textbox', { name: 'Search actions', exact: true });
+  const search = p.getByRole('searchbox', { name: 'Search actions', exact: true });
   await search.fill(label);
   await p.getByRole('button', { name: label, exact: true }).click();
 }
@@ -190,12 +191,25 @@ test('group tabs select independent windows, persist, and can be separated', asy
   await action(p, 'Group window with next tile');
   const bar = frame(p, 'browser').locator('.desk-window-tabs');
   await expect(bar).toBeVisible();
+  await p.waitForTimeout(650);
+  const barBox = await bar.boundingBox();
+  const contentBox = await frame(p, 'browser').locator('.browser-app').boundingBox();
+  expect(contentBox.y).toBeGreaterThanOrEqual(barBox.y + barBox.height + 5);
+  await p.screenshot({ path: 'artifacts/browser/window-group.png' });
   await expect(p.locator('.desk-divider')).toHaveCount(0);
   await bar.getByRole('button', { name: 'terminal', exact: true }).click();
   await expect(p.locator('.desk-ws-label:visible')).toHaveText('terminal');
   await p.reload();
   await expect(frame(p, 'terminal').locator('.desk-window-tabs')).toBeVisible();
   await expect(frame(p, 'browser')).toHaveCSS('opacity', '0');
+  await frame(p, 'terminal')
+    .locator('.desk-window-tabs')
+    .getByRole('button', { name: 'browser', exact: true })
+    .click();
+  await p.keyboard.press('Meta+Digit1');
+  await p.keyboard.press('Meta+Digit2');
+  await expect(p.locator('.desk-ws-label:visible')).toHaveText('browser');
+  await expect(frame(p, 'browser')).toHaveAttribute('data-active', 'true');
   await action(p, 'Remove window from group');
   await expect(p.locator('.desk-divider')).toHaveCount(1);
   await expect(frame(p, 'terminal').locator('.desk-window-tabs')).toHaveCount(0);
@@ -239,4 +253,42 @@ test('Files instances keep independent folders and restore them', async ({ page:
     'data-path',
     '/home/test/Documents'
   );
+});
+test('scrolling layout reveals focused columns without squeezing them and saves widths', async ({
+  page: p,
+}) => {
+  await boot(p);
+  await p.keyboard.press('Meta+Comma');
+  await p.getByRole('combobox', { name: 'Window layout' }).selectOption('scrolling');
+  await expect(p.locator('.desk-column-scroll')).toBeVisible();
+  const settings = await rect(p, 'settings'),
+    browser = await rect(p, 'browser');
+  expect(settings.width).toBeGreaterThan(550);
+  expect(settings.x + settings.width).toBeLessThanOrEqual(1185);
+  expect(Math.abs(settings.width - browser.width)).toBeLessThan(2);
+  await p.keyboard.press('Meta+ArrowLeft');
+  await p.keyboard.press('Meta+ArrowLeft');
+  const terminal = await rect(p, 'terminal');
+  expect(terminal.x).toBeGreaterThanOrEqual(9);
+  const divider = p.locator('.desk-divider').first();
+  const d = await divider.boundingBox();
+  await drag(p, d.x + d.width / 2, d.y + 70, 70, 0);
+  const widened = await rect(p, 'terminal');
+  expect(widened.width).toBeGreaterThan(terminal.width + 50);
+  await p.reload();
+  expect((await rect(p, 'terminal')).width).toBeCloseTo(widened.width, 0);
+  await p.locator('.desk-column-scroll').evaluate(el => {
+    el.scrollLeft = el.scrollWidth;
+  });
+  await expect.poll(async () => (await frame(p, 'terminal').boundingBox()).x).toBeLessThan(0);
+  await p.keyboard.press('Meta+Digit1');
+  await expect(p.locator('.desk-column-scroll')).toBeHidden();
+  await expect(frame(p, 'settings')).toHaveCSS('visibility', 'hidden');
+  await p.keyboard.press('Meta+Digit2');
+  await p.waitForTimeout(650);
+  await p.screenshot({ path: 'artifacts/browser/scrolling-layout.png' });
+  await p.keyboard.press('Meta+E');
+  await expect(p.locator('.desk-column-scroll')).toBeHidden();
+  await p.waitForTimeout(650);
+  await p.screenshot({ path: 'artifacts/browser/scrolling-expo.png' });
 });

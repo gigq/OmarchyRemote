@@ -713,6 +713,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
                         "code": code, "shift": flags.contains(.shift), "alt": flags.contains(.alternate),
                         "ctrl": flags.contains(.control),
                         "plain": !flags.contains(.command) && !flags.contains(.control),
+                        "focusShell": row["focusShell"] as? Bool == true,
                     ])
                 command.wantsPriorityOverSystemBehavior = true
                 return command
@@ -740,6 +741,9 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
 
     @objc private func handleShellKey(_ command: UIKeyCommand) {
         guard let payload = command.propertyList as? [String: Any], let webView else { return }
+        if payload["focusShell"] as? Bool == true {
+            webView.becomeFirstResponder()
+        }
         webView.callAsyncJavaScript(
             "return window.HyprlandDesk?.nativeKey(key);",
             arguments: ["key": payload], in: nil, in: .page, completionHandler: nil)

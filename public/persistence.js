@@ -196,6 +196,16 @@
       )
     );
     return {
+      columnWidths: Object.fromEntries(
+        Object.entries(saved.columnWidths || {}).filter(
+          ([k, v]) => k.length <= 100 && Number.isFinite(v) && v >= 0.25 && v <= 1
+        )
+      ),
+      columnOffsets: Object.fromEntries(
+        Object.entries(saved.columnOffsets || {}).filter(
+          ([k, v]) => open.includes(k) && Number.isFinite(v) && v >= 0
+        )
+      ),
       groups: Object.fromEntries(
         Object.entries(saved.groups || {}).filter(
           ([k, v]) => k !== 'home' && open.includes(k) && typeof v === 'string' && v.length <= 100
@@ -247,6 +257,8 @@
       instances: Object.fromEntries(
         s.open.filter(k => HyprlandApps.get(k)?.baseKey).map(k => [k, HyprlandApps.get(k).baseKey])
       ),
+      columnWidths: s.columnWidths,
+      columnOffsets: s.columnOffsets,
       groups: s.groups,
       groupActive: s.groupActive,
       scratchKey: s.scratchKey,

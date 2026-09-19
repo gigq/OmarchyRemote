@@ -518,7 +518,7 @@ class Component extends DCLogic {
     this.closing = true;
     try {
       await this.remote?.closeApp(k);
-      HyprlandApps.forgetInstance(k);
+      window.HyprlandApps?.forgetInstance(k);
       const s = this.state;
       if (s.desk && window.HyprlandDesk) {
         this.set({

@@ -72,7 +72,7 @@ Development views reload after source changes, including atomic file replacement
 
 ### Adjustable desk tiling
 
-Settings → This device offers Dwindle (Omarchy's default) and Master and stack.
+Settings → This device offers Dwindle (Omarchy's default), Master and stack, and Scrolling columns.
 Dwindle recursively splits the available area; Master keeps the first window on
 the left with the others stacked on the right. Resize with a divider (touch or
 pointer), or hold Command and right-drag inside a window. Command + left-drag
@@ -91,7 +91,7 @@ so closing and renumbering workspaces does not turn it into a stale numeric targ
 Command+Shift+P returns there. Command+Shift+X moves to the next workspace without
 following; if the source becomes empty, focus returns Home. Moves into an already
 full four-tile workspace are ignored. Command+Shift+Y changes Dwindle split direction
-and Command+Shift+U cycles layouts. Native hardware registration follows in the shared-registry step.
+and Command+Shift+U cycles layouts. Native hardware registration is included in build 31 and later.
 
 ### Action palette and shared keyboard registry
 
@@ -133,3 +133,17 @@ out the current tab. Closing a grouped window closes only that window. Workspace
 layout backups include instance identities, group memberships, and the selected
 tab. Terminal session IDs stay local to the client; restoring on another device
 starts its own shells. Browser/web-app native surfaces follow visible group tabs.
+
+### Scrolling layout
+
+Settings → Window layout → Scrolling columns keeps windows in a horizontal strip
+instead of shrinking all tiles to fit. Columns default to 49% width, matching the
+host Omarchy scrolling configuration. Drag a divider or Command+right-drag to set
+an individual column between 25% and 100% of the workspace width. Widths persist
+per device. Groups occupy one column and keep its width when their tab changes.
+
+Focus-left/right and next/previous window reveal the focused column. The bottom
+strip uses native horizontal overflow scrolling for touch/trackpad panning, accepts
+wheel input, and has named buttons to focus columns. This does not intercept
+scrolling inside app content. Expo scales the complete row into its workspace
+preview. Scratchpad remains floating above the workspace; phone geometry is unchanged.

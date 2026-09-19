@@ -197,3 +197,9 @@ The action palette can create **New terminal window** and **New files window**.
 Each window has its own state. **Group window with next tile** combines tiles into
 a tabbed group; **Remove window from group** separates the active tab. Group tabs,
 independent windows, and their selected state are restored with the device layout.
+
+**Scrolling columns** is the third Window layout option. Columns start at 49% of
+workspace width, matching Omarchy's configured scrolling width. Focus commands
+reveal their column, dividers resize individual columns, and the bottom scroll
+strip pans across the workspace with touch or a trackpad. Window content keeps its
+width while panning. Dwindle remains the default.
