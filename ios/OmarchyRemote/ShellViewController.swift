@@ -204,10 +204,12 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
     weak var shell: WKWebView?
     private var page: WKWebView?
     private var appID: String?
-    private(set) var shortcutsActive = false {
-        didSet { if shortcutsActive != oldValue { UIMenuSystem.main.setNeedsRebuild() } }
+    private var ownShortcutsActive = false {
+        didSet { if ownShortcutsActive != oldValue { UIMenuSystem.main.setNeedsRebuild() } }
     }
     private var webApps: [String: BrowserDeviceBridge] = [:]
+    private var isBrowser: Bool { appID == nil || appID?.hasPrefix("window-") == true }
+    var shortcutsActive: Bool { ownShortcutsActive || webApps.values.contains { $0.shortcutsActive } }
     private var observations: [NSKeyValueObservation] = []
     private var pageOwnsKeyboardFocus: Bool {
         func containsResponder(_ view: UIView) -> Bool {
@@ -269,7 +271,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
     }
     func reset() {
         lastHoverLocation = nil
-        shortcutsActive = false
+        ownShortcutsActive = false
         updateFocus(false)
         observations.removeAll()
         page?.findInteraction?.dismissFindNavigator()
@@ -295,7 +297,8 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         browser.scrollView.panGestureRecognizer.addTarget(self, action: #selector(pageScrolled(_:)))
         browser.allowsBackForwardNavigationGestures = true
         browser.isFindInteractionEnabled = true
-        browser.accessibilityIdentifier = appID.map { "hyprland.webapp." + $0 } ?? "hyprland.browser.page"
+        browser.accessibilityIdentifier =
+            appID.map { (isBrowser ? "hyprland.browser." : "hyprland.webapp.") + $0 } ?? "hyprland.browser.page"
         let focus = UITapGestureRecognizer()
         focus.delegate = self
         focus.cancelsTouchesInView = false
@@ -348,7 +351,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         return browser
     }
     private func showControls(_ hidden: Bool) {
-        guard appID == nil, controlsHidden != hidden else { return }
+        guard isBrowser, controlsHidden != hidden else { return }
         controlsHidden = hidden
         publish(controlsHidden: hidden)
     }
@@ -440,7 +443,7 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         else { replyHandler(nil, "Unsupported page"); return }
         let action = body["action"] as? String ?? "open"
         if appID == nil, let id = body["appID"] as? String {
-            guard id.hasPrefix("webapp-"), id.count <= 80,
+            guard (id.hasPrefix("webapp-") || id.hasPrefix("window-")), id.count <= 80,
                 id.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") })
             else { replyHandler(nil, "Invalid web app"); return }
             if webApps[id] == nil {
@@ -459,14 +462,14 @@ private final class BrowserDeviceBridge: NSObject, WKScriptMessageHandlerWithRep
         if action == "capabilities" {
             replyHandler(
                 [
-                    "nativeFind": true, "shortcuts": true, "embedded": true, "webApps": true,
+                    "nativeFind": true, "shortcuts": true, "embedded": true, "webApps": true, "browserWindows": true,
                     "darkMode": darkSource != nil, "dark": forceDark,
                 ], nil);
             return
         }
         if action == "context" {
-            guard appID == nil else { replyHandler(nil, "Browser context only"); return }
-            shortcutsActive = body["active"] as? Bool == true
+            guard isBrowser else { replyHandler(nil, "Browser context only"); return }
+            ownShortcutsActive = body["active"] as? Bool == true
             replyHandler(["active": shortcutsActive], nil)
             return
         }

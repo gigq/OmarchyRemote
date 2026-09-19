@@ -158,3 +158,14 @@ resizes. Bounds remain inside the desk when its dimensions change. Fullscreen an
 Expo continue to work. An overlapping foreground window covers native web surfaces
 behind it with their preview so native content cannot paint over the front window.
 The scratchpad remains a separate slot that can follow you between workspaces.
+
+### Independent Browser windows
+
+Search actions → New browser window creates another Browser pane with its own tab
+manager, address, back/forward history, find, zoom, and native web surface. Its last
+selected desktop tab is saved separately on this device. Closing a window releases
+only that window's page, leaving other Browser windows and desktop tabs open. All
+windows share the native website data store, including logins. Choosing the same
+desktop tab in two panes still targets the same desktop tab when syncing URLs.
+Additional embedded Browser surfaces require native build 33; the PWA continues to
+open websites externally. Layout backups preserve the additional window identities.

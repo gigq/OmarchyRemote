@@ -1,7 +1,6 @@
 /* Provider-neutral tab manager. The companion extension owns desktop mutations. */
 (() => {
   const { node, storage } = window.HyprlandUtil;
-  const LAST_TAB = 'omarchy-browser-last-tab';
   const webURL = raw => {
     try {
       const u = new URL(raw);
@@ -11,14 +10,18 @@
     }
   };
   class BrowserApp {
-    constructor(root, host) {
+    constructor(root, host, spec = { key: 'browser' }) {
+      this.windowKey = spec.key;
+      this.appID = spec.key === 'browser' ? null : spec.key;
+      this.lastTabKey = 'omarchy-' + spec.key + '-last-tab';
+      this.closedTabsKey = 'omarchy-' + spec.key + '-closed-tabs';
       this.host = host;
       this.root = root;
       this.instances = [];
       this.filter = '';
       this.active = true;
-      this.restoreTarget = storage.read(LAST_TAB);
-      this.closedTabs = storage.read('omarchy-browser-closed-tabs', []);
+      this.restoreTarget = storage.read(this.lastTabKey);
+      this.closedTabs = storage.read(this.closedTabsKey, []);
       if (!Array.isArray(this.closedTabs)) this.closedTabs = [];
       this.zoom = 1;
       this.abort = new AbortController();
@@ -59,7 +62,13 @@
       this.manager = node('div', 'browser-manager');
       this.manager.append(this.search, this.status, this.list, footer);
       root.append(this.manager);
-      this.bridge = window.webkit?.messageHandlers?.browserDevice;
+      const device = window.webkit?.messageHandlers?.browserDevice;
+      this.bridge = device
+        ? {
+            postMessage: body =>
+              device.postMessage({ ...body, ...(this.appID ? { appID: this.appID } : {}) }),
+          }
+        : null;
       this.capabilities = this.bridge
         ? Promise.resolve()
             .then(() => this.bridge.postMessage({ action: 'capabilities' }))
@@ -164,8 +173,9 @@
       this.pageState = e => {
         if (this.disposed) return;
         const v = e.detail || {};
-        if (v.appID) return;
-        if (v.hovered && this.active && !this.covered) this.host.logic.desk?.hoverFocus('browser');
+        if ((v.appID || null) !== this.appID) return;
+        if (v.hovered && this.active && !this.covered)
+          this.host.logic.desk?.hoverFocus(this.windowKey);
         if (v.focused && this.root.contains(document.activeElement)) document.activeElement.blur();
         this.navigationState(v);
         if (typeof v.controlsHidden === 'boolean' && document.activeElement !== this.address)
@@ -176,9 +186,9 @@
           this.active &&
           !this.covered &&
           this.host?.logic.state.desk &&
-          this.host.logic.cur() !== 'browser'
+          this.host.logic.cur() !== this.windowKey
         )
-          this.host.logic.focusApp('browser');
+          this.host.logic.focusApp(this.windowKey);
         if (v.url && document.activeElement !== this.address) this.address.value = v.url;
         if ('back' in v) this.back.disabled = !v.back;
         if ('forward' in v) this.forward.disabled = !v.forward;
@@ -316,7 +326,7 @@
           clearTimeout(this.syncTimer);
           this.pendingNavigation = null;
           this.navigationTarget = null;
-          storage.set(LAST_TAB, null);
+          storage.set(this.lastTabKey, null);
           this.resume.hidden = true;
           this.showManager();
         }
@@ -455,7 +465,7 @@
     rememberTab(target) {
       const instance = this.instances.find(i => i.id === target.instance_id);
       if (instance)
-        storage.write(LAST_TAB, {
+        storage.write(this.lastTabKey, {
           profile_id: instance.profile_id || null,
           instance_id: instance.id,
           tab_id: target.tab_id,
@@ -471,7 +481,7 @@
       const tab = instance.windows.flatMap(w => w.tabs).find(t => t.id === q.tab_id);
       this.restoreTarget = null;
       if (!tab || !webURL(tab.url)) {
-        storage.set(LAST_TAB, null);
+        storage.set(this.lastTabKey, null);
         return;
       }
       await this.open(
@@ -497,7 +507,7 @@
         !this.covered &&
         !document.hidden &&
         !document.querySelector('.desk-sheet') &&
-        this.host?.logic.cur() === 'browser'
+        this.host?.logic.cur() === this.windowKey
       );
       if (active !== this.lastContext) {
         this.lastContext = active;
@@ -545,13 +555,13 @@
           url: tab.url,
         });
         this.closedTabs = this.closedTabs.slice(-20);
-        storage.write('omarchy-browser-closed-tabs', this.closedTabs);
+        storage.write(this.closedTabsKey, this.closedTabs);
       }
       if (current?.tab === tab) {
         clearTimeout(this.syncTimer);
         this.pendingNavigation = null;
         this.navigationTarget = null;
-        storage.set(LAST_TAB, null);
+        storage.set(this.lastTabKey, null);
         if (next) await this.selectTab(next);
         else {
           this.resume.hidden = true;
@@ -580,7 +590,7 @@
       const window = instance.windows.find(w => w.id === saved.window_id) || instance.windows[0];
       if (await this.createTab(instance, window, saved.url, saved.workspace_id)) {
         this.closedTabs.pop();
-        storage.write('omarchy-browser-closed-tabs', this.closedTabs);
+        storage.write(this.closedTabsKey, this.closedTabs);
       }
     }
     async createTab(instance, window, url, workspace = 0) {
@@ -642,7 +652,7 @@
         serial !== this.inputFocusSerial ||
         !this.active ||
         this.covered ||
-        this.host?.logic.cur() !== 'browser'
+        this.host?.logic.cur() !== this.windowKey
       )
         return;
       this.address.focus({ preventScroll: true });
@@ -676,7 +686,7 @@
         serial !== this.inputFocusSerial ||
         !this.active ||
         this.covered ||
-        this.host?.logic.cur() !== 'browser'
+        this.host?.logic.cur() !== this.windowKey
       )
         return;
       this.command('stop');
@@ -910,13 +920,13 @@
         this.command('snapshot');
       }
       this.root.closest('[data-workspace]')?.classList.toggle('native-surface-visible', visible);
-      const opacity = HyprlandThemes.windowOpacity(this.host?.logic.cur() === 'browser');
+      const opacity = HyprlandThemes.windowOpacity(this.host?.logic.cur() === this.windowKey);
       const v = visualViewport;
       const payload = {
         visible,
         focused:
           visible &&
-          this.host?.logic.cur() === 'browser' &&
+          this.host?.logic.cur() === this.windowKey &&
           !this.root.contains(document.activeElement?.closest('input,textarea,select')),
         opacity,
         ...(visible
@@ -1224,5 +1234,8 @@
     }
   }
   window.HostBrowserApp = BrowserApp;
-  window.HyprlandApps?.provide('browser', { create: (root, host) => new BrowserApp(root, host) });
+  window.HyprlandApps?.provide('browser', {
+    multiple: true,
+    create: (root, host, spec) => new BrowserApp(root, host, spec),
+  });
 })();

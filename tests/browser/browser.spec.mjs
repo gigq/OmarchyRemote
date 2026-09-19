@@ -444,3 +444,76 @@ test('Embedded navigation updates the originating desktop tab without replaying 
     'Desktop tab was not updated: Tab is no longer open'
   );
 });
+
+test('independent Browser windows isolate native surfaces, navigation events and restoration', async ({
+  page: p,
+}) => {
+  await p.setViewportSize({ width: 1194, height: 834 });
+  await p.route('**/api/**', r => r.fulfill({ json: {} }));
+  await p.route('**/api/browser/snapshot', r => r.fulfill({ json: data() }));
+  await p.addInitScript(() => {
+    window.browserCalls = [];
+    window.webkit = {
+      messageHandlers: {
+        browserDevice: {
+          postMessage: async message => {
+            window.browserCalls.push(message);
+            return message.action === 'capabilities'
+              ? { embedded: true, shortcuts: true, browserWindows: true }
+              : {};
+          },
+        },
+      },
+    };
+  });
+  await p.goto('/native/');
+  await p.keyboard.press('Meta+Shift+Enter');
+  const first = p.locator('#remote-browser-app');
+  await first.getByRole('link', { name: 'Open Example Domain on phone' }).click();
+  await p.keyboard.press('Meta+Shift+K');
+  await p
+    .getByRole('searchbox', { name: 'Search actions', exact: true })
+    .fill('New browser window');
+  await p.keyboard.press('Enter');
+  const second = p.locator('[data-workspace^="window-"] .browser-app');
+  await second.getByRole('link', { name: 'Open Other tab on phone' }).click();
+  const id = await p.locator('[data-workspace^="window-"]').getAttribute('data-workspace');
+  await p.evaluate(
+    id =>
+      window.dispatchEvent(
+        new CustomEvent('host-browser-state', {
+          detail: {
+            appID: id,
+            url: 'https://example.org/#second',
+            back: true,
+            forward: false,
+          },
+        })
+      ),
+    id
+  );
+  await expect(second.getByRole('textbox', { name: 'Page address' })).toHaveValue(
+    'https://example.org/#second'
+  );
+  await expect(first.getByRole('textbox', { name: 'Page address' })).toHaveValue(
+    'https://example.com/'
+  );
+  expect(
+    await p.evaluate(id => window.browserCalls.some(v => v.appID === id && v.action === 'open'), id)
+  ).toBe(true);
+  await p.reload();
+  await expect(second.getByRole('textbox', { name: 'Page address' })).toBeVisible();
+  await expect(first.getByRole('textbox', { name: 'Page address' })).toBeVisible();
+  await p.keyboard.press('Meta+W');
+  await expect(second).toHaveCount(0);
+  await expect(first.getByRole('textbox', { name: 'Page address' })).toBeVisible();
+  expect(
+    await p.evaluate(
+      id => window.browserCalls.some(v => v.appID === id && v.action === 'close'),
+      id
+    )
+  ).toBe(true);
+  expect(
+    await p.evaluate(() => window.browserCalls.some(v => !v.appID && v.action === 'close'))
+  ).toBe(false);
+});

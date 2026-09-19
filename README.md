@@ -207,3 +207,7 @@ width while panning. Dwindle remains the default.
 **Command+Shift+O** toggles the active desk window between tiled and floating.
 Floating windows stay on their workspace, remember their bounds per device, and
 come forward when focused. Command-drag moves them; Command+right-drag resizes them.
+
+**New browser window** in Search actions creates another independent Browser pane
+(native build 33 or later). Each remembers its own desktop tab and navigation;
+website logins remain shared on the device.
