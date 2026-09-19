@@ -71,3 +71,18 @@ test('native drag bridge follows same resizing and cancellation path', async ({ 
   expect((await rect(p, 'browser')).width).toBeLessThan(before.width - 70);
   await expect(p.locator('.desk-dragging')).toHaveCount(0);
 });
+test('previous workspace follows actual navigation and silent moves keep the source focused', async ({
+  page: p,
+}) => {
+  await boot(p);
+  await p.keyboard.press('Meta+Shift+Digit3');
+  await p.keyboard.press('Meta+Digit2');
+  await p.keyboard.press('Meta+Shift+KeyP');
+  await expect(p.locator('.desk-ws-label:visible')).toHaveText('browser');
+  await p.keyboard.press('Meta+Shift+KeyP');
+  await expect(p.locator('.desk-ws-label:visible')).toHaveText('terminal');
+  await p.keyboard.press('Meta+Shift+KeyX');
+  await expect(p.locator('.desk-ws-label:visible')).toHaveText('home');
+  await p.keyboard.press('Meta+Digit2');
+  await expect(p.locator('.desk-divider')).toHaveCount(1);
+});

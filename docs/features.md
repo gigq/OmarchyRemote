@@ -85,3 +85,10 @@ A keyboard-focused divider accepts arrows in 25-point steps; double-click resets
 its size. Fullscreen and Expo hide dividers. Browser and saved website content
 forward modifier drags through a native gesture bridge starting with build 30;
 ordinary website touches and scrolling retain their normal behavior.
+
+Desk navigation remembers the previous workspace by a surviving window identity,
+so closing and renumbering workspaces does not turn it into a stale numeric target.
+Command+Shift+P returns there. Command+Shift+X moves to the next workspace without
+following; if the source becomes empty, focus returns Home. Moves into an already
+full four-tile workspace are ignored. Command+Shift+Y changes Dwindle split direction
+and Command+Shift+U cycles layouts. Native hardware registration follows in the shared-registry step.

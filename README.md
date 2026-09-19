@@ -179,3 +179,7 @@ This device → Window layout selects Dwindle, the Omarchy default, or Master an
 stack. Layout and split sizes are saved per device. Toggle active split changes
 Dwindle's split direction; focused dividers accept arrow keys and double-click resets
 a split to equal sizes. Embedded website modifier drags require native build 30.
+
+In desk mode, Command+Shift+P returns to the previous workspace, Command+Shift+X
+moves the active window to the next workspace without following it,
+Command+Shift+Y toggles the active Dwindle split, and Command+Shift+U cycles layouts.

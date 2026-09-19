@@ -195,6 +195,7 @@
     return {
       open,
       tiles,
+      previousWindow: open.includes(saved.previousWindow) ? saved.previousWindow : null,
       windowLayout: Object.hasOwn(HyprlandDesk.MODES, saved.windowLayout)
         ? saved.windowLayout
         : 'dwindle',
@@ -226,6 +227,7 @@
     storage.write(s.desk ? 'omarchy-layout-desk' : 'omarchy-layout-phone', {
       open: s.open,
       tiles: s.tiles,
+      previousWindow: s.previousWindow,
       windowLayout: s.windowLayout,
       splitAxes: s.splitAxes,
       splits: s.splits,

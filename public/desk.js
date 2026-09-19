@@ -66,16 +66,18 @@
       focus: after[ws]?.includes(s.focus) ? s.focus : null,
     };
   };
-  const move = (s, key, target) => {
+  const move = (s, key, target, follow = true) => {
     if (!key || key === 'home' || !s.open.includes(key)) return null;
     const d = desks(s);
     target = Math.max(1, Math.min(d.length, target));
-    if (deskOf(s, key) === target) return null;
+    if (deskOf(s, key) === target || (d[target]?.length || 0) >= MAX_TILES) return null;
     const ns = { ...s, tiles: { ...normalize(s), [key]: target } };
     return {
       tiles: normalize(ns),
-      ws: deskOf(ns, key),
-      focus: key,
+      ws: follow
+        ? deskOf(ns, key)
+        : Math.max(0, deskOf(ns, d[s.ws]?.find(k => k !== key) || 'home')),
+      focus: follow ? key : d[s.ws]?.find(k => k !== key) || 'home',
       full: (s.full || []).filter(k => k !== key),
     };
   };
@@ -276,6 +278,42 @@
     },
     {
       group: 'Workspaces',
+      keys: '⇧ P',
+      shift: true,
+      code: /^KeyP$/,
+      desk: true,
+      label: 'Return to previous workspace',
+      run: d => d.previousWorkspace(),
+    },
+    {
+      group: 'Windows',
+      keys: '⇧ X',
+      shift: true,
+      code: /^KeyX$/,
+      desk: true,
+      label: 'Move window to next workspace without following',
+      run: d => d.moveWindow(d.logic.state.ws + 1, false),
+    },
+    {
+      group: 'Windows',
+      keys: '⇧ Y',
+      shift: true,
+      code: /^KeyY$/,
+      desk: true,
+      label: 'Toggle split direction',
+      run: d => d.toggleSplit(),
+    },
+    {
+      group: 'Windows',
+      keys: '⇧ U',
+      shift: true,
+      code: /^KeyU$/,
+      desk: true,
+      label: 'Cycle window layout',
+      run: d => d.cycleLayout(),
+    },
+    {
+      group: 'Workspaces',
       keys: '[ / ]',
       code: /^Bracket(Left|Right)$/,
       label: 'Previous / next workspace',
@@ -463,6 +501,16 @@
     }
     update() {
       const s = this.logic.state;
+      const apps = desks(s)[s.ws] || ['home'];
+      const oldApps = this.lastWorkspaceApps;
+      const changed = this.lastWs != null && this.lastWs !== s.ws;
+      this.lastWs = s.ws;
+      this.lastWorkspaceApps = [cur(s), ...apps.filter(k => k !== cur(s))];
+      if (changed && oldApps) {
+        const previousWindow = oldApps.find(k => s.open.includes(k) && !apps.includes(k));
+        if (previousWindow && s.previousWindow !== previousWindow)
+          this.logic.set({ previousWindow });
+      }
       if (!s.desk && this.sheet) this.closeSheet();
       if (
         this.drag &&
@@ -743,11 +791,20 @@
     patch(p) {
       if (p) this.logic.set(p);
     }
-    moveWindow(target) {
+    previousWorkspace() {
+      const s = this.logic.state;
+      if (s.previousWindow && s.open.includes(s.previousWindow)) this.logic.jump(s.previousWindow);
+    }
+    cycleLayout() {
+      const modes = Object.keys(MODES),
+        current = mode(this.logic.state);
+      this.logic.set({ windowLayout: modes[(modes.indexOf(current) + 1) % modes.length] });
+    }
+    moveWindow(target, follow = true) {
       const s = this.logic.state;
       if (!s.desk) return;
       if (target < 1) return;
-      this.patch(move(s, cur(s), target));
+      this.patch(move(s, cur(s), target, follow));
     }
     focusDir(dir) {
       const s = this.logic.state;
