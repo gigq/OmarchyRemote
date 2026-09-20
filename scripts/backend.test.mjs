@@ -98,7 +98,7 @@ test('host gateway rejects cross-site requests and unknown hosts', async () => {
     ws.on('error', () => {});
   });
   assert.equal(status, 403);
-  assert.equal((await api('capabilities')).apps.length, 9);
+  assert.equal((await api('capabilities')).apps.length, 10);
 });
 
 test('persistent real shell accepts input, resizes, and reconnects', async () => {
@@ -208,8 +208,33 @@ test('home widgets expose live host metrics and sanitized CodexBar windows', asy
     assert.ok(['codex', 'claude'].includes(p.id));
     assert.equal(p.accountEmail, undefined);
     assert.equal(p.identity, undefined);
-    for (const w of p.windows) assert.ok(w.used_percent >= 0 && w.used_percent <= 100);
+    for (const w of p.windows)
+      assert.ok(w.used_percent === null || (w.used_percent >= 0 && w.used_percent <= 100));
   }
+});
+
+test('CodexBar app exposes cached telemetry without account or redemption identifiers', async () => {
+  const d = await api('codexbar');
+  assert.equal(d.providers.length, 2);
+  assert.ok(d.costs === null || Array.isArray(d.costs));
+  const forbidden = new Set([
+    'accountEmail',
+    'accountOrganization',
+    'identity',
+    'diagnostic',
+    'token',
+    'id',
+  ]);
+  function inspect(value) {
+    if (Array.isArray(value)) return value.forEach(inspect);
+    if (!value || typeof value !== 'object') return;
+    for (const [key, child] of Object.entries(value)) {
+      assert.ok(!forbidden.has(key), 'Excluded telemetry field: ' + key);
+      inspect(child);
+    }
+  }
+  for (const provider of d.providers) inspect(provider.details);
+  inspect(d.costs);
 });
 
 test('uploads keep bytes and names privately, classify images, and reject empty or oversized files', async () => {

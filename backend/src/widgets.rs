@@ -107,57 +107,6 @@ fn tailscale(value: Value) -> Value {
     });
     json!({"state":value["BackendState"],"host":value["Self"]["HostName"],"ip":value["Self"]["TailscaleIPs"][0],"magic_dns":value["CurrentTailnet"]["MagicDNSEnabled"],"exit_node":value["ExitNodeStatus"]["TailscaleIPs"][0],"peers":peers,"updated_at":now()})
 }
-fn codexbar_provider(provider: &str, raw: Value) -> Value {
-    let entry = raw.as_array().and_then(|a| a.first()).unwrap_or(&raw);
-    let usage = &entry["usage"];
-    let mut windows = Vec::new();
-    for (key, label) in [
-        ("primary", "Session"),
-        ("secondary", "Weekly"),
-        ("tertiary", "Other"),
-    ] {
-        let w = &usage[key];
-        if let Some(used) = w["usedPercent"].as_f64() {
-            windows.push(json!({"label":label,"used_percent":used.clamp(0.0,100.0),"resets_at":w["resetsAt"],"minutes":w["windowMinutes"]}));
-        }
-    }
-    if let Some(extra) = usage["extraRateWindows"].as_array() {
-        for e in extra {
-            if let Some(used) = e["window"]["usedPercent"].as_f64() {
-                windows.push(json!({"label":e["title"],"used_percent":used.clamp(0.0,100.0),"resets_at":e["window"]["resetsAt"],"minutes":e["window"]["windowMinutes"]}));
-            }
-        }
-    }
-    json!({"id":provider,"windows":windows,"updated_at":usage["updatedAt"],"error":if usage.is_null() {Some("Usage unavailable")} else {None}})
-}
-async fn codexbar_query(provider: &str) -> Result<Value> {
-    let source = if provider == "claude" {
-        "oauth"
-    } else {
-        "auto"
-    };
-    let output = tokio::time::timeout(
-        Duration::from_secs(45),
-        Command::new("/usr/bin/codexbar")
-            .args([
-                "usage",
-                "--provider",
-                provider,
-                "--source",
-                source,
-                "--format",
-                "json",
-                "--json-only",
-                "--no-credits",
-            ])
-            .kill_on_drop(true)
-            .output(),
-    )
-    .await??;
-    // Some providers return a JSON error envelope with a nonzero exit status.
-    let raw: Value = serde_json::from_slice(&output.stdout)?;
-    Ok(codexbar_provider(provider, raw))
-}
 pub fn start() -> Widgets {
     let state = Arc::new(Mutex::new(
         json!({"metrics":{"error":"Starting sampler"},"tailscale":{"error":"Reading Tailscale"}}),
@@ -165,7 +114,10 @@ pub fn start() -> Widgets {
     let usage_target = state.clone();
     tokio::spawn(async move {
         loop {
-            let (codex, claude) = tokio::join!(codexbar_query("codex"), codexbar_query("claude"));
+            let (codex, claude) = tokio::join!(
+                crate::codexbar::query("codex"),
+                crate::codexbar::query("claude")
+            );
             let mut providers = Vec::new();
             for (id, result) in [("codex", codex), ("claude", claude)] {
                 let mut value = result
@@ -184,6 +136,23 @@ pub fn start() -> Widgets {
             }
             usage_target.lock().unwrap()["codexbar"] =
                 json!({"providers":providers,"checked_at":now()});
+            tokio::time::sleep(Duration::from_secs(300)).await;
+        }
+    });
+    let cost_target = state.clone();
+    tokio::spawn(async move {
+        loop {
+            match crate::codexbar::costs().await {
+                Ok(costs) => {
+                    let mut state = cost_target.lock().unwrap();
+                    state["codexbar_costs"] = costs;
+                    state["codexbar_cost_error"] = Value::Null;
+                }
+                Err(_) => {
+                    cost_target.lock().unwrap()["codexbar_cost_error"] =
+                        json!("Cost history unavailable")
+                }
+            }
             tokio::time::sleep(Duration::from_secs(300)).await;
         }
     });
@@ -321,21 +290,6 @@ pub async fn weather(lat: f64, lon: f64) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn codexbar_only_exports_usage_windows() {
-        let value = codexbar_provider(
-            "codex",
-            json!([{"usage":{"accountEmail":"private@example.com","identity":{"token":"secret"},"primary":null,"secondary":{"usedPercent":63,"resetsAt":"2026-09-17T00:00:00Z"},"extraRateWindows":[{"title":"Spark","window":{"usedPercent":0}}]}}]),
-        );
-        assert_eq!(value["windows"].as_array().unwrap().len(), 2);
-        assert_eq!(value["windows"][0]["used_percent"], 63.0);
-        assert_eq!(value["windows"][1]["used_percent"], 0.0);
-        assert!(!value.to_string().contains("private"));
-        assert!(!value.to_string().contains("secret"));
-        let unavailable =
-            codexbar_provider("claude", json!([{"error":{"message":"sensitive details"}}]));
-        assert_eq!(unavailable["error"], "Usage unavailable");
-    }
     #[test]
     fn parses_linux_counters() {
         assert_eq!(

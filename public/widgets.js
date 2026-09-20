@@ -37,13 +37,15 @@
     constructor(logic) {
       this.logic = logic;
       this.roots = Object.fromEntries(
-        ['weather', 'metrics', 'tailscale', 'codexbar'].map(k => {
+        ['weather', 'metrics', 'tailscale', ...HyprlandApps.widgets().map(w => w.key)].map(k => {
           const root = node('div', 'home-widget widget-' + k);
           root.id = 'widget-' + k;
           return [k, root];
         })
       );
-      this.deck = new HyprlandWidgetDeck(mount('home-widgets'), this.roots);
+      this.deck = new HyprlandWidgetDeck(mount('home-widgets'), this.roots, key =>
+        logic.openApp(key)
+      );
       this.location = storage.get('omarchy-weather-location');
       this.unitMode = storage.get('omarchy-weather-unit-mode') || 'auto';
       this.localeUnit = this.browserUnit();
@@ -71,8 +73,7 @@
       this.clock();
       this.refreshLocale();
       this.clockTimer = setInterval(this.clock, 1000);
-      this.roots.codexbar.textContent = 'Reading CodexBar…';
-      this.provider = storage.get('omarchy-codexbar-provider') || 'codex';
+      for (const widget of HyprlandApps.widgets()) widget.render(this.roots[widget.key], null);
       this.roots.metrics.textContent = 'Connecting to host…';
       this.roots.tailscale.textContent = 'Reading Tailscale…';
       this.renderWeather();
@@ -186,10 +187,11 @@
         const data = await this.api('widgets');
         this.renderMetrics(data.metrics);
         this.renderTailscale(data.tailscale);
-        this.renderCodexbar(data.codexbar);
+        for (const widget of HyprlandApps.widgets())
+          widget.render(this.roots[widget.key], data[widget.source || widget.key]);
         this.deck.refresh();
       } catch {
-        for (const k of ['metrics', 'tailscale', 'codexbar']) {
+        for (const k of ['metrics', 'tailscale', ...HyprlandApps.widgets().map(w => w.key)]) {
           this.header(this.roots[k], k === 'metrics' ? 'btop' : k, '');
           this.roots[k].append(
             node('p', 'widget-muted', HyprlandApps.host.name + ' unavailable · reconnecting…')
@@ -206,76 +208,6 @@
       const h = node('div', 'widget-line widget-legend');
       h.append(node('strong', '', title), node('span', 'widget-muted widget-truncate', detail));
       root.append(h);
-    }
-    renderCodexbar(data) {
-      this.codexbar = data;
-      const root = this.roots.codexbar;
-      const p = data?.providers?.find(p => p.id === this.provider);
-      this.header(root, 'CodexBar', '');
-      root.firstChild.lastChild.replaceWith(
-        this.button(this.provider === 'codex' ? 'Codex' : 'Claude', () => {
-          this.provider = this.provider === 'codex' ? 'claude' : 'codex';
-          storage.set('omarchy-codexbar-provider', this.provider);
-          this.renderCodexbar(this.codexbar);
-        })
-      );
-      if (!p) {
-        root.append(node('p', 'widget-muted', 'Loading usage…'));
-        return;
-      }
-      if (!p.windows?.length) {
-        root.append(node('p', 'widget-muted', p.error || 'No usage limits reported'));
-        return;
-      }
-      const list = node('div', 'codexbar-windows');
-      for (const w of p.windows) {
-        const row = node('div', 'codexbar-window');
-        const reset = Date.parse(w.resets_at),
-          minutes = Math.max(0, Math.ceil((reset - Date.now()) / 60000));
-        const used = w.used_percent;
-        const line = node('div', 'widget-line');
-        const usage = node('span', 'codexbar-usage');
-        usage.append(
-          node('strong', '', percent(used)),
-          node(
-            'span',
-            'widget-muted codexbar-reset',
-            ' used · ' +
-              (Number.isFinite(reset)
-                ? 'resets ' +
-                  (minutes >= 1440
-                    ? Math.floor(minutes / 1440) + 'd ' + Math.floor((minutes % 1440) / 60) + 'h'
-                    : minutes >= 60
-                      ? Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm'
-                      : minutes + 'm')
-                : 'reset —')
-          )
-        );
-        line.append(node('span', 'widget-truncate', w.label.replace(/^Codex /, '')), usage);
-        const track = node('div', 'metric-track'),
-          bar = node('i');
-        bar.style.width = Math.max(0, Math.min(100, used)) + '%';
-        bar.style.background =
-          used >= 90
-            ? 'var(--theme-red)'
-            : used >= 75
-              ? 'var(--theme-yellow)'
-              : 'var(--theme-accent)';
-        track.append(bar);
-        row.append(line, track);
-        list.append(row);
-      }
-      for (const type of ['pointerdown', 'touchstart', 'touchmove', 'touchend'])
-        list.addEventListener(type, e => e.stopPropagation(), { passive: true });
-      root.append(list);
-      root.append(
-        node(
-          'div',
-          'widget-muted',
-          (p.error ? 'Unavailable · last update ' : 'Updated ') +
-            (p.updated_at ? stamp(Date.parse(p.updated_at) / 1000) : '—')
-        )
-      );
     }
     renderMetrics(m) {
       const root = this.roots.metrics;

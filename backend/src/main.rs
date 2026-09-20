@@ -1,6 +1,7 @@
 mod ansi;
 mod apps;
 mod browser;
+mod codexbar;
 mod files;
 mod files_ops;
 mod herdr;
@@ -115,6 +116,12 @@ async fn file_upload(
 }
 async fn widget_snapshot(State(app): State<App>) -> Json<Value> {
     Json(app.widgets.lock().unwrap().clone())
+}
+async fn codexbar_snapshot(State(app): State<App>) -> Json<Value> {
+    let state = app.widgets.lock().unwrap();
+    Json(
+        json!({"providers":state["codexbar"]["providers"],"checked_at":state["codexbar"]["checked_at"],"costs":state["codexbar_costs"],"cost_error":state["codexbar_cost_error"]}),
+    )
 }
 #[derive(Deserialize)]
 struct CityQuery {
@@ -452,6 +459,7 @@ async fn main() -> anyhow::Result<()> {
             post(files::upload).layer(DefaultBodyLimit::max(files::MAX_BYTES)),
         )
         .route("/api/widgets", get(widget_snapshot))
+        .route("/api/codexbar", get(codexbar_snapshot))
         .route("/api/widgets/cities", get(widget_cities))
         .route("/api/widgets/weather", get(widget_weather))
         .route("/api/terminal/session", post(session))

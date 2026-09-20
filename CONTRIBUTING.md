@@ -107,3 +107,7 @@ action descriptors without `run`) so Settings detects conflicts even when the ap
 is closed. Keep this derived from the same action factory as the instance's
 `actions`; Browser is the reference. Overrides live in the device layout, and desk
 handling, native registrations and help use the resolved action registry.
+
+## App-owned widgets
+
+A provider can register `widgets: [{ key, name, source, render(root, snapshot) }]` alongside `create`. Load that provider module before `widget-deck.js`. `HyprlandApps.widgets()` adds the owning app key automatically; the Home widget manager uses its name and tapping its content opens that app. `source` selects the field in `/api/widgets` (defaults to the widget key). The shared Home widget controller creates the widget root as `#widget-<key>`; render handles null before the first sample. Keep app-specific rendering in the provider module, following `public/codexbar.js`. Controls inside a widget are excluded from launch, as are drags and long presses.

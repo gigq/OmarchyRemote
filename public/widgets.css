@@ -469,48 +469,11 @@
   height: auto;
   clip-path: none;
 }
-.codexbar-windows {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  touch-action: pan-y;
-}
-.codexbar-window {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin-bottom: 8px;
-  font-size: 10px;
-}
-.codexbar-window .metric-track {
-  flex: none;
-  height: 5px;
-}
 
-.widget-codexbar {
-  padding: 16px 14px 10px;
-  gap: 4px;
+.widget-app-link {
+  cursor: pointer;
 }
-.codexbar-window {
-  gap: 5px;
-  margin-bottom: 6px;
-}
-.codexbar-window .widget-truncate {
-  flex: 1;
-}
-.codexbar-reset {
-  font-size: 9px;
-  white-space: nowrap;
-}
-.codexbar-window strong {
-  white-space: nowrap;
-  font-weight: 500;
-}
-.codexbar-usage {
-  white-space: nowrap;
-  flex: none;
-}
-.codexbar-window .widget-truncate {
-  color: var(--theme-foreground);
+.widget-app-link:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: -4px;
 }

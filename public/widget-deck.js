@@ -4,15 +4,46 @@
     weather: 'Weather',
     metrics: 'Host metrics',
     tailscale: 'Tailscale',
-    codexbar: 'CodexBar',
+    ...Object.fromEntries(HyprlandApps.widgets().map(w => [w.key, w.name])),
   };
   const { node: el } = window.HyprlandUtil;
   const read = window.HyprlandUtil.storage.read;
   class WidgetDeck {
-    constructor(host, roots) {
+    constructor(host, roots, openApp) {
       this.host = host;
       this.roots = roots;
       this.abort = new AbortController();
+      for (const widget of HyprlandApps.widgets()) {
+        const root = roots[widget.key];
+        root.classList.add('widget-app-link');
+        root.tabIndex = 0;
+        root.setAttribute('role', 'group');
+        root.setAttribute(
+          'aria-label',
+          widget.name + ' widget; open ' + HyprlandApps.get(widget.app).name
+        );
+        const interactive = target => target.closest('button,a,input,select,textarea,summary');
+        root.addEventListener(
+          'click',
+          e => {
+            if (interactive(e.target) || Date.now() < this.suppress) return;
+            e.stopPropagation();
+            openApp(widget.app);
+          },
+          { signal: this.abort.signal }
+        );
+        root.addEventListener(
+          'keydown',
+          e => {
+            if (e.target !== root || !['Enter', ' '].includes(e.key)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            openApp(widget.app);
+          },
+          { signal: this.abort.signal }
+        );
+      }
+
       const saved = read('omarchy-widgets');
       this.order = Array.isArray(saved)
         ? [...new Set(saved.filter(k => catalog[k]))]
@@ -54,6 +85,7 @@
         clearTimeout(this.hold);
         this.touch = null;
         if (!p || p.id !== e.pointerId) return;
+        if (Math.hypot(p.dx, p.dy) > 9) this.suppress = Date.now() + 500;
         if (p.swipe) {
           e.stopPropagation();
           this.suppress = Date.now() + 500;

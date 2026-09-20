@@ -55,6 +55,12 @@
       { keys: '↩', code: /^(Enter|NumpadEnter)$/, label: 'Terminal' },
     ],
   });
+  define('codexbar', {
+    name: 'CodexBar',
+    color: 'var(--theme-magenta)',
+    glyph: 'cb',
+    description: 'AI usage, banked resets, credits and costs',
+  });
   define('files', {
     name: 'files',
     color: 'var(--theme-red)',
@@ -222,6 +228,10 @@
       if (catalog[key]?.baseKey) delete catalog[key];
     },
     provide,
+    widgets: () =>
+      Object.values(catalog)
+        .filter(app => !app.baseKey)
+        .flatMap(app => (app.provider?.widgets || []).map(widget => ({ ...widget, app: app.key }))),
     get: key => catalog[key] || null,
     keys: () => Object.keys(catalog),
     DEFAULT_PINS,
