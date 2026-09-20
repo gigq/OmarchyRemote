@@ -113,6 +113,154 @@
     }
     return group;
   }
+  function sourceLink(text, href) {
+    const link = node('a', 'usage-source', text);
+    try {
+      const url = new URL(href);
+      if (
+        url.protocol !== 'https:' ||
+        !['willreset.com', 'x.com', 'twitter.com'].includes(url.hostname)
+      )
+        return node('span', '', text);
+      link.href = url.href;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+    } catch {
+      return node('span', '', text);
+    }
+    return link;
+  }
+  function elapsed(value) {
+    const time = Date.parse(value);
+    if (!Number.isFinite(time) || time > Date.now()) return 'Unknown';
+    const hours = Math.floor((Date.now() - time) / 3600000);
+    return hours >= 24 ? Math.floor(hours / 24) + 'd ' + (hours % 24) + 'h ago' : hours + 'h ago';
+  }
+  function newsIsStale(entry, timestamp) {
+    const sourceTime = Date.parse(timestamp);
+    return (
+      !!entry?.error ||
+      (entry?.checked_at && Date.now() / 1000 - entry.checked_at > 900) ||
+      (Number.isFinite(sourceTime) && Date.now() - sourceTime > 900000)
+    );
+  }
+  function resetNews(root, news) {
+    const card = node('section', 'usage-card reset-news');
+    card.append(node('h2', '', 'Reset watch'));
+    card.append(sourceLink('Data: willreset.com', 'https://willreset.com/'));
+    const entry = news?.forecast;
+    const forecast = entry?.data;
+    const stale = newsIsStale(entry, forecast?.computed_at);
+    if (stale)
+      card.append(node('p', 'usage-warning', 'Forecast may be outdated · last saved data'));
+    if (forecast) {
+      const odds = node('div', 'reset-odds');
+      for (const [key, title] of [
+        ['prob_24', 'Within 24 hours'],
+        ['prob_48', 'Within 48 hours'],
+      ]) {
+        const cell = node('div');
+        cell.append(
+          node('strong', 'usage-total', Number.isFinite(forecast[key]) ? forecast[key] + '%' : '—'),
+          node('small', 'widget-muted', title)
+        );
+        odds.append(cell);
+      }
+      card.append(
+        odds,
+        node(
+          'p',
+          'widget-muted',
+          'Forecast · ' + (forecast.confidence || 'unknown') + ' confidence'
+        )
+      );
+      const last = node('p', '', 'Last reset: ' + elapsed(forecast.last_reset_at));
+      last.append(node('small', 'widget-muted', date(forecast.last_reset_at)));
+      card.append(last);
+      if (forecast.last_reset_url)
+        card.append(sourceLink('Last reset announcement ↗', forecast.last_reset_url));
+      const promise = forecast.promise || {};
+      const expired = promise.expires_at && Date.parse(promise.expires_at) < Date.now();
+      card.append(
+        node(
+          'p',
+          'usage-badge',
+          promise.active && !expired
+            ? stale
+              ? 'Previously reported plan · check source'
+              : 'Reset planned · reported by willreset.com'
+            : stale || typeof promise.active !== 'boolean'
+              ? 'Upcoming announcement status unknown'
+              : 'No active reset promise reported'
+        )
+      );
+      if (promise.active && !expired) {
+        if (promise.quote || promise.text || promise.summary)
+          card.append(
+            node('p', 'reset-post-text', promise.quote || promise.text || promise.summary)
+          );
+        if (promise.at && !promise.at.startsWith('0001-'))
+          card.append(node('small', 'widget-muted', 'Reported time · ' + date(promise.at)));
+        if (promise.url || promise.source_url)
+          card.append(sourceLink('Read announcement ↗', promise.url || promise.source_url));
+      }
+      if (forecast.confidence_note)
+        card.append(node('small', 'widget-muted', forecast.confidence_note));
+      card.append(node('small', 'widget-muted', 'Forecast updated ' + date(forecast.computed_at)));
+    } else
+      card.append(
+        node(
+          'p',
+          'widget-muted',
+          entry?.error ? 'Reset forecast unavailable · retrying' : 'Loading reset forecast…'
+        )
+      );
+    for (const [key, title, path] of [
+      ['feed', 'Reset-related posts', 'tibo'],
+      ['timeline', 'Reset history', 'timeline'],
+    ]) {
+      const section = node('details', 'usage-details');
+      section.append(node('summary', '', title));
+      const source = news?.[key];
+      if (newsIsStale(source, source?.data?.fetched_at))
+        section.append(
+          node('p', 'usage-warning', 'Source unavailable or outdated · last saved data')
+        );
+      const rows = source?.data?.items;
+      if (!rows)
+        section.append(
+          node('p', 'widget-muted', source?.error ? 'Unavailable · retrying' : 'Loading…')
+        );
+      else if (!rows.length) section.append(node('p', 'widget-muted', 'No records reported.'));
+      for (const row of rows?.slice(0, 40) || []) {
+        const item = node('article', 'reset-post');
+        item.append(node('small', 'widget-muted', date(row.at || row.announced_at)));
+        item.append(
+          node('span', 'usage-badge', row.preview ? 'Preview' : label(row.kind || 'Update'))
+        );
+        item.append(
+          node(
+            'p',
+            'reset-post-text',
+            row.text || row.summary || row.body || 'Read the source post'
+          )
+        );
+        item.append(sourceLink('Original post ↗', row.url || row.source_url));
+        section.append(item);
+      }
+      if (source?.checked_at)
+        section.append(
+          node(
+            'small',
+            'widget-muted',
+            'Checked ' + date(new Date(source.checked_at * 1000).toISOString())
+          )
+        );
+      section.append(sourceLink('View all on willreset.com ↗', 'https://willreset.com/' + path));
+      card.append(section);
+    }
+    root.append(card);
+  }
   class CodexBar {
     constructor(root) {
       this.root = root;
@@ -193,6 +341,7 @@
         [...this.body.querySelectorAll('details')].map(n => [n.firstChild.textContent, n.open])
       );
       this.body.replaceChildren();
+      if (this.select.value === 'codex') resetNews(this.body, this.data?.reset_news);
       if (!p) {
         this.body.append(
           node('p', 'widget-muted', this.error || 'Waiting for the host’s first CodexBar sample…')

@@ -45,11 +45,11 @@ const data = {
     },
   ],
 };
-async function boot(page) {
+async function boot(page, snapshot = data) {
   await page.route('**/api/widgets', r =>
-    r.fulfill({ json: { metrics: {}, tailscale: {}, codexbar: data } })
+    r.fulfill({ json: { metrics: {}, tailscale: {}, codexbar: snapshot } })
   );
-  await page.route('**/api/codexbar', r => r.fulfill({ json: data }));
+  await page.route('**/api/codexbar', r => r.fulfill({ json: snapshot }));
   await page.goto('/native/');
   if (page.viewportSize().width < 600)
     await page.getByRole('button', { name: 'Show CodexBar', exact: true }).click();
@@ -107,3 +107,83 @@ test('widget controls and long press do not launch app; keyboard activation does
   await expect(page.locator('#remote-codexbar-app')).toBeVisible();
   await expect(page.getByLabel('Usage provider')).toHaveValue('claude');
 });
+
+for (const width of [402, 1194]) {
+  test(`Reset watch displays sourced forecasts, posts and history at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 874 });
+    const checked = Math.floor(Date.now() / 1000);
+    const news = {
+      forecast: {
+        checked_at: checked,
+        data: {
+          prob_24: 41,
+          prob_48: 65,
+          confidence: 'low',
+          computed_at: new Date().toISOString(),
+          last_reset_at: '2026-09-12T08:09:17Z',
+          last_reset_url: 'https://x.com/thsottiaux/status/1',
+          promise: {
+            active: true,
+            quote: 'A reset is planned tonight.',
+            url: 'https://x.com/thsottiaux/status/2',
+          },
+        },
+      },
+      feed: {
+        checked_at: checked,
+        data: {
+          items: [
+            {
+              kind: 'banked',
+              text: '<script>plain text only</script>',
+              at: '2026-09-19T16:48:38Z',
+              url: 'javascript:alert(1)',
+            },
+          ],
+        },
+      },
+      timeline: {
+        checked_at: checked,
+        data: {
+          items: [
+            {
+              kind: 'reset_preview',
+              preview: true,
+              summary: 'Upcoming reset preview',
+              announced_at: '2026-09-19T16:48:38Z',
+              source_url: 'https://x.com/thsottiaux/status/3',
+            },
+          ],
+        },
+      },
+    };
+    await boot(page, { ...data, reset_news: news });
+    await page.locator('#widget-codexbar').getByText('63% used', { exact: true }).click();
+    const card = page.locator('.reset-news');
+    await expect(card).toContainText('41%');
+    await expect(card).toContainText('65%');
+    await expect(card).toContainText('Reset planned');
+    await expect(card).toContainText('Last reset:');
+    await card.getByText('Reset-related posts', { exact: true }).click();
+    await expect(card).toContainText('<script>plain text only</script>');
+    await expect(card.locator('a[href^="javascript:"]')).toHaveCount(0);
+    await card.getByText('Reset history', { exact: true }).click();
+    await expect(card).toContainText('Preview');
+    expect(await card.evaluate(n => n.scrollWidth <= n.clientWidth)).toBeTruthy();
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `artifacts/browser/reset-watch-${width}.png` });
+    news.forecast.data.computed_at = '2000-01-01T00:00:00Z';
+    news.forecast.data.prob_24 = null;
+    await page.route('**/api/codexbar', r => r.fulfill({ json: { ...data, reset_news: news } }));
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await expect(card).toContainText('Forecast may be outdated');
+    await expect(card).toContainText('Previously reported plan');
+    await expect(card).not.toContainText('41%');
+    await expect(card).not.toContainText('0%');
+    await expect(card.locator('details').first()).toHaveAttribute('open', '');
+    await page.getByLabel('Usage provider').selectOption('claude');
+    await expect(card).toHaveCount(0);
+  });
+}

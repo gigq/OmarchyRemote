@@ -166,3 +166,33 @@
   background: var(--theme-accent);
   border-radius: 4px;
 }
+.reset-odds {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+.reset-news {
+  font-size: 12px;
+}
+.reset-news > .usage-details {
+  margin: 12px 0 0;
+}
+.usage-source {
+  color: var(--theme-accent);
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+.reset-post {
+  border-top: 1px solid var(--theme-border);
+  padding: 12px 0;
+}
+.reset-post .usage-badge {
+  display: block;
+  margin-top: 6px;
+}
+.reset-post-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}

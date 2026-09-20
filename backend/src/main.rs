@@ -9,6 +9,7 @@ mod preferences;
 mod terminal;
 mod uploads;
 mod widgets;
+mod willreset;
 
 use axum::{
     Json, Router,
@@ -115,12 +116,18 @@ async fn file_upload(
     .map_err(error)?
 }
 async fn widget_snapshot(State(app): State<App>) -> Json<Value> {
-    Json(app.widgets.lock().unwrap().clone())
+    let mut snapshot = app.widgets.lock().unwrap().clone();
+    if let Some(fields) = snapshot.as_object_mut() {
+        fields.remove("reset_news");
+        fields.remove("codexbar_costs");
+        fields.remove("codexbar_cost_error");
+    }
+    Json(snapshot)
 }
 async fn codexbar_snapshot(State(app): State<App>) -> Json<Value> {
     let state = app.widgets.lock().unwrap();
     Json(
-        json!({"providers":state["codexbar"]["providers"],"checked_at":state["codexbar"]["checked_at"],"costs":state["codexbar_costs"],"cost_error":state["codexbar_cost_error"]}),
+        json!({"providers":state["codexbar"]["providers"],"checked_at":state["codexbar"]["checked_at"],"costs":state["codexbar_costs"],"cost_error":state["codexbar_cost_error"],"reset_news":state["reset_news"]}),
     )
 }
 #[derive(Deserialize)]

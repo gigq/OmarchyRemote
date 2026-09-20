@@ -111,6 +111,7 @@ pub fn start() -> Widgets {
     let state = Arc::new(Mutex::new(
         json!({"metrics":{"error":"Starting sampler"},"tailscale":{"error":"Reading Tailscale"}}),
     ));
+    crate::willreset::start(state.clone());
     let usage_target = state.clone();
     tokio::spawn(async move {
         loop {
