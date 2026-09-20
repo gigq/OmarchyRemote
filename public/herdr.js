@@ -1,4 +1,4 @@
-/* Herd owns its app provider and Home widget, including thread navigation. */
+/* Herdr owns its app provider and Home widget, including thread navigation. */
 (() => {
   const { node, button } = HyprlandUtil;
   const { orderHerdr, paneGroup, HerdrApp } = HyprlandRemote;
@@ -6,10 +6,10 @@
     const scroll = root.querySelector('.herdr-widget-threads')?.scrollTop || 0;
     root.replaceChildren();
     const header = node('div', 'widget-line widget-legend');
-    header.append(node('strong', '', 'Herd'));
+    header.append(node('strong', '', 'herdr'));
     root.append(header);
     if (!snapshot) {
-      root.append(node('p', 'widget-muted', error || 'Connecting to Herd…'));
+      root.append(node('p', 'widget-muted', error || 'Connecting to herdr…'));
       return;
     }
     const tabs = new Map(snapshot.tabs.map(tab => [tab.tab_id, tab.label]));
@@ -64,6 +64,6 @@
   }
   HyprlandApps.provide('herdr', {
     create: (root, bridge) => new HerdrApp(root, bridge),
-    widgets: [{ key: 'herdr', name: 'Herd', endpoint: 'herdr/snapshot', render }],
+    widgets: [{ key: 'herdr', name: 'herdr', endpoint: 'herdr/snapshot', render }],
   });
 })();

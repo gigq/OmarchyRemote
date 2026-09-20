@@ -46,7 +46,7 @@ for (const width of [402, 1194]) {
       });
     });
     await page.goto('/native/');
-    if (width < 600) await page.getByRole('button', { name: 'Show Herd', exact: true }).click();
+    if (width < 600) await page.getByRole('button', { name: 'Show herdr', exact: true }).click();
     const widget = page.locator('#widget-herdr');
     await expect(widget).toContainText('1 need attention');
     await expect(widget).toContainText('Fix scrolling');
@@ -92,12 +92,12 @@ test('Herd migrates into an existing widget layout once and respects removal', a
   await expect.poll(order).toEqual(['weather', 'herdr']);
   await page.reload();
   await expect.poll(order).toEqual(['weather', 'herdr']);
-  await page.getByRole('button', { name: 'Show Herd', exact: true }).click();
+  await page.getByRole('button', { name: 'Show herdr', exact: true }).click();
   await expect(page.locator('#widget-herdr')).toContainText('No threads open.');
   await page.getByRole('button', { name: 'Manage widgets', exact: true }).click();
-  await page.getByRole('button', { name: 'Remove Herd', exact: true }).click();
+  await page.getByRole('button', { name: 'Remove herdr', exact: true }).click();
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.reload();
   await expect.poll(order).toEqual(['weather']);
-  await expect(page.getByRole('button', { name: 'Show Herd', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Show herdr', exact: true })).toHaveCount(0);
 });

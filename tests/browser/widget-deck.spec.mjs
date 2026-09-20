@@ -65,7 +65,7 @@ test('CodexBar usage, long-press overview, reordering, removal, adding and persi
   await p.reload();
   await expect(p.getByRole('button', { name: 'Show Host metrics', exact: true })).toHaveCount(0);
   await p.getByRole('button', { name: 'Manage widgets', exact: true }).click();
-  for (const label of ['Weather', 'Tailscale', 'CodexBar', 'Herd'])
+  for (const label of ['Weather', 'Tailscale', 'CodexBar', 'herdr'])
     await p.getByRole('button', { name: 'Remove ' + label, exact: true }).click();
   await p.getByRole('button', { name: 'Done', exact: true }).click();
   await expect(p.getByRole('button', { name: '+ Widgets', exact: true })).toBeVisible();
