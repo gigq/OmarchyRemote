@@ -31,6 +31,8 @@
 <script src="/codexbar.js"></script>
 <link rel="stylesheet" href="/codexbar.css">
 <script src="/remote.js"></script>
+<script src="/herdr.js"></script>
+<link rel="stylesheet" href="/herdr-widget.css">
 <script src="/dashboard.js"></script>
 <link rel="stylesheet" href="/dashboard.css">
 <script src="/expo.js"></script>
@@ -344,7 +346,7 @@
       <div style="display:flex;flex-direction:column;gap:10px">
         <div class="home-app-grid" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-content:start"><sc-for list="{{ homeApps }}" as="ap"><div class="home-tile" sc-camel-on-click="{{ ap.on }}" style="position:relative;height:62px;border-radius:16px;background:var(--theme-surface);border:1px solid var(--theme-border);display:flex;flex-direction:column;justify-content:space-between;padding:10px;cursor:pointer;box-sizing:border-box"><div class="nf home-tile-glyph" style="font-size:17px;line-height:1;color: {{ ap.c }}">{{ ap.g }}</div><div class="home-tile-name" style="font-size:10px;color:var(--theme-secondary)">{{ ap.n }}</div><span class="kbd super home-tile-key" style="display: {{ ap.keyDisplay }}">{{ ap.key }}</span><span class="home-app-badge" style="display: {{ ap.badgeDisplay }}">{{ ap.badge }}</span></div></sc-for><button class="home-pin" sc-camel-on-click="{{ managePins }}" aria-label="Manage pinned apps"><span class="nf"></span><small>pin</small></button></div>
       </div>
-      <div id="home-attention"></div><div id="home-metrics"></div><div id="home-widgets"></div>
+      <div id="home-metrics"></div><div id="home-widgets"></div>
       <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity:0;pointer-events:none">home</div>
     </div>
 

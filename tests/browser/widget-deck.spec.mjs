@@ -46,7 +46,9 @@ test('CodexBar usage, long-press overview, reordering, removal, adding and persi
   await p.waitForTimeout(400);
   await p.mouse.move(to.x, to.y, { steps: 10 });
   await p.mouse.up();
-  await expect.poll(() => order(p)).toEqual(['codexbar', 'weather', 'metrics', 'tailscale']);
+  await expect
+    .poll(() => order(p))
+    .toEqual(['codexbar', 'weather', 'metrics', 'tailscale', 'herdr']);
   await p.waitForTimeout(550);
   await p.getByRole('button', { name: 'Remove CodexBar', exact: true }).click();
   await expect(card('codexbar')).toHaveCount(0);
@@ -63,7 +65,7 @@ test('CodexBar usage, long-press overview, reordering, removal, adding and persi
   await p.reload();
   await expect(p.getByRole('button', { name: 'Show Host metrics', exact: true })).toHaveCount(0);
   await p.getByRole('button', { name: 'Manage widgets', exact: true }).click();
-  for (const label of ['Weather', 'Tailscale', 'CodexBar'])
+  for (const label of ['Weather', 'Tailscale', 'CodexBar', 'Herd'])
     await p.getByRole('button', { name: 'Remove ' + label, exact: true }).click();
   await p.getByRole('button', { name: 'Done', exact: true }).click();
   await expect(p.getByRole('button', { name: '+ Widgets', exact: true })).toBeVisible();

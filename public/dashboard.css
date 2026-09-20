@@ -49,31 +49,6 @@
   top: 7px;
   right: 8px;
 }
-#home-attention {
-  margin-top: auto;
-  padding: 16px 12px 12px;
-  font-size: 12px;
-  color: var(--theme-secondary);
-}
-#home-attention .legend-title {
-  padding: 0 6px;
-  min-height: 0;
-  height: auto;
-  border: 0;
-  border-radius: 0;
-  background: var(--chrome-ground);
-  font-size: 10px;
-  line-height: 13px;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-}
-#home-attention .legend-meta {
-  color: var(--theme-secondary);
-}
-#home-attention .legend-meta em {
-  font-style: normal;
-  color: var(--theme-accent);
-}
 #home-metrics {
   margin: 14px 0 10px;
   padding: 16px 12px 12px;
@@ -127,19 +102,6 @@
 }
 .dashboard-button:active {
   background: var(--theme-surface-raised);
-}
-.attention-preview {
-  display: block;
-  width: 100%;
-  border: 0;
-  text-align: left;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--theme-yellow);
-  min-height: 30px;
-  padding: 4px 0;
-  font-size: 11px;
 }
 .dashboard-empty {
   padding: 24px 8px;

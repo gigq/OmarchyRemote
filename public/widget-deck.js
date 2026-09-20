@@ -48,6 +48,15 @@
       this.order = Array.isArray(saved)
         ? [...new Set(saved.filter(k => catalog[k]))]
         : Object.keys(catalog);
+      // Remember known entries so a new app widget appears once on existing installs,
+      // without restoring widgets the user deliberately removed.
+      const known = read('omarchy-widget-catalog', ['weather', 'metrics', 'tailscale', 'codexbar']);
+      if (Array.isArray(saved) && Array.isArray(known))
+        for (const key of Object.keys(catalog))
+          if (!known.includes(key) && !this.order.includes(key)) this.order.push(key);
+      if (Array.isArray(saved) && JSON.stringify(saved) !== JSON.stringify(this.order))
+        HyprlandUtil.storage.write('omarchy-widgets', this.order);
+      HyprlandUtil.storage.write('omarchy-widget-catalog', Object.keys(catalog));
       this.selected = read('omarchy-widget-current');
       if (!this.order.includes(this.selected)) this.selected = this.order[0];
       this.viewport = el('div', 'widget-viewport');
@@ -143,6 +152,10 @@
       return b;
     }
     render(persist = true) {
+      this.strip.style.setProperty(
+        '--widget-rows',
+        Math.max(1, this.order.length - Number(this.order.includes('tailscale')))
+      );
       this.strip.replaceChildren(...this.order.map(k => this.roots[k]));
       if (!this.order.length)
         this.strip.append(this.button('+ Widgets', () => this.open(), 'widget-empty'));

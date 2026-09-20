@@ -50,7 +50,7 @@
     root.append(list);
   }
   const bank = provider => provider?.details?.usage?.codexResetCredits;
-  function widget(root, data) {
+  function widget(root, data, { error } = {}) {
     const providers = data?.providers || [];
     const id = selected();
     const p = providers.find(p => p.id === id);
@@ -71,7 +71,7 @@
     head.append(node('strong', '', 'CodexBar'), toggle);
     root.append(head);
     if (!p) {
-      root.append(node('p', 'widget-muted', 'Loading usage…'));
+      root.append(node('p', 'widget-muted', error || 'Loading usage…'));
       return;
     }
     windows(root, p.windows, true);

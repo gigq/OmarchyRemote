@@ -73,7 +73,7 @@
       this.clock();
       this.refreshLocale();
       this.clockTimer = setInterval(this.clock, 1000);
-      for (const widget of HyprlandApps.widgets()) widget.render(this.roots[widget.key], null);
+      for (const widget of HyprlandApps.widgets()) this.renderAppWidget(widget, null);
       this.roots.metrics.textContent = 'Connecting to host…';
       this.roots.tailscale.textContent = 'Reading Tailscale…';
       this.renderWeather();
@@ -179,24 +179,45 @@
       if (!response.ok) throw Error(data.error || 'Unavailable');
       return data;
     }
+    renderAppWidget(widget, data, error = null) {
+      widget.render(this.roots[widget.key], data, {
+        error,
+        open: action =>
+          this.logic.dashboard.navigate(widget.app, () =>
+            action?.(this.logic.remote.app(widget.app))
+          ),
+      });
+    }
     async poll() {
-      if (this.busy || document.hidden || this.logic.cur() !== 'home' || this.logic.state.ov)
-        return;
+      if (document.hidden || this.busy) return;
       this.busy = true;
       try {
-        const data = await this.api('widgets');
-        this.renderMetrics(data.metrics);
-        this.renderTailscale(data.tailscale);
-        for (const widget of HyprlandApps.widgets())
-          widget.render(this.roots[widget.key], data[widget.source || widget.key]);
-        this.deck.refresh();
-      } catch {
-        for (const k of ['metrics', 'tailscale', ...HyprlandApps.widgets().map(w => w.key)]) {
-          this.header(this.roots[k], k === 'metrics' ? 'btop' : k, '');
-          this.roots[k].append(
-            node('p', 'widget-muted', HyprlandApps.host.name + ' unavailable · reconnecting…')
-          );
+        const widgets = HyprlandApps.widgets();
+        const endpoints = [
+          ...new Set(['widgets', ...widgets.map(w => w.endpoint).filter(Boolean)]),
+        ];
+        const results = await Promise.allSettled(endpoints.map(path => this.api(path)));
+        const snapshots = new Map(endpoints.map((path, i) => [path, results[i]]));
+        const shared = snapshots.get('widgets');
+        if (shared.status === 'fulfilled') {
+          this.renderMetrics(shared.value.metrics);
+          this.renderTailscale(shared.value.tailscale);
+        } else {
+          for (const key of ['metrics', 'tailscale']) {
+            this.header(this.roots[key], key === 'metrics' ? 'btop' : key, '');
+            this.roots[key].append(
+              node('p', 'widget-muted', HyprlandApps.host.name + ' unavailable · reconnecting…')
+            );
+          }
         }
+        for (const widget of widgets) {
+          const result = snapshots.get(widget.endpoint || 'widgets');
+          if (result.status === 'fulfilled') {
+            const data = widget.endpoint ? result.value : result.value[widget.source || widget.key];
+            this.renderAppWidget(widget, data);
+          } else this.renderAppWidget(widget, null, 'Host unavailable · reconnecting…');
+        }
+        this.deck.refresh();
       } finally {
         this.busy = false;
       }

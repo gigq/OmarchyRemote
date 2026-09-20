@@ -179,13 +179,6 @@ html.desk-mode {
   grid-column: content;
   grid-row: 4;
 }
-.desk-mode #home-attention {
-  grid-column: content;
-  grid-row: 5;
-  align-self: end;
-  margin-top: auto;
-  font-size: 13px;
-}
 .desk-mode #home-metrics {
   grid-column: content;
   grid-row: 6;
@@ -254,7 +247,7 @@ html.desk-mode {
 .desk-mode .widget-strip {
   display: grid !important;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(3, auto);
+  grid-template-rows: repeat(var(--widget-rows, 3), auto);
   gap: 7px;
   height: 100% !important;
   width: auto !important;
@@ -504,9 +497,6 @@ html.desk-mode.vision-mode {
     height: 56px !important;
     padding: 8px !important;
     border-radius: 12px !important;
-  }
-  .vision-mode #home-attention {
-    font-size: 10px;
   }
 }
 @media (max-width: 900px) {

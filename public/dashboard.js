@@ -10,21 +10,19 @@
       this.logic = logic;
       this.abort = new AbortController();
       this.snapshot = null;
-      this.home = mount('home-attention');
       this.metrics = mount('home-metrics');
       this.launch = mount('dashboard-launcher');
       this.buildLauncher();
       const host = el('div', 'home-host');
       this.host = host;
       this.hostLine(HyprlandApps.host.name + ' · connecting…');
-      this.home.parentElement.insertBefore(
+      this.metrics.parentElement.insertBefore(
         host,
-        this.home.parentElement.querySelector('[data-live-date]')
+        this.metrics.parentElement.querySelector('[data-live-date]')
       );
-      this.home.classList.add('legend');
       this.metrics.classList.add('legend');
       this.metrics.append(el('span', 'legend-title', 'host'));
-      this.drawHome();
+      this.updateBadges();
       const pins = read('omarchy-home-pins', null);
       if (Array.isArray(pins))
         logic.set({ homePins: [...new Set(pins.filter(k => k !== 'home' && logic.APPS[k]))] });
@@ -222,10 +220,10 @@
         if (herd.status === 'fulfilled') {
           this.snapshot = herd.value;
           this.online = true;
-          this.drawHome();
+          this.updateBadges();
         } else {
           this.online = false;
-          this.drawHome();
+          this.updateBadges();
         }
         if (widgets.status === 'fulfilled') {
           const m = widgets.value.metrics;
@@ -291,40 +289,11 @@
     openPane(p) {
       this.navigate('herdr', () => this.logic.remote.app('herdr')?.select(p.pane_id));
     }
-    drawHome() {
-      this.home.replaceChildren();
-      const panes = this.panes(),
-        waiting = panes.filter(p => group(p) === 'attention');
-      const meta = el('span', 'legend-meta');
-      if (this.online) {
-        meta.append(
-          document.createTextNode(panes.length + ' panes · '),
-          el('em', '', panes.filter(p => group(p) === 'running').length + ' running')
-        );
-      } else meta.textContent = this.snapshot ? 'Disconnected' : 'Connecting…';
-      this.home.append(
-        this.button('herdr', () => this.logic.openApp('herdr'), 'legend-title'),
-        meta
-      );
+    updateBadges() {
+      const waiting = this.panes().filter(p => group(p) === 'attention').length;
       const badges = this.logic.state.badges || {};
-      if ((badges.herdr || 0) !== waiting.length)
-        this.logic.set({ badges: { ...badges, herdr: waiting.length } });
-      for (const p of waiting.slice(0, 2))
-        this.home.append(
-          this.button('● ' + title(p) + ' · needs you', () => this.openPane(p), 'attention-preview')
-        );
-      if (!waiting.length)
-        this.home.append(
-          el(
-            'div',
-            'dashboard-muted',
-            this.online
-              ? 'No agents need your attention.'
-              : this.snapshot
-                ? 'Reconnect to see agent status.'
-                : 'Connecting to Herd…'
-          )
-        );
+      if ((badges.herdr || 0) !== waiting)
+        this.logic.set({ badges: { ...badges, herdr: waiting } });
     }
     buildLauncher() {
       const line = el('div', 'launcher-search-line');

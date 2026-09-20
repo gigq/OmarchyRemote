@@ -58,6 +58,8 @@ CodexBar is sampled every five minutes using the installed CLI, with Codex's aut
 
 Usage and local costs are cached separately on the host every five minutes. The app reads that cache every thirty seconds while visible; Refresh rereads the cache without launching extra CLI processes. Connection failures preserve the last sample in an open app. The app and widget share their provider selection. Widgets registered by an app belong to its provider module: tapping opens the owning app, while embedded controls, scrolling and long-press management retain their behavior.
 
+Herd’s app-owned Home widget replaces the separate attention panel. It shows named threads and their projects, prioritizing threads waiting for attention and otherwise showing working threads. Each row opens its specific pane in Herd; tapping the widget background opens the app. Quiet, empty and disconnected states are explicit. It uses the same add/remove/reorder controls as CodexBar. New widget types appear once on existing installations without restoring widgets that were deliberately removed.
+
 Long-press a Home widget (or tap its manage icon) to open the widget overview. Drag after a short hold to reorder, swipe up or tap × to remove, and use the library to add widgets back. Enabled widgets, order and the selected page persist per phone. Removing a widget changes Home's layout without changing the host service or any provider subscription.
 
 ## Themes

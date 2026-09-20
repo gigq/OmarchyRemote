@@ -1532,10 +1532,10 @@
           create: (root, bridge) => new TerminalApp(root, bridge, key),
           close: app => closeSession(key, app),
         });
-    HyprlandApps.provide('herdr', { create: (root, bridge) => new HerdrApp(root, bridge) });
   }
   window.HyprlandRemote = {
     attach: logic => new HostBridge(logic),
+    HerdrApp,
     keyInput,
     orderHerdr,
     paneGroup,

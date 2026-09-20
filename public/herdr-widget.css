@@ -1,0 +1,51 @@
+.widget-herdr {
+  gap: 10px;
+}
+.herdr-widget-threads {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+.herdr-widget-thread {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 0;
+  border: 0;
+  border-bottom: 1px solid var(--theme-border);
+  background: transparent;
+  color: var(--theme-foreground);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.herdr-widget-thread:last-child {
+  border-bottom: 0;
+}
+.herdr-widget-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.herdr-widget-info strong,
+.herdr-widget-info small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.herdr-widget-state {
+  max-width: 40%;
+  overflow-wrap: anywhere;
+  font-size: 10px;
+  color: var(--theme-accent);
+}
+.herdr-widget-thread[data-state='attention'] .herdr-widget-state {
+  color: var(--theme-yellow);
+}
