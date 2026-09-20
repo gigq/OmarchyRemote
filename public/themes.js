@@ -189,7 +189,6 @@
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute('content', current.colors.background);
-    document.querySelectorAll('[data-theme-name]').forEach(n => (n.textContent = current.name));
     document
       .querySelectorAll('[data-theme-for]')
       .forEach(n => (n.textContent = 'for ' + current.name));

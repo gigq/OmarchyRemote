@@ -108,12 +108,6 @@
   flex: none;
   width: 100%;
 }
-.dashboard-line {
-  display: flex;
-  gap: 8px;
-  justify-content: space-between;
-  align-items: center;
-}
 .dashboard-muted {
   color: var(--theme-secondary);
   font-size: 11px;
@@ -134,11 +128,6 @@
 .dashboard-button:active {
   background: var(--theme-surface-raised);
 }
-.dashboard-line > .dashboard-button {
-  border: 0;
-  background: transparent;
-  padding: 4px;
-}
 .attention-preview {
   display: block;
   width: 100%;
@@ -152,36 +141,10 @@
   padding: 4px 0;
   font-size: 11px;
 }
-.dashboard-actions {
-  display: flex;
-  gap: 8px;
-}
-.dashboard-button.primary {
-  background: var(--theme-accent);
-  color: var(--theme-background);
-}
-.attention-card {
-  padding: 16px;
-  border: 1px solid color-mix(in srgb, var(--theme-yellow) 50%, var(--theme-border));
-  border-radius: 16px;
-  background: var(--theme-surface);
-  margin-top: 12px;
-}
-.attention-card h3 {
-  font-size: 16px;
-  font-weight: 500;
-  margin: 8px 0;
-}
 .dashboard-empty {
   padding: 24px 8px;
   color: var(--theme-secondary);
   font-size: 12px;
-}
-#dashboard-notifications {
-  max-height: calc(var(--canvas-height, 874px) - 160px);
-  overflow: auto;
-  touch-action: pan-y;
-  overscroll-behavior: contain;
 }
 .launcher-search-line {
   display: flex;

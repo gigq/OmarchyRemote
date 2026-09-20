@@ -227,3 +227,13 @@ fragment when navigating between origins. The fragment is consumed and removed
 before shell initialization. Disconnect uses a standalone same-origin picker so
 host connections stop. Native mode provides a picker even while the server is down;
 a PWA’s cross-origin navigation remains subject to the browser’s standalone scope.
+
+### System top-edge gestures
+
+The notification and quick-settings pull-down panes have been removed on every
+viewport, including iPhone and iPad. Their rendering, gesture actions, notification
+mute/dismiss state and styles are gone. Home still shows Herd attention summaries,
+and Settings remains a regular app. The middle of the in-app top bar still opens
+the launcher; pulling down at either corner does nothing in the shell. Native
+build 35 defers only the bottom edge, letting iOS handle its top-edge gestures
+without the app’s previous extra swipe requirement.

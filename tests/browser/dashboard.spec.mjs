@@ -1,14 +1,15 @@
 import { test, expect } from './fixtures.mjs';
 import { captureTerminals } from './terminal-helper.mjs';
 async function launcher(page) {
+  const center = page.viewportSize().width / 2;
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
-    touchPoints: [{ x: 200, y: 30 }],
+    touchPoints: [{ x: center, y: 30 }],
   });
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchMove',
-    touchPoints: [{ x: 200, y: 180 }],
+    touchPoints: [{ x: center, y: 180 }],
   });
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await cdp.detach();
@@ -94,46 +95,33 @@ test('Home pins persist without removing apps from the launcher', async ({ page 
   await page.getByRole('searchbox', { name: 'Search apps, panes and files' }).fill('lnav');
   await expect(page.locator('.launcher-result').getByText('lnav', { exact: true })).toBeVisible();
 });
-test('attention inbox dismisses an event but shows a new request for the same pane', async ({
-  page,
-}) => {
-  let seq = 1;
-  await page.route('**/api/herdr/snapshot', route =>
-    route.fulfill({
-      json: {
-        workspaces: [{ workspace_id: 'qa', label: 'QA' }],
-        tabs: [{ tab_id: 'qa', label: 'QA' }],
-        panes: [
-          {
-            pane_id: 'qa',
-            workspace_id: 'qa',
-            tab_id: 'qa',
-            agent: 'codex',
-            agent_status: 'blocked',
-            attention_kind: 'permission',
-            state_change_seq: seq,
-            terminal_title_stripped: 'QA approval',
-          },
-        ],
-      },
-    })
-  );
-  await page.goto('/native/');
-  await expect(page.locator('#home-attention')).toContainText('QA approval');
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send('Input.dispatchTouchEvent', {
-    type: 'touchStart',
-    touchPoints: [{ x: 70, y: 30 }],
+for (const viewport of [
+  { width: 402, height: 874 },
+  { width: 1194, height: 834 },
+]) {
+  test(`top corners have no shell panes at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.route('**/api/**', route => route.abort());
+    await page.goto('/native/');
+    await expect(page.locator('#touch-shell')).toBeVisible();
+    const cdp = await page.context().newCDPSession(page);
+    for (const x of [40, viewport.width - 40]) {
+      await cdp.send('Input.dispatchTouchEvent', {
+        type: 'touchStart',
+        touchPoints: [{ x, y: 30 }],
+      });
+      await cdp.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ x, y: 180 }],
+      });
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await expect(page.locator('.shell-shade, #dashboard-notifications')).toHaveCount(0);
+      await expect(
+        page.getByRole('searchbox', { name: 'Search apps, panes and files' })
+      ).not.toBeVisible();
+    }
+    await cdp.detach();
+    await launcher(page);
+    await expect(page.getByRole('searchbox')).toBeFocused();
   });
-  await cdp.send('Input.dispatchTouchEvent', {
-    type: 'touchMove',
-    touchPoints: [{ x: 70, y: 180 }],
-  });
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  await cdp.detach();
-  await expect(page.locator('.attention-card')).toBeVisible();
-  await page.getByRole('button', { name: 'dismiss', exact: true }).click();
-  await expect(page.locator('.attention-card')).toHaveCount(0);
-  seq = 2;
-  await expect(page.locator('.attention-card')).toBeVisible({ timeout: 8000 });
-});
+}

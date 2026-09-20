@@ -1,4 +1,4 @@
-/* Live dashboard, attention inbox and a native-input universal launcher. */
+/* Live dashboard, Home attention summaries and a native-input universal launcher. */
 (() => {
   const { node: el, mount } = window.HyprlandUtil;
   const read = window.HyprlandUtil.storage.read,
@@ -9,13 +9,10 @@
     constructor(logic) {
       this.logic = logic;
       this.abort = new AbortController();
-      this.dismissed = read('omarchy-inbox-dismissed', []);
-      this.muted = read('omarchy-inbox-muted', false);
       this.snapshot = null;
       this.home = mount('home-attention');
       this.metrics = mount('home-metrics');
       this.launch = mount('dashboard-launcher');
-      this.inbox = mount('dashboard-notifications');
       this.buildLauncher();
       const host = el('div', 'home-host');
       this.host = host;
@@ -28,7 +25,6 @@
       this.metrics.classList.add('legend');
       this.metrics.append(el('span', 'legend-title', 'host'));
       this.drawHome();
-      this.drawInbox();
       const pins = read('omarchy-home-pins', null);
       if (Array.isArray(pins))
         logic.set({ homePins: [...new Set(pins.filter(k => k !== 'home' && logic.APPS[k]))] });
@@ -227,11 +223,9 @@
           this.snapshot = herd.value;
           this.online = true;
           this.drawHome();
-          this.drawInbox();
         } else {
           this.online = false;
           this.drawHome();
-          this.drawInbox();
         }
         if (widgets.status === 'fulfilled') {
           const m = widgets.value.metrics;
@@ -332,91 +326,6 @@
           )
         );
     }
-    eventKey(p) {
-      return p.pane_id + ':' + p.state_change_seq + ':' + p.agent_status;
-    }
-    drawInbox() {
-      const signature = JSON.stringify([
-        this.online,
-        this.muted,
-        this.dismissed,
-        this.panes().map(p => [this.eventKey(p), title(p)]),
-      ]);
-      if (signature === this.inboxSignature) return;
-      this.inboxSignature = signature;
-      const scroll = this.inbox.scrollTop;
-      this.inbox.replaceChildren();
-      const panes = this.panes().filter(
-        p => group(p) === 'attention' && !this.dismissed.includes(this.eventKey(p))
-      );
-      const header = el('div', 'dashboard-line');
-      header.append(
-        el('span', '', `notifications · ${this.muted ? 0 : panes.length}`),
-        this.button('clear all', () => {
-          this.dismissed = [...this.dismissed, ...panes.map(p => this.eventKey(p))].slice(-500);
-          save('omarchy-inbox-dismissed', this.dismissed);
-          this.drawInbox();
-        }),
-        this.button('×', () => this.logic.set({ shade: null }))
-      );
-      this.inbox.append(header);
-      const source = el('div', 'dashboard-line');
-      source.append(
-        el('span', 'dashboard-muted', 'HERD'),
-        this.button(this.muted ? 'unmute' : 'mute', () => {
-          this.muted = !this.muted;
-          save('omarchy-inbox-muted', this.muted);
-          this.drawInbox();
-        })
-      );
-      this.inbox.append(source);
-      if (!this.online)
-        this.inbox.append(el('p', 'dashboard-muted', 'Disconnected · showing last known state.'));
-      if (this.muted || !panes.length)
-        this.inbox.append(
-          el(
-            'p',
-            'dashboard-empty',
-            this.muted ? 'Herd notifications are muted.' : 'You’re all caught up.'
-          )
-        );
-      if (!this.muted)
-        for (const p of panes) {
-          const card = el('article', 'attention-card');
-          card.append(
-            el('div', 'dashboard-muted', title(p) + ' · ' + (p.agent || 'shell')),
-            el('h3', '', 'waiting for you'),
-            el(
-              'p',
-              'dashboard-muted',
-              p.attention_kind === 'permission'
-                ? 'Permission request · review in pane'
-                : 'Open the pane to read and respond.'
-            )
-          );
-          const actions = el('div', 'dashboard-actions');
-          actions.append(
-            this.button('open pane', () => this.openPane(p), 'primary'),
-            this.button('dismiss', () => this.dismiss(p))
-          );
-          card.append(actions);
-          let start;
-          card.onpointerdown = e => (start = { x: e.clientX, y: e.clientY });
-          card.onpointerup = e => {
-            if (start && Math.abs(e.clientX - start.x) > 80 && Math.abs(e.clientY - start.y) < 40)
-              this.dismiss(p);
-            start = null;
-          };
-          this.inbox.append(card);
-        }
-      this.inbox.scrollTop = scroll;
-    }
-    dismiss(p) {
-      this.dismissed.push(this.eventKey(p));
-      this.dismissed = this.dismissed.slice(-500);
-      save('omarchy-inbox-dismissed', this.dismissed);
-      this.drawInbox();
-    }
     buildLauncher() {
       const line = el('div', 'launcher-search-line');
       // The search is a prompt field: ❯ prefix, accent ring on focus, an `esc` keycap beside it.
@@ -468,9 +377,8 @@
           this.results.querySelector('button')?.click();
         }
       };
-      for (const root of [this.launch, this.inbox])
-        for (const type of ['pointerdown', 'pointerup', 'touchstart', 'touchmove', 'touchend'])
-          root.addEventListener(type, e => e.stopPropagation(), { passive: true });
+      for (const type of ['pointerdown', 'pointerup', 'touchstart', 'touchmove', 'touchend'])
+        this.launch.addEventListener(type, e => e.stopPropagation(), { passive: true });
     }
     async search() {
       const seq = (this.seq = (this.seq || 0) + 1);

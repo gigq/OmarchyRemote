@@ -400,7 +400,7 @@ test('pointer focus is opt-in, desk-only and ignores dragging, touch and overlay
     await p.evaluate(options => hover('files', options), options);
     expect((await state(p)).focus).toBe('browser');
   }
-  for (const flag of ['ov', 'launch', 'shade']) {
+  for (const flag of ['ov', 'launch']) {
     await p.evaluate(flag => {
       logic.state[flag] = true;
       hover('files');

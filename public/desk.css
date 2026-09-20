@@ -295,9 +295,8 @@ html.desk-mode {
   position: static;
 }
 
-/* Launcher, shades, and the SUPER keyboard hang from the centre of the wider bar. */
-.desk-mode .shell-overlay,
-.desk-mode .shell-shade {
+/* Launcher and the SUPER keyboard hang from the centre of the wider bar. */
+.desk-mode .shell-overlay {
   left: calc(50% - 300px) !important;
   right: auto !important;
   width: 600px;

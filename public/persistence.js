@@ -12,8 +12,6 @@
     'omarchy-codexbar-provider',
     'omarchy-herdr-fit',
     'omarchy-files-mode',
-    'omarchy-inbox-dismissed',
-    'omarchy-inbox-muted',
     'omarchy-layout-phone',
     'omarchy-layout-desk',
     'omarchy-focus-follows-pointer',

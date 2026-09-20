@@ -358,14 +358,6 @@
     <div id="dashboard-launcher"></div>
   </div>
 
-  <div class="shell-shade" style="position:absolute;left:0;right:0;top:52px;z-index:14;background:color-mix(in srgb, var(--theme-surface) 96%, transparent);border:1px solid var(--theme-border);border-top:0;border-radius:0 0 28px 28px;visibility: {{ shadeNVisibility }};transform: {{ shadeNTf }};transition: {{ tr }};padding:14px 18px 18px;display:flex;flex-direction:column;gap:8px;box-sizing:border-box">
-    <div id="dashboard-notifications"></div>
-  </div>
-
-  <div class="shell-shade" style="position:absolute;left:0;right:0;top:52px;z-index:14;background:color-mix(in srgb, var(--theme-surface) 96%, transparent);border:1px solid var(--theme-border);border-top:0;border-radius:0 0 28px 28px;visibility: {{ shadeQVisibility }};transform: {{ shadeQTf }};transition: {{ tr }};padding:14px 18px 18px;display:flex;flex-direction:column;gap:10px;box-sizing:border-box">
-    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--theme-secondary);padding:0 4px"><span>quick settings</span></div>
-    <div style="display:flex;gap:8px;margin-top:4px"><div sc-camel-on-click="{{ openSettings }}" style="flex:1;padding:12px;border-radius:12px;background:var(--theme-background);border:1px solid var(--theme-surface-raised);font-size:11px;cursor:pointer"><div style="color:var(--theme-secondary);margin-bottom:2px">theme</div><div data-theme-name>Prototype</div></div><div sc-camel-on-click="{{ openSettings }}" style="flex:1;padding:12px;border-radius:12px;background:var(--theme-background);border:1px solid var(--theme-surface-raised);font-size:11px;cursor:pointer"><div style="color:var(--theme-secondary);margin-bottom:2px">all settings</div><div>{{ openCount }} workspaces · touch</div></div></div>
-  </div>
 
 </div>
 </div>
@@ -405,7 +397,6 @@ class Component extends DCLogic {
     sup: false,
     term: false,
     ctl: false,
-    shade: null,
     launch: false,
     query: '',
     shift: false,
@@ -463,7 +454,7 @@ class Component extends DCLogic {
     return s.desk && window.HyprlandDesk ? window.HyprlandDesk.cur(s) : s.open[s.ws];
   }
   reset() {
-    return { ov: false, kb: false, sup: false, ctl: false, launch: false, shade: null, query: '' };
+    return { ov: false, kb: false, sup: false, ctl: false, launch: false, query: '' };
   }
   // Desk mode: workspaces hold several windows; `jump` and `focusApp` address a window by app key.
   jump(key) {
@@ -481,7 +472,7 @@ class Component extends DCLogic {
     else this.set({ ws: window.HyprlandDesk.deskOf(s, key), focus: key, scratchVisible: false });
   }
   openLauncher() {
-    const show = () => this.set({ launch: true, kb: true, sup: false, ov: false, shade: null });
+    const show = () => this.set({ launch: true, kb: true, sup: false, ov: false });
     if (window.ReactDOM?.flushSync) window.ReactDOM.flushSync(show);
     else show();
     this.dashboard?.field.focus();
@@ -568,7 +559,6 @@ class Component extends DCLogic {
       E = Math.max(24, p.w * 0.08),
       T = 40,
       third = p.w / 3;
-    if (s.shade && dy < -T) return this.set({ shade: null });
     if (s.launch && dy < -T) return this.set({ launch: false, kb: false, query: '' });
     if (p.y > p.h - E && dy < -T) {
       const corner = p.w * 0.15;
@@ -576,10 +566,10 @@ class Component extends DCLogic {
       if (p.x > p.w - corner) return this.set({ kb: true, sup: true, ov: false, launch: false });
       return this.set({ ov: !s.ov, kb: false, launch: false });
     }
+    // Only the middle of the in-app bar opens the launcher. Corners belong to the OS.
     if (p.y < 70 && dy > T) {
-      if (p.x < third) return this.set({ shade: 'notif', kb: false, ov: false, launch: false });
-      if (p.x > 2 * third) return this.set({ shade: 'qs', kb: false, ov: false, launch: false });
-      return this.openLauncher();
+      if (p.x >= third && p.x <= 2 * third) return this.openLauncher();
+      return;
     }
     if (s.ov && dy > T && Math.abs(dx) < T) return this.set({ ov: false });
     if (p.x < E && dx > T) return this.go(s.ws - 1);
@@ -881,14 +871,13 @@ class Component extends DCLogic {
     const m = this.matches();
     const homeKeys = s.homePins || window.HyprlandApps.DEFAULT_PINS;
     return {
-      swipeHintOpacity: s.ov || s.kb || s.launch || s.shade ? 0 : 1,
+      swipeHintOpacity: s.ov || s.kb || s.launch ? 0 : 1,
       keyEnd: this.keyEnd,
       down: this.down,
       up: this.up,
       cancel: this.cancel,
       tr,
       rad,
-      openCount: n,
       pills,
       wsLabel: D ? D.label : '',
       isWifi: online,
@@ -925,13 +914,8 @@ class Component extends DCLogic {
               ? window.HyprlandApps.host.name + ' · ' + (A[cur].typing || A[cur].name)
               : 'touch keyboard',
       launchVisibility: s.launch ? 'visible' : 'hidden',
-      shadeNVisibility: s.shade === 'notif' ? 'visible' : 'hidden',
-      shadeQVisibility: s.shade === 'qs' ? 'visible' : 'hidden',
       launchTf: s.launch ? 'translateY(0)' : 'translateY(-104%)',
       matchCount: m.length,
-      shadeNTf: s.shade === 'notif' ? 'translateY(0)' : 'translateY(-104%)',
-      shadeQTf: s.shade === 'qs' ? 'translateY(0)' : 'translateY(-104%)',
-      openSettings: () => this.openApp('settings'),
     };
   }
 }

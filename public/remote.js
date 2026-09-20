@@ -1402,7 +1402,6 @@
         app.show?.(visible.includes(key) && !ov, {
           covered: !!(
             s.launch ||
-            s.shade ||
             s.map ||
             this.logic.desk?.sheet ||
             this.logic.desk?.covered(key) ||
@@ -1426,7 +1425,6 @@
         document.hidden ||
         s.ov ||
         s.launch ||
-        s.shade ||
         s.map ||
         s.sup ||
         document.querySelector('.desk-sheet,[role="dialog"]')

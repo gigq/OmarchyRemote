@@ -96,7 +96,7 @@ install or configure a remote server.
 
 ## Using it
 
-**Phone.** Start edge gestures inside the app's content, above the home indicator and below the status area. Left and right edges switch workspaces. Swipe down from the top left, middle, or right for notifications, the launcher, or quick settings. Swipe up from the bottom corners for the keyboard or the SUPER keyboard; the middle of the bottom edge opens Expo, as does tapping the active workspace pill. Open workspaces are restored on reload and host sessions reconnect; when a shell's process exits its tab closes, and the terminal window closes with its last tab.
+**Phone.** Start edge gestures inside the app's content, above the home indicator and below the status area. Left and right edges switch workspaces. Swipe down from the middle of the in-app top bar for the launcher. The top corners have no app pull-down panes; the native app leaves the system top-edge gestures to iOS. Open Settings from Home or the launcher. Swipe up from the bottom corners for the keyboard or the SUPER keyboard; the middle of the bottom edge opens Expo, as does tapping the active workspace pill. Open workspaces are restored on reload and host sessions reconnect; when a shell's process exits its tab closes, and the terminal window closes with its last tab.
 
 **iPad, Mac, and desktop windows.** When both edges of the viewport are at least 600 px, the shell switches to desk mode: a 1:1 layout that fills the window, Home with the clock, app grid, and all widgets at once, and workspaces that tile windows with Hyprland's dwindle split (up to four per workspace). Hardware keyboards use ⌘ on Apple devices (Omarchy's SUPER) and Ctrl+Alt elsewhere. Press ⌘/ or tap the shortcut button in the top bar for the same table.
 
@@ -111,7 +111,7 @@ install or configure a remote server.
 | ⌘W                                 | Close the focused window                              |
 | ⌘⏎ (or ⌘T), ⌘⇧B, ⌘⇧F, ⌘⇧A, ⌘⇧D, ⌘, | Terminal, browser, files, Herdr, lazydocker, settings |
 | ⌘K                                 | Launcher                                              |
-| ⌘/                                 | Shortcut sheet; Esc closes sheets, Expo, and shades   |
+| ⌘/                                 | Shortcut sheet; Esc closes sheets and Expo            |
 
 0 selects workspace 10. Window cycling requires multiple windows in the current workspace and follows the focused window in fullscreen. Text fields keep the standard editing shortcuts, including ⌘arrows and ⌘⌫; use ⌘J to cycle while editing. ⌘Space and ⌘backtick are left to the operating system. The native app registers shell commands with UIKit; web browsers can intercept shortcuts before the shell receives them. Numbered moves use Option on iPad because Shift-Command-3/4 are screenshot shortcuts; the browser version retains Shift. ⌘Enter opens Terminal (⌘T remains an alternate). Shift-Return for Browser and Delete for closing windows remain browser-only aliases.
 

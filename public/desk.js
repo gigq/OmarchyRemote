@@ -511,8 +511,7 @@
       keys: 'E',
       code: /^KeyE$/,
       label: 'Expo overview',
-      run: d =>
-        d.logic.set({ ov: !d.logic.state.ov, kb: false, sup: false, launch: false, shade: null }),
+      run: d => d.logic.set({ ov: !d.logic.state.ov, kb: false, sup: false, launch: false }),
     },
     {
       group: 'Windows',
@@ -1010,7 +1009,6 @@
         s.desk &&
         !s.ov &&
         !s.launch &&
-        !s.shade &&
         !this.sheet &&
         ![...document.querySelectorAll('[role="dialog"], [aria-modal="true"], [role="menu"]')].some(
           el => el.getClientRects().length
@@ -1219,7 +1217,6 @@
         !s.desk ||
         s.ov ||
         s.launch ||
-        s.shade ||
         this.sheet ||
         !key ||
         !s.open.includes(key) ||
@@ -1246,7 +1243,7 @@
       const s = this.logic.state,
         logic = this.logic;
       const match = this.actions().find(a => HyprlandKeymap.matches(a, e));
-      const blocked = this.sheet || s.ov || s.shade || s.launch;
+      const blocked = this.sheet || s.ov || s.launch;
       if (
         e.key === 'Escape' &&
         !e.metaKey &&
@@ -1257,7 +1254,6 @@
         if (this.sheet) this.closeSheet();
         else if (editable(e.target)) return;
         else if (s.ov) logic.set({ ov: false });
-        else if (s.shade) logic.set({ shade: null });
         else return;
         e.preventDefault();
         e.stopImmediatePropagation();
