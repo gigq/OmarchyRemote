@@ -412,6 +412,15 @@
   };
   const BINDINGS = [
     {
+      group: 'Hosts',
+      keys: '⌃ 1…9 / 0',
+      ctrl: true,
+      code: /^Digit[0-9]$/,
+      desk: true,
+      label: 'Switch to host',
+      run: (d, e) => window.HyprlandHosts?.switchIndex((Number(e.code.slice(5)) || 10) - 1),
+    },
+    {
       group: 'Workspaces',
       keys: '1…9 / 0',
       code: /^Digit[0-9]$/,
@@ -859,7 +868,7 @@
             label,
             group: b.group,
             meta: true,
-            ctrl: false,
+            ctrl: !!b.ctrl,
             alt: !!b.alt,
             shift: !!b.shift,
             editing: code.startsWith('Arrow') && !b.alt,

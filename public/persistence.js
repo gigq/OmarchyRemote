@@ -305,6 +305,10 @@
     const state = node('span', 'legend-meta device-state');
     state.setAttribute('role', 'status');
     section.append(node('span', 'legend-title', 'this device'), state);
+    section.append(
+      key('hosts', () => window.HyprlandHosts?.manage(), 'Manage hosts'),
+      key('disconnect', () => window.HyprlandHosts?.disconnect(), 'Disconnect')
+    );
     const row = node('form', 'device-name-form'),
       field = node('label', 'prompt-field device-field'),
       input = node('input');

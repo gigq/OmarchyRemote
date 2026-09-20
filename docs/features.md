@@ -196,3 +196,34 @@ use a different chord if the system consumes one. Overrides are included in the
 existing per-device layout backup. Browser custom bindings apply to all Browser
 windows. Native build 33 also supports punctuation and combined Command+Control
 bindings. Phone workspaces retain their existing geometry.
+
+### Saved hosts and disconnect
+
+Native build 34 introduces a device-local host directory, seeded from the existing
+configured URL. Settings and the pull-down launcher expose Manage hosts and
+Disconnect. The standalone local picker adds, renames (save the same address),
+removes and connects up to ten hosts. HTTPS addresses are canonicalized to the
+host’s `/native/` shell; credentials, query strings and custom paths are rejected.
+Loopback HTTP is supported for development only. Native Add Host uses UIKit text
+fields in a system dialog; the PWA keeps an inline form.
+
+Command+Control+1–9/0 switches hosts by saved order without consuming workspace
+number shortcuts. These actions participate in the desk registry, help and custom
+bindings. The local picker also accepts their default chords. A disconnect unloads
+the shell and embedded web surfaces, cancels automatic reconnect, and stays at the
+picker on relaunch; it does not close remote PTYs or agents. Failed live connections
+use the selected host’s offline snapshot with the existing retry behavior.
+
+Native preferences are mirrored under the selected host URL. Switch requests flush
+the current snapshot before selecting the destination; storage messages include a
+host scope so late messages cannot overwrite another host’s state. The bundled
+origin replaces its local snapshot on scope changes even when the destination has
+no saved state. Live origins keep separate local storage. The directory itself is
+not included in any host backup, and removing an entry does not delete its saved
+preferences. Native embedded website cookies stay shared on the device.
+
+PWA clients retain their directory locally and transfer that directory alone in a
+fragment when navigating between origins. The fragment is consumed and removed
+before shell initialization. Disconnect uses a standalone same-origin picker so
+host connections stop. Native mode provides a picker even while the server is down;
+a PWA’s cross-origin navigation remains subject to the browser’s standalone scope.

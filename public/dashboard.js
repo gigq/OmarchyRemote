@@ -480,10 +480,10 @@
       this.results.replaceChildren();
       // Rows: a cursor bar marks the selection, a glyph carries the app's tile color,
       // and a kbd chip shows the SUPER binding (⏎ on the selected row).
-      const add = (heading, items) => {
+      const add = (heading, items, limit = 6) => {
         if (!items.length) return;
         this.results.append(el('div', 'launcher-group', heading));
-        for (const item of items.slice(0, 6)) {
+        for (const item of items.slice(0, limit)) {
           const b = this.button('', item.run, 'launcher-result');
           const body = el('div', 'launcher-body'),
             name = el('strong', '');
@@ -519,6 +519,8 @@
               run: () => this.logic.openApp(k),
             }))
         );
+      if (!['@', '/', '>'].includes(mode))
+        add('HOSTS', window.HyprlandHosts?.launcherItems(q) || [], 12);
       if (!['/', '>'].includes(mode))
         add(
           'PANES',

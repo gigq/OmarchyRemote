@@ -5,21 +5,69 @@ import OSLog
 import CoreLocation
 import GameController
 
-/// Where the live shell comes from: the `OmarchyRemoteURL` Info.plist key (the address the
-/// backend is published at, for example a Tailscale Serve URL). Debug builds load it and
-/// fall back to the bundled copy; page-to-app bridges only answer that origin or the bundle.
+/// The connection directory belongs to this device, independently of host-backed preferences.
+@MainActor
 enum ShellSource {
-    static let liveURL: URL? = {
-        guard let raw = Bundle.main.object(forInfoDictionaryKey: "OmarchyRemoteURL") as? String,
-            let url = URL(string: raw.trimmingCharacters(in: .whitespacesAndNewlines)), url.host != nil
+    private static let directoryKey = "omarchyHostDirectory"
+    static func normalize(_ raw: String) -> URL? {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard var parts = URLComponents(string: text.contains("://") ? text : "https://" + text),
+            let host = parts.host, !host.isEmpty,
+            parts.scheme == "https" || (parts.scheme == "http" && ["localhost", "127.0.0.1", "[::1]"].contains(host)),
+            parts.user == nil, parts.password == nil, parts.query == nil, parts.fragment == nil,
+            ["", "/", "/native", "/native/"].contains(parts.path)
         else { return nil }
-        return url
-    }()
+        parts.host = host.lowercased()
+        if parts.port == (parts.scheme == "https" ? 443 : 80) { parts.port = nil }
+        parts.path = "/native/"
+        return parts.url
+    }
+    static var directory: [String: Any] {
+        get {
+            if let saved = UserDefaults.standard.dictionary(forKey: directoryKey) { return saved }
+            let raw = Bundle.main.object(forInfoDictionaryKey: "OmarchyRemoteURL") as? String ?? ""
+            let url = normalize(raw)
+            let hosts: [[String: String]] =
+                url.map { [["id": $0.absoluteString, "url": $0.absoluteString, "name": $0.host ?? "Host"]] } ?? []
+            let initial: [String: Any] = ["hosts": hosts, "selected": url?.absoluteString ?? ""]
+            UserDefaults.standard.set(initial, forKey: directoryKey)
+            return initial
+        }
+        set { UserDefaults.standard.set(newValue, forKey: directoryKey) }
+    }
+    static var liveURL: URL? {
+        guard let selected = directory["selected"] as? String,
+            let hosts = directory["hosts"] as? [[String: String]],
+            let host = hosts.first(where: { $0["id"] == selected }), let raw = host["url"]
+        else { return nil }
+        return normalize(raw)
+    }
+    static var scope: String { liveURL?.absoluteString ?? "" }
     static var hostLabel: String { liveURL?.host ?? "the host" }
-    @MainActor static func trusts(_ origin: WKSecurityOrigin) -> Bool {
+    static func trusts(_ origin: WKSecurityOrigin) -> Bool {
         guard let live = liveURL, let scheme = live.scheme, let host = live.host else { return false }
         let port = live.port ?? (scheme == "https" ? 443 : 80)
-        return origin.protocol == scheme && origin.host == host && origin.port == port
+        // WebKit reports zero when the origin has no explicit port.
+        let originPort = origin.port == 0 ? (origin.protocol == "https" ? 443 : 80) : origin.port
+        return origin.protocol == scheme && origin.host == host && originPort == port
+    }
+}
+
+@MainActor
+private final class ShellHostsBridge: NSObject, WKScriptMessageHandlerWithReply {
+    weak var owner: ShellViewController?
+    func userContentController(
+        _ controller: WKUserContentController, didReceive message: WKScriptMessage,
+        replyHandler: @escaping @MainActor @Sendable (Any?, String?) -> Void
+    ) {
+        guard message.frameInfo.isMainFrame,
+            ShellSource.trusts(message.frameInfo.securityOrigin) || message.frameInfo.request.url?.isFileURL == true,
+            let body = message.body as? [String: Any], body["scope"] as? String == ShellSource.scope
+        else {
+            replyHandler(nil, "This connection has changed.")
+            return
+        }
+        owner?.changeHost(body, reply: replyHandler)
     }
 }
 
@@ -84,11 +132,16 @@ private final class ShellStorageBridge: NSObject, WKScriptMessageHandler {
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame,
             ShellSource.trusts(message.frameInfo.securityOrigin) || message.frameInfo.request.url?.isFileURL == true,
-            let values = message.body as? [String: String], values.count <= 128,
+            let body = message.body as? [String: Any]
+        else { return }
+        save(body)
+    }
+    func save(_ body: [String: Any]) {
+        guard body["scope"] as? String == ShellSource.scope, !ShellSource.scope.isEmpty,
+            let values = body["values"] as? [String: String], values.count <= 128,
             values.allSatisfy({ $0.key.hasPrefix("omarchy-") && $0.key.count <= 100 && $0.value.utf8.count <= 262144 }),
             values.reduce(0, { $0 + $1.value.utf8.count }) <= 1048576
         else { return }
-        // A local mirror also seeds the bundled offline origin and a changed live URL path.
         UserDefaults.standard.set(values, forKey: key)
     }
 }
@@ -641,6 +694,10 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     private let browserDevice = BrowserDeviceBridge()
     private let keyboardState = ShellKeyboardStateBridge()
     private let storageBridge = ShellStorageBridge()
+    private let hostsBridge = ShellHostsBridge()
+    private var showingHosts = false
+    private var shellBottom: NSLayoutConstraint?
+    private var pickerBottom: NSLayoutConstraint?
     private var shellEditing = false
     private var lastKeyboardGeometry: [Double]?
     private let keyboardProbe = UIView()
@@ -654,13 +711,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     private var contentNeedsRecovery = false
     private var recoveryAttempts: [Date] = []
     private var reconnectTask: Task<Void, Never>?
-    private var developmentURL: URL? {
-        #if DEBUG
-            ShellSource.liveURL
-        #else
-            nil
-        #endif
-    }
+    private var developmentURL: URL? { ShellSource.liveURL }
     private var prefersBundle: Bool {
         UserDefaults.standard.bool(forKey: "useBundledPrototype")
             || ProcessInfo.processInfo.arguments.contains("--bundled")
@@ -746,7 +797,8 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     fileprivate func updateKeyboardEditing(_ editing: Bool) {
         guard editing != shellEditing else { return }
         shellEditing = editing
-        UIMenuSystem.main.setNeedsRebuild()
+        // Picker shortcuts do not depend on text editing.
+        if !showingHosts { UIMenuSystem.main.setNeedsRebuild() }
     }
 
     @objc private func handleShellKey(_ command: UIKeyCommand) {
@@ -823,6 +875,9 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         configuration.websiteDataStore = WKWebsiteDataStore(
             forIdentifier: UUID(uuidString: "D4D78234-4474-4CD8-9D29-C9F226134F66")!)
         configuration.userContentController.add(storageBridge, name: "shellStorage")
+        hostsBridge.owner = self
+        configuration.userContentController.addScriptMessageHandler(
+            hostsBridge, contentWorld: .page, name: "shellHosts")
         refreshDeviceIdentity(in: configuration.userContentController)
         keyboardState.owner = self
         configuration.userContentController.add(keyboardState, name: "shellKeyboard")
@@ -878,10 +933,13 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
                 keyboardProbe.heightAnchor.constraint(equalToConstant: 0),
             ])
         }
+        // The connection form follows the keyboard; the full-screen shell owns its own geometry.
+        shellBottom = webView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        pickerBottom = webView.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
+        shellBottom?.isActive = true
         // Deliberately use the view edges, not the safe-area guide.
         NSLayoutConstraint.activate([
             webView.topAnchor.constraint(equalTo: view.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
@@ -1008,6 +1066,9 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         UserDefaults.standard.set(deviceID, forKey: identityKey)
         let identity: [String: Any] = [
             "id": deviceID, "name": UIDevice.current.model, "snapshot": storageBridge.snapshot,
+            "scope": ShellSource.scope, "hosts": ShellSource.directory,
+            "legacyScope": ShellSource.normalize(
+                Bundle.main.object(forInfoDictionaryKey: "OmarchyRemoteURL") as? String ?? "")?.absoluteString ?? "",
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: identity),
             let json = String(data: data, encoding: .utf8)
@@ -1023,6 +1084,9 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     }
 
     @objc private func loadShell() {
+        pickerBottom?.isActive = false
+        shellBottom?.isActive = true
+        webView.scrollView.isScrollEnabled = false
         refreshDeviceIdentity(in: webView.configuration.userContentController)
         reconnectTask?.cancel()
         reconnectTask = nil
@@ -1033,7 +1097,9 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         usingOfflineFallback = false
         sourceButton.isHidden = true
         retryButton.isHidden = true
-        if let url = developmentURL, !prefersBundle {
+        if showingHosts || ShellSource.liveURL == nil {
+            loadHostPicker()
+        } else if let url = developmentURL, !prefersBundle {
             let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 8)
             remoteNavigation = webView.load(request)
             let generation = loadGeneration
@@ -1046,6 +1112,118 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         } else {
             loadBundledShell()
         }
+    }
+
+    fileprivate func changeHost(_ body: [String: Any], reply: @escaping @MainActor @Sendable (Any?, String?) -> Void) {
+        storageBridge.save(body)
+        var directory = ShellSource.directory
+        var hosts = directory["hosts"] as? [[String: String]] ?? []
+        let action = body["action"] as? String ?? ""
+        let id = body["id"] as? String ?? ""
+        switch action {
+        case "prompt":
+            guard presentedViewController == nil else {
+                reply(nil, "Finish the open dialog first.")
+                return
+            }
+            let alert = UIAlertController(
+                title: "Add Host", message: "Enter the machine’s HTTPS address.", preferredStyle: .alert)
+            alert.addTextField { field in
+                field.placeholder = "Name (optional)"
+                field.accessibilityLabel = "Name"
+                field.autocapitalizationType = .none
+                field.autocorrectionType = .no
+                field.clearButtonMode = .whileEditing
+            }
+            alert.addTextField { field in
+                field.placeholder = "https://machine.tailnet.ts.net"
+                field.accessibilityLabel = "Address"
+                field.keyboardType = .URL
+                field.textContentType = .URL
+                field.autocapitalizationType = .none
+                field.autocorrectionType = .no
+                field.clearButtonMode = .whileEditing
+            }
+            let save = UIAlertAction(title: "Save", style: .default) { [weak self, weak alert] _ in
+                guard let self, let fields = alert?.textFields else {
+                    reply(nil, "The dialog closed.")
+                    return
+                }
+                self.changeHost(
+                    ["action": "save", "name": fields[0].text ?? "", "url": fields[1].text ?? ""], reply: reply)
+            }
+            save.isEnabled = false
+            alert.textFields?[1].addAction(
+                UIAction { [weak alert, weak save] _ in
+                    save?.isEnabled = ShellSource.normalize(alert?.textFields?[1].text ?? "") != nil
+                }, for: .editingChanged)
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in reply(ShellSource.directory, nil) })
+            alert.addAction(save)
+            alert.preferredAction = save
+            present(alert, animated: true)
+            return
+        case "save":
+            guard let raw = body["url"] as? String, let url = ShellSource.normalize(raw) else {
+                reply(nil, "Use the host’s HTTPS address.")
+                return
+            }
+            let existing = hosts.firstIndex(where: { $0["url"] == url.absoluteString })
+            guard existing != nil || hosts.count < 10 else {
+                reply(nil, "You can save up to 10 hosts.")
+                return
+            }
+            let name = String(
+                (body["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).prefix(80))
+            let item = [
+                "id": url.absoluteString, "url": url.absoluteString, "name": name.isEmpty ? (url.host ?? "Host") : name,
+            ]
+            if let existing {
+                hosts[existing] = item
+            } else {
+                hosts.append(item)
+            }
+            directory["hosts"] = hosts
+        case "remove":
+            directory["hosts"] = hosts.filter { $0["id"] != id }
+            if directory["selected"] as? String == id { directory["selected"] = "" }
+        case "connect":
+            guard hosts.contains(where: { $0["id"] == id }) else {
+                reply(nil, "Host not found.")
+                return
+            }
+            directory["selected"] = id
+            showingHosts = false
+            UserDefaults.standard.set(false, forKey: "useBundledPrototype")
+        case "disconnect":
+            directory["selected"] = ""
+            showingHosts = true
+        case "manage":
+            showingHosts = true
+        default:
+            reply(nil, "Unknown host action.")
+            return
+        }
+        ShellSource.directory = directory
+        reply(directory, nil)
+        if ["connect", "disconnect", "manage"].contains(action)
+            || (action == "remove" && id == body["scope"] as? String)
+        {
+            browserDevice.resetAll()
+            shellEditing = false
+            updateCommands([])
+            loadShell()
+        }
+    }
+
+    private func loadHostPicker() {
+        guard let root = Bundle.main.resourceURL?.appendingPathComponent("Web", isDirectory: true) else { return }
+        showingHosts = true
+        shellBottom?.isActive = false
+        pickerBottom?.isActive = true
+        webView.scrollView.isScrollEnabled = true
+        webRoot = root
+        refreshDeviceIdentity(in: webView.configuration.userContentController)
+        webView.loadFileURL(root.appendingPathComponent("hosts.html"), allowingReadAccessTo: root)
     }
 
     private func loadBundledShell() {
@@ -1063,7 +1241,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     }
 
     private func fallBackToBundle() {
-        guard !usingOfflineFallback, !prefersBundle, developmentURL != nil else { return }
+        guard !usingOfflineFallback, !prefersBundle, developmentURL != nil, !showingHosts else { return }
         loadGeneration += 1
         loadTimeout?.cancel()
         remoteNavigation = nil
@@ -1108,7 +1286,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     // Probe without replacing the usable offline page on every failed attempt.
     private func scheduleLiveReconnect() {
         reconnectTask?.cancel()
-        guard let url = developmentURL, !prefersBundle else { return }
+        guard let url = developmentURL, !prefersBundle, !showingHosts else { return }
         reconnectTask = Task { [weak self] in
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .seconds(15)) } catch { return }
@@ -1220,7 +1398,8 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     ) {
         guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
         if let live = developmentURL,
-            url.scheme == live.scheme, url.host == live.host, url.port == live.port
+            url.scheme == live.scheme, url.host == live.host,
+            (url.port ?? (url.scheme == "https" ? 443 : 80)) == (live.port ?? (live.scheme == "https" ? 443 : 80))
         {
             decisionHandler(.allow)
         } else if url.isFileURL, let root = webRoot,

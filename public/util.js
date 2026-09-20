@@ -23,8 +23,12 @@
   try {
     if (
       native &&
-      Number(native['omarchy-local-modified'] || 0) >
-        Number(localStorage.getItem('omarchy-local-modified') || 0)
+      ((window.__OMARCHY_DEVICE__?.scope &&
+        localStorage.getItem('hyper-storage-scope') !== window.__OMARCHY_DEVICE__.scope &&
+        (localStorage.getItem('hyper-storage-scope') !== null ||
+          window.__OMARCHY_DEVICE__.scope !== window.__OMARCHY_DEVICE__.legacyScope)) ||
+        Number(native['omarchy-local-modified'] || 0) >
+          Number(localStorage.getItem('omarchy-local-modified') || 0))
     ) {
       for (const key of Object.keys(localStorage))
         if (key.startsWith('omarchy-')) localStorage.removeItem(key);
@@ -32,6 +36,8 @@
         if (key.startsWith('omarchy-') && typeof value === 'string')
           localStorage.setItem(key, value);
     }
+    if (window.__OMARCHY_DEVICE__?.scope)
+      localStorage.setItem('hyper-storage-scope', window.__OMARCHY_DEVICE__.scope);
   } catch {}
   let mirrorPending = false;
   const mirror = () => {
@@ -45,7 +51,11 @@
             .filter(k => k.startsWith('omarchy-'))
             .map(k => [k, localStorage.getItem(k)])
         );
-        window.webkit.messageHandlers.shellStorage.postMessage(values);
+        window.webkit.messageHandlers.shellStorage.postMessage(
+          window.__OMARCHY_DEVICE__?.scope === undefined
+            ? values
+            : { scope: window.__OMARCHY_DEVICE__.scope, values }
+        );
       } catch {}
     });
   };

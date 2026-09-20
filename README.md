@@ -67,6 +67,33 @@ Everything runs on the host you already own. There is no cloud relay: a Rust bac
 
 5. Open the address on the phone. Safari's Share → Add to Home Screen installs it as a web app; open it online once so the offline shell caches. The native app below wraps the same pages at `/native/`.
 
+## Multiple hosts
+
+Settings → Manage hosts, or search “hosts” in the launcher, opens the device’s saved
+connection list. Add an HTTPS address for another machine running this backend and
+web server, then select it to connect. Saving the same address again renames it.
+Save up to ten hosts; their list order determines **⌘ Control 1–9 / 0** on iPad
+and visionOS (0 selects host 10). These shortcuts are separate from workspace
+numbers and appear in shortcut help and customization. The launcher also lists
+each saved host directly.
+
+**Disconnect** in Settings or the launcher returns to the local host picker without
+closing remote shells or agents. The selected host survives app restarts; an
+explicit disconnect stays disconnected. The native picker works without a server.
+Host switching requires native **build 34**. Existing installations keep their
+configured host automatically; no address needs to be re-entered.
+
+The host directory stays on the device, outside host backups. Each host retains
+its own preferences, layouts, terminal IDs and Herd drafts, including when using
+the shared bundled offline page. Removing a saved host does not delete its remote
+data or its saved preferences. Embedded website cookies remain device-wide.
+In the PWA, connecting navigates to the other origin and carries only the host list
+in a URL fragment (removed immediately after loading); preferences remain isolated
+by origin. Cross-origin navigation may leave an installed PWA’s standalone scope.
+Use the native app for switching within one app window. Hosts must already be
+reachable on the device’s network, such as through Tailscale; this screen does not
+install or configure a remote server.
+
 ## Using it
 
 **Phone.** Start edge gestures inside the app's content, above the home indicator and below the status area. Left and right edges switch workspaces. Swipe down from the top left, middle, or right for notifications, the launcher, or quick settings. Swipe up from the bottom corners for the keyboard or the SUPER keyboard; the middle of the bottom edge opens Expo, as does tapping the active workspace pill. Open workspaces are restored on reload and host sessions reconnect; when a shell's process exits its tab closes, and the terminal window closes with its last tab.
@@ -139,7 +166,7 @@ Shell shortcuts keep the same meaning inside Browser: ⌘numbers switch workspac
 
 The native visionOS destination uses the same shell in a freely resizable window, initially 1280×900 points with a 600×400 minimum. Width and height resize independently, and the shell remains in desktop mode even in a short window. VisionOS supplies the system window controls; the shell’s iPhone home indicator is hidden there. The native Vision Pro build replaces the earlier iPad-compatible installation using the same bundle identifier.
 
-Before building, create `ios/Local.xcconfig` (ignored by git) and set three values in it: `OMARCHY_REMOTE_URL` (your HTTPS address followed by `/native/`, written as `https:/$()/host:12443/native/` because `//` starts a comment in xcconfig files), `DEVELOPMENT_TEAM`, and `PRODUCT_BUNDLE_IDENTIFIER` under a domain you control. The committed `ios/Config.xcconfig` holds the placeholders and includes your local file, so the Xcode project itself needs no edits. Debug builds load that live URL and fall back to the bundled offline copy if the host is unavailable; Release builds use the bundled copy only. If iOS terminates the shell’s web-content process, the app recovers automatically, deferring recovery until foreground when necessary. Repeated process failures are bounded before showing a manual retry. The offline copy preserves local settings and drafts, retries the host on foreground, and checks every 15 seconds while active without replacing the offline page on failed checks. Terminal output, agents, and other host-backed functions still require a connection. The offline status also offers a manual Retry live button. Every build runs `scripts/prepare-native.py` to package `public/` into the app. Hold two fingers on the screen for about a second to switch between the live and bundled sources or reload.
+Before building, create `ios/Local.xcconfig` (ignored by git) and set three values in it: `OMARCHY_REMOTE_URL` (your HTTPS address followed by `/native/`, written as `https:/$()/host:12443/native/` because `//` starts a comment in xcconfig files), `DEVELOPMENT_TEAM`, and `PRODUCT_BUNDLE_IDENTIFIER` under a domain you control. The committed `ios/Config.xcconfig` holds the placeholders and includes your local file, so the Xcode project itself needs no edits. The configured URL seeds the device’s initial saved host. Both Debug and Release builds load the selected host and fall back to the bundled offline copy if it is unavailable. If iOS terminates the shell’s web-content process, the app recovers automatically, deferring recovery until foreground when necessary. Repeated process failures are bounded before showing a manual retry. The offline copy preserves local settings and drafts, retries the host on foreground, and checks every 15 seconds while active without replacing the offline page on failed checks. Terminal output, agents, and other host-backed functions still require a connection. The offline status also offers a manual Retry live button. Every build runs `scripts/prepare-native.py` to package `public/` into the app. Hold two fingers on the screen for about a second to switch between the live and bundled sources or reload.
 
 Build from Xcode with a paired device, or headlessly with `xcodebuild` and the OmarchyRemote scheme. `python -m unittest discover -s scripts -p 'test_native_bundle.py'` checks the packaging; `python scripts/prepare-native.py` writes an inspection copy to the ignored `ios/Generated/Web`.
 

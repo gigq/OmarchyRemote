@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <title>Hosts · Omarchy Remote</title>
+    <link rel="stylesheet" href="hosts.css" />
+    <script src="hosts.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p>OMARCHY REMOTE</p>
+        <h1>Your hosts</h1>
+        <p>Connect to a machine running Omarchy Remote.</p>
+      </header>
+      <ol id="host-list" aria-label="Saved hosts"></ol>
+      <button id="host-back" hidden>Return to current host</button>
+      <form id="host-form">
+        <h2>Add a host</h2>
+        <label
+          >Name
+          <input
+            name="name"
+            placeholder="Optional name"
+            maxlength="80"
+            autocomplete="off"
+            autocapitalize="none"
+            autocorrect="off"
+            spellcheck="false"
+        /></label>
+        <label
+          >Address
+          <input
+            name="url"
+            placeholder="https://machine.tailnet.ts.net"
+            required
+            autocapitalize="none"
+            autocorrect="off"
+            spellcheck="false"
+            inputmode="url"
+            autocomplete="url"
+        /></label>
+        <button type="submit">Save host</button>
+        <p id="host-error" role="alert"></p>
+      </form>
+      <footer>Saved on this device. ⌘ Control 1–0 switches hosts.</footer>
+    </main>
+  </body>
+</html>

@@ -151,6 +151,72 @@ final class HardwareShortcutTests: XCTestCase {
         app.buttons["Done"].tap()
     }
 
+    private func openHostDirectory() {
+        app.typeKey("k", modifierFlags: .command)
+        let launcher = app.searchFields["Search apps, panes and files"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 5))
+        launcher.typeText("Manage hosts")
+        let manage = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Manage hosts")).firstMatch
+        XCTAssertTrue(manage.waitForExistence(timeout: 5))
+        manage.tap()
+        XCTAssertTrue(app.staticTexts["Your hosts"].waitForExistence(timeout: 10))
+    }
+
+    func testHostDirectoryPersistsAndDisconnects() {
+        openHostDirectory()
+        let oldQA = app.buttons["Remove Q"]
+        if oldQA.exists { oldQA.tap() }
+        let removeQA = app.buttons["Remove QA Local"]
+        if removeQA.exists { removeQA.tap() }
+        app.buttons["Add a host"].tap()
+        let name = app.alerts["Add Host"].textFields["Name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.tap()
+        _ = app.keyboards.firstMatch.waitForExistence(timeout: 3)
+        app.typeText("QA Local")
+        expectation(for: NSPredicate(format: "value == %@", "QA Local"), evaluatedWith: name)
+        waitForExpectations(timeout: 5)
+        let address = app.alerts["Add Host"].textFields["Address"]
+        address.tap()
+        app.typeText("http://127.0.0.1:9")
+        expectation(for: NSPredicate(format: "value == %@", "http://127.0.0.1:9"), evaluatedWith: address)
+        waitForExpectations(timeout: 5)
+        app.alerts["Add Host"].buttons["Save"].tap()
+        XCTAssertTrue(removeQA.waitForExistence(timeout: 5))
+        let connectQA = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@ AND NOT label BEGINSWITH %@", "QA Local", "Remove")
+        ).firstMatch
+        connectQA.tap()
+        XCTAssertTrue(app.staticTexts["terminal"].firstMatch.waitForExistence(timeout: 15))
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.staticTexts["terminal"].firstMatch.waitForExistence(timeout: 20))
+        openHostDirectory()
+        XCTAssertTrue(removeQA.waitForExistence(timeout: 5))
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "Saved hosts after relaunch"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        app.buttons["Return to current host"].tap()
+        XCTAssertTrue(app.staticTexts["terminal"].firstMatch.waitForExistence(timeout: 15))
+        app.typeKey("k", modifierFlags: .command)
+        let launcher = app.searchFields["Search apps, panes and files"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 5))
+        launcher.typeText("Disconnect")
+        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Disconnect")).firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["Your hosts"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["Return to current host"].exists)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Your hosts"].waitForExistence(timeout: 15))
+        app.typeKey("1", modifierFlags: [.command, .control])
+        XCTAssertTrue(app.staticTexts["terminal"].firstMatch.waitForExistence(timeout: 15))
+        openHostDirectory()
+        removeQA.tap()
+        XCTAssertFalse(removeQA.exists)
+        app.buttons["Return to current host"].tap()
+    }
+
     func testBrowserPhysicalShortcuts() {
         app.terminate()
         app.launchArguments = ["--bundled", "--browser-shortcuts-test"]

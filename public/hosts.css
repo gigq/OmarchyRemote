@@ -1,0 +1,93 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, sans-serif;
+  background: #191724;
+  color: #e0def4;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+main {
+  max-width: 640px;
+  margin: auto;
+  padding: max(48px, env(safe-area-inset-top)) 24px max(32px, env(safe-area-inset-bottom));
+}
+header p,
+footer,
+small {
+  color: #a8a3bd;
+}
+h1 {
+  font-size: 30px;
+}
+h2 {
+  font-size: 18px;
+}
+ol {
+  padding: 0;
+  list-style: none;
+}
+li {
+  display: flex;
+  gap: 12px;
+  margin: 12px 0;
+}
+button,
+input {
+  font: inherit;
+  border: 1px solid #6e668b;
+  border-radius: 12px;
+  padding: 12px;
+  background: #242133;
+  color: inherit;
+  min-height: 44px;
+}
+button {
+  cursor: pointer;
+}
+button:hover,
+button:focus-visible {
+  border-color: #c4a7e7;
+}
+.host-connect {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.host-connect small {
+  display: block;
+  font-size: 12px;
+  margin-top: 6px;
+}
+.host-connect[aria-current] {
+  border-color: #c4a7e7;
+}
+.host-number {
+  float: right;
+  color: #c4a7e7;
+  margin-left: 12px;
+}
+form {
+  margin: 32px 0;
+  border-top: 1px solid #403b54;
+  padding-top: 12px;
+}
+label {
+  display: block;
+  margin: 16px 0;
+}
+input {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+}
+#host-error {
+  color: #ebbcba;
+}
+footer {
+  font-size: 13px;
+}
