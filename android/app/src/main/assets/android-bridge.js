@@ -8,6 +8,7 @@
     if (!callback) return;
     pending.delete(reply.id);
     if (reply.error) callback.reject(new Error(reply.error));
+    else if (reply.value?.error) callback.reject(new Error(reply.value.error));
     else callback.resolve(reply.value);
   };
   const send = (channel, body) =>

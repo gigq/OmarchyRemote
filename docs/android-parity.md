@@ -28,3 +28,5 @@ visible here until they are actually implemented and tested.
 Initial emulator evidence: `artifacts/android/initial.png`, `terminal.png`, and CDP inspection confirmed platform `android`, live host content, battery state, and typed terminal echo. The initial full-screen OS education dialog was dismissed. The QA-created terminal was closed without sending any input to existing Herdr threads.
 
 Android Gradle `assembleDebug` and `lintDebug` pass. The minimum supported Android version is 11 (API 30); the runtime read of bundled assets avoids newer Java APIs unavailable there.
+
+Weather location: implemented foreground permission handling, denial, disabled services, a 20-second lookup timeout, and cancellation on host change or destruction. Emulator checks verified no unsolicited permission prompt, denial, successful GPS lookup at an injected coordinate, and disabled-service errors. Clicking the weather compass populated the live widget and saved the location; screenshot: `artifacts/android/location-weather.png`. Approximate-only physical-device behavior remains to verify.

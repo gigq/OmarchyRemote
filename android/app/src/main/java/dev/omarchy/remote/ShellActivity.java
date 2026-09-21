@@ -21,6 +21,7 @@ public final class ShellActivity extends Activity {
   private static final String ASSET = "https://appassets.androidplatform.net";
   private final Map<String, Page> pages = new LinkedHashMap<>();
   private FrameLayout root;
+  private DeviceLocation deviceLocation;
   private WebView shell;
   private android.content.SharedPreferences prefs;
   private JSONObject directory;
@@ -42,6 +43,7 @@ public final class ShellActivity extends Activity {
   @Override
   public void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
+    deviceLocation = new DeviceLocation(this);
     prefs = getSharedPreferences("shell", MODE_PRIVATE);
     directory = json(prefs.getString("hosts", "{\"hosts\":[]}"));
     selected = directory.optString("selected", "");
@@ -189,6 +191,7 @@ public final class ShellActivity extends Activity {
   }
 
   private void loadShell(boolean picker) {
+    deviceLocation.cancel();
     for (Page page : pages.values()) {
       root.removeView(page.web);
       page.web.destroy();
@@ -340,7 +343,22 @@ public final class ShellActivity extends Activity {
                           .contains(Locale.getDefault().getCountry())
                       ? "f"
                       : "c"));
-        else throw new IllegalStateException("Location support is being configured");
+        else if (body.optString("action").equals("location"))
+          deviceLocation.request(
+              body.optBoolean("requestPermission"),
+              (location, error) -> {
+                if (error != null) reply.send(object("error", error));
+                else
+                  reply.send(
+                      object(
+                          "lat",
+                          Math.round(location.getLatitude() * 100) / 100.0,
+                          "lon",
+                          Math.round(location.getLongitude() * 100) / 100.0,
+                          "name",
+                          "Current location"));
+              });
+        else throw new IllegalArgumentException("Unknown weather action");
         break;
       case "browserDevice":
         reply.send(browser(body));
@@ -681,7 +699,14 @@ public final class ShellActivity extends Activity {
   }
 
   @Override
+  public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
+    super.onRequestPermissionsResult(request, permissions, results);
+    if (request == DeviceLocation.PERMISSION_REQUEST) deviceLocation.permissionResult();
+  }
+
+  @Override
   protected void onDestroy() {
+    deviceLocation.cancel();
     unregisterReceiver(battery);
     if (fileCallback != null) fileCallback.onReceiveValue(null);
     for (Page page : pages.values()) page.web.destroy();
