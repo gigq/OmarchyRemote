@@ -1535,7 +1535,7 @@
         if (this.pendingNativeFocus?.target === target) return;
         const token = ++this.focusSerial;
         this.pendingNativeFocus = { token, target, input, current: this.logic.cur() };
-        bridge.postMessage({ focusRequest: token });
+        bridge.postMessage({ focusRequest: token, keepKeyboardHidden: !this.logic.state.kb });
       } else {
         if (input) input.focus();
         else target.focus({ preventScroll: true });

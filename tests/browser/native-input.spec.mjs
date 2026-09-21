@@ -95,6 +95,8 @@ for (const trigger of ['button', 'keyboard', 'beforeinput'])
     await page.evaluate(() => {
       input.dismissOnSend = true;
       window.hiddenCount = 0;
+      window.nativeDismissals = 0;
+      window.addEventListener('hyprland-keyboard-dismiss', () => nativeDismissals++);
       input.onHide = () => {
         hiddenCount++;
         input.show(false);
@@ -121,11 +123,13 @@ for (const trigger of ['button', 'keyboard', 'beforeinput'])
     await expect(field).toBeFocused();
     await expect(field).toHaveValue('Keep this draft');
     expect(await page.evaluate(() => hiddenCount)).toBe(0);
+    expect(await page.evaluate(() => nativeDismissals)).toBe(0);
     await page.evaluate(() => (window.offline = false));
     await submit();
     await expect(field).toBeHidden();
     await expect(field).not.toBeFocused();
     expect(await page.evaluate(() => hiddenCount)).toBe(1);
+    expect(await page.evaluate(() => nativeDismissals)).toBe(1);
     expect(await page.evaluate(() => sent)).toEqual([{ text: 'Keep this draft', enter: true }]);
     await expect(field).toHaveValue('');
   });
@@ -217,5 +221,36 @@ test('unavailable draft storage warns without losing or sending the current text
     input.select('agent-a');
   });
   await expect(page.locator('.native-input')).toHaveValue('Keep this unsaved text');
+  expect(await page.evaluate(() => sent)).toEqual([]);
+});
+
+test('message Ctrl editing stays local while direct Ctrl+A reaches the host', async ({ page }) => {
+  const field = page.locator('.native-input');
+  await field.fill('A local draft');
+  await field.press('Control+a');
+  expect(await field.evaluate(el => [el.selectionStart, el.selectionEnd])).toEqual([0, 13]);
+  await field.press('Backspace');
+  await expect(field).toHaveValue('');
+  expect(await page.evaluate(() => keys)).toEqual([]);
+  await page.getByRole('button', { name: 'Switch typing mode' }).click();
+  await field.press('Control+a');
+  expect(await page.evaluate(() => keys)).toEqual([{ key: 'a', mods: { ctrl: true } }]);
+});
+
+test('changing a message thread ends its editor composition before restoring another draft', async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    input.select('one');
+    input.focus();
+    input.field.value = 'First draft';
+    input.field.dispatchEvent(new CompositionEvent('compositionstart'));
+    input.field.dispatchEvent(new InputEvent('input', { data: 'First draft', isComposing: true }));
+    input.select('two');
+  });
+  await expect(page.locator('.native-input')).toHaveValue('');
+  expect(await page.evaluate(() => input.composing)).toBe(false);
+  await page.evaluate(() => input.select('one'));
+  await expect(page.locator('.native-input')).toHaveValue('First draft');
   expect(await page.evaluate(() => sent)).toEqual([]);
 });

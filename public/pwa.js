@@ -9,7 +9,7 @@ function deskMode() {
 function keyboardInset() {
   const native = window.__HYPRLAND_KEYBOARD__;
   if (
-    deskMode() &&
+    (deskMode() || window.__OMARCHY_PLATFORM__ === 'android') &&
     native &&
     Number.isFinite(native.inset) &&
     Number.isFinite(native.height) &&
@@ -102,7 +102,8 @@ if (!window.__HYPRLAND_DEV__ && 'serviceWorker' in navigator && window.isSecureC
   });
 }
 
-// iOS shrinks the visual viewport for its keyboard, not the layout viewport.
+// iOS phones shrink the visual viewport. Full-screen Android reports keyboard
+// occlusion through native insets even when both browser viewports stay full height.
 function fitNativeKeyboard() {
   const scale =
     parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--canvas-scale')) || 1;

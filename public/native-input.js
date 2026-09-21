@@ -74,10 +74,7 @@
         this.ctrlButton.setAttribute('aria-pressed', String(this.ctrl));
         this.focus();
       });
-      this.hideButton = button('⌄', () => {
-        this.field.blur();
-        this.onHide();
-      });
+      this.hideButton = button('⌄', () => this.dismiss());
       this.hideButton.setAttribute('aria-label', 'Hide keyboard');
       const row = (this.row = document.createElement('div'));
       row.className = 'native-input-row';
@@ -140,6 +137,17 @@
           this.enter();
           return;
         }
+        // Message drafts are ordinary local text, including Android/desktop Ctrl editing.
+        // The explicit Ctrl tool and direct-key mode still send terminal control keys.
+        if (
+          this.message &&
+          !this.ctrl &&
+          e.ctrlKey &&
+          !e.altKey &&
+          !e.metaKey &&
+          /^[acvxyz]$/i.test(e.key)
+        )
+          return;
         if ((e.ctrlKey || this.ctrl) && /^[a-z]$/i.test(e.key)) {
           e.preventDefault();
           this.key(e.key, { ctrl: true });
@@ -279,8 +287,7 @@
           this.field.value = '';
           this.storeDraft(this.id, '');
           if (this.dismissOnSend) {
-            this.field.blur();
-            this.onHide();
+            this.dismiss();
             return;
           }
         }
@@ -301,6 +308,11 @@
       }
       this.storeDraft(id, text);
     }
+    dismiss() {
+      this.field.blur();
+      this.onHide();
+      window.dispatchEvent(new Event('hyprland-keyboard-dismiss'));
+    }
     focus() {
       this.element.hidden = false;
       this.field.focus({ preventScroll: true });
@@ -312,6 +324,11 @@
       if (!visible) this.field.blur();
     }
     select(id) {
+      if (id !== this.id) {
+        // Finish the old editor session before replacing its text with another thread.
+        this.field.blur();
+        this.composing = false;
+      }
       this.saveDraft();
       if (this.id) this.drafts.set(this.id, this.draft);
       this.id = id;

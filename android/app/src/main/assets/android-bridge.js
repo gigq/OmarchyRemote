@@ -60,6 +60,9 @@
       }
     },
   });
+  window.addEventListener('hyprland-keyboard-dismiss', () =>
+    send('shellKeyboard', { dismiss: true })
+  );
   const reportEditing = () => {
     const el = document.activeElement;
     send(

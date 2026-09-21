@@ -471,6 +471,9 @@ public final class ShellActivity extends Activity {
         hosts(body, reply);
         break;
       case "shellKeyboard":
+        if (body.optBoolean("dismiss"))
+          ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
+              .hideSoftInputFromWindow(root.getWindowToken(), 0);
         if (raw instanceof Boolean) shellEditing = (Boolean) raw;
         if (body.has("commands")) deviceKeys.register(body.optJSONArray("commands"));
         if (body.has("focusRequest")) {
@@ -485,13 +488,15 @@ public final class ShellActivity extends Activity {
                   evaluate(
                       "window.HyprlandRemote?.focusFromNative(" + token + ",true)",
                       focused -> {
+                        if (!"true".equals(focused)) return;
                         if (generation == launchGeneration) {
-                          if ("true".equals(focused)) {
-                            launchReadyToken = token;
-                            drainLaunchKeys(token, generation);
-                          }
+                          launchReadyToken = token;
+                          drainLaunchKeys(token, generation);
                         }
-                        if (getResources().getConfiguration().keyboard
+                        if (body.optBoolean("keepKeyboardHidden"))
+                          ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
+                              .hideSoftInputFromWindow(root.getWindowToken(), 0);
+                        else if (getResources().getConfiguration().keyboard
                             != Configuration.KEYBOARD_QWERTY)
                           ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
                               .showSoftInput(shell, InputMethodManager.SHOW_IMPLICIT);

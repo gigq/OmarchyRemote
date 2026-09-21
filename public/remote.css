@@ -135,7 +135,8 @@
   height: 100%;
   vertical-align: top;
 }
-.remote-app.native-typing.with-keyboard {
+.remote-app.native-typing.with-keyboard,
+.android-shell.system-keyboard-open .remote-app.native-typing {
   bottom: max(40px, calc(var(--keyboard-inset, 0px) + 8px));
 }
 .native-input-panel {
