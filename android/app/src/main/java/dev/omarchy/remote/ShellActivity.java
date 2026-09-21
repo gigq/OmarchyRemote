@@ -11,6 +11,7 @@ import android.view.*;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.*;
 import android.widget.*;
+import androidx.core.text.util.LocalePreferences;
 import androidx.webkit.*;
 import java.io.*;
 import java.util.*;
@@ -540,10 +541,12 @@ public final class ShellActivity extends Activity {
           reply.send(
               object(
                   "unit",
-                  Arrays.asList("US", "BS", "BZ", "KY", "PR", "PW")
-                          .contains(Locale.getDefault().getCountry())
+                  LocalePreferences.TemperatureUnit.FAHRENHEIT.equals(
+                          LocalePreferences.getTemperatureUnit())
                       ? "f"
-                      : "c"));
+                      : "c",
+                  "locale",
+                  Locale.getDefault(Locale.Category.FORMAT).toLanguageTag()));
         else if (body.optString("action").equals("location"))
           deviceLocation.request(
               body.optBoolean("requestPermission"),
