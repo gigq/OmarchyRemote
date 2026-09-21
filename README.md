@@ -129,7 +129,7 @@ install or configure a remote server.
 
 ## Saved settings and device backups
 
-Settings → This device offers **Focus follows pointer** (off by default). In desk mode, moving a mouse or trackpad pointer over a window focuses it for keyboard input. Touch, dragging, Expo, and open dialogs do not change hover focus. The preference is saved and backed up per device. Embedded Browser and web-app hover requires native build 29 or later on iPad/iPhone. Native website hover is disabled on visionOS so looking at a window cannot steal focus.
+Settings → This device offers **Focus follows pointer** (off by default). In desk mode, moving a mouse or trackpad pointer over a window focuses it for keyboard input. Touch, dragging, Expo, and open dialogs do not change hover focus. The preference is saved and backed up per device. Embedded Browser and web-app hover is supported on Android and requires native build 29 or later on iPad/iPhone. Native website hover is disabled on visionOS so looking at a window cannot steal focus.
 
 Settings → This device lets you name the device, back up now, or restore another device’s backup. Themes, wallpaper choices, Home pins, widgets, app preferences, and window arrangements stay independent on each device. Local changes save immediately and retry their host backup after reconnecting. Herd message drafts save on every edit, separately for each pane, and reappear when you return after a reload or app restart. Drafts stay on the local device and are excluded from host settings backups; sending or deleting the text clears that draft. A storage failure displays a warning while keeping the text in the composer. Open windows can be restored, but a terminated host terminal process is not recreated with its old contents.
 

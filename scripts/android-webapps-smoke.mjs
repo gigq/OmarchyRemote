@@ -1,7 +1,8 @@
 // Native saved-app lifecycle against an isolated in-memory catalog; no live host writes.
 import assert from 'node:assert/strict';
 import { execFileSync, execFile } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { createServer } from 'node:http';
 import WebSocket from 'ws';
@@ -86,7 +87,7 @@ const server = createServer(async (req, res) => {
     if (req.url.startsWith('/qa/')) {
       res.setHeader('Content-Type', 'text/html');
       res.end(
-        '<!doctype html><meta name="viewport" content="width=device-width"><title>Saved app QA</title><h1>Saved app QA</h1><a id="next" href="/qa/two" target="_blank">Next page</a><input aria-label="Fixture input">'
+        '<!doctype html><meta name="viewport" content="width=device-width"><style>html,body,#pointer-target{margin:0;width:100%;height:100%}#pointer-target{box-sizing:border-box;padding:24px;background:#fff;color:#111}html[data-qa-hover="on"] #pointer-target:hover{background:#b7f7d0}</style><div id="pointer-target"><h1>Saved app QA</h1><a id="next" href="/qa/two" target="_blank">Next page</a><input aria-label="Fixture input"></div>'
       );
       return;
     }
@@ -113,6 +114,8 @@ adb('reverse', `tcp:${port}`, `tcp:${port}`);
 const host = `http://127.0.0.1:${port}/native/`;
 const site = `http://127.0.0.1:${port}/qa/one`;
 const sockets = [];
+let hoverQaBuild;
+const hoverQaRemote = '/data/local/tmp/omarchy-remote-qa-hover.jar';
 async function page(suffix = '') {
   let target;
   await until(async () => {
@@ -217,6 +220,139 @@ try {
       return Math.abs(rect.width - size.width) <= 2 && Math.abs(rect.height - size.height) <= 2;
     }
     await until(async () => (await fits(id, web)) && (await fits(second, other)));
+
+    hoverQaBuild = mkdtempSync(join('/tmp', 'omarchy-android-hover-'));
+    const hoverQaClasses = join(hoverQaBuild, 'classes');
+    const hoverQaDex = join(hoverQaBuild, 'dex');
+    mkdirSync(hoverQaClasses);
+    mkdirSync(hoverQaDex);
+    const androidJar =
+      process.env.ANDROID_JAR || '/opt/android-sdk/platforms/android-36/android.jar';
+    const d8 = process.env.D8 || '/opt/android-sdk/build-tools/36.0.0/d8';
+    const hoverQaSource = join(process.cwd(), 'scripts/android-qa/AndroidHoverInject.java');
+    const hoverQaClass = join(hoverQaClasses, 'AndroidHoverInject.class');
+    const hoverQaJar = join(hoverQaBuild, 'android-hover.jar');
+    execFileSync('javac', [
+      '--release',
+      '8',
+      '-classpath',
+      androidJar,
+      '-d',
+      hoverQaClasses,
+      hoverQaSource,
+    ]);
+    execFileSync(d8, [
+      '--min-api',
+      '29',
+      '--lib',
+      androidJar,
+      '--output',
+      hoverQaDex,
+      hoverQaClass,
+    ]);
+    execFileSync('jar', ['cf', hoverQaJar, '-C', hoverQaDex, 'classes.dex']);
+    adb('push', hoverQaJar, hoverQaRemote);
+
+    // These probes only observe events delivered by Android; no JavaScript pointer events are
+    // dispatched here. The QA helper injects MotionEvents through InputManager and InputDispatcher.
+    const installPointerProbe = evaluate =>
+      evaluate(
+        `(()=>{const target=document.querySelector('#pointer-target');document.documentElement.dataset.qaHover='on';window.__androidPointerEvents=[];for(const type of ['pointerenter','pointermove','pointerover'])target.addEventListener(type,e=>window.__androidPointerEvents.push({type,pointerType:e.pointerType,buttons:e.buttons}),true);return true})()`
+      );
+    await installPointerProbe(web);
+    await installPointerProbe(other);
+    await shell(
+      'window.__androidHoverStates=[];window.addEventListener("host-browser-state",e=>{if(e.detail?.hovered)window.__androidHoverStates.push(e.detail.appID||null)});true'
+    );
+    const focus = () =>
+      shell('JSON.parse(localStorage.getItem("omarchy-layout-desk") || "null")?.focus || null');
+    const setPointerFocus = async enabled => {
+      await shell(
+        `HyprlandUtil.storage.set('omarchy-focus-follows-pointer',${JSON.stringify(String(enabled))});true`
+      );
+      await until(() =>
+        shell(
+          `HyprlandUtil.storage.get('omarchy-focus-follows-pointer')===${JSON.stringify(String(enabled))}`
+        )
+      );
+    };
+    const rectCenter = key =>
+      shell(
+        `document.querySelector('[data-workspace="${key}"] .webapp-app').getBoundingClientRect().toJSON()`
+      ).then(rect => ({
+        x: Math.round(rect.x + rect.width / 2),
+        y: Math.round(rect.y + rect.height / 2),
+      }));
+    const injectHover = point => {
+      adb(
+        'shell',
+        `CLASSPATH=${hoverQaRemote}`,
+        'app_process',
+        '/',
+        'AndroidHoverInject',
+        'MOVE',
+        String(point.x),
+        String(point.y)
+      );
+    };
+    const nativeHover = async point => {
+      injectHover(point);
+      await new Promise(resolve => setTimeout(resolve, 350));
+    };
+    let initialFocus;
+    await until(async () => {
+      const current = await focus();
+      if (current !== id && current !== second) return false;
+      initialFocus = current;
+      return true;
+    });
+    const hoverTarget = initialFocus === id ? second : id;
+    const hoverPage = hoverTarget === id ? web : other;
+    const otherTarget = hoverTarget === id ? second : id;
+    const hoverPoint = await rectCenter(hoverTarget);
+    const otherPoint = await rectCenter(otherTarget);
+    await setPointerFocus(false);
+    await nativeHover(hoverPoint);
+    assert.equal(
+      await focus(),
+      initialFocus,
+      'Mouse hover does not focus a tile while the setting is off'
+    );
+    await setPointerFocus(true);
+    await nativeHover(otherPoint);
+    assert.equal(
+      await focus(),
+      initialFocus,
+      'Hovering the already focused tile leaves focus unchanged'
+    );
+    await nativeHover(hoverPoint);
+    await until(() => focus().then(value => value === hoverTarget));
+    assert.equal(
+      await focus(),
+      hoverTarget,
+      'Native mouse hover focuses the hovered native tile when enabled'
+    );
+    assert.ok(
+      await shell(`window.__androidHoverStates.includes(${JSON.stringify(hoverTarget)})`),
+      'Native hover event reaches the shell bridge'
+    );
+    assert.equal(
+      await hoverPage('document.querySelector("#pointer-target").matches(":hover")'),
+      true,
+      'The website under the native tile receives CSS hover state'
+    );
+    assert.ok(
+      await hoverPage(
+        'window.__androidPointerEvents.some(e=>e.type==="pointermove"&&e.pointerType==="mouse"&&e.buttons===0)'
+      ),
+      'The website receives a real mouse pointermove while native hover focus is enabled'
+    );
+    const resetPointerProbe = evaluate =>
+      evaluate(
+        `(()=>{document.documentElement.removeAttribute('data-qa-hover');window.__androidPointerEvents=[];return true})()`
+      );
+    await resetPointerProbe(web);
+    await resetPointerProbe(other);
     const initialWidth = await web('innerWidth');
     const divider = await shell(
       'document.querySelector(".desk-divider").getBoundingClientRect().toJSON()'
@@ -367,6 +503,12 @@ try {
       `window.webkit.messageHandlers.shellHosts.postMessage(${JSON.stringify({ action: 'remove', id: host })})`
     );
   } finally {
+    if (hoverQaBuild) {
+      try {
+        adb('shell', 'rm', '-f', hoverQaRemote);
+      } catch {}
+      rmSync(hoverQaBuild, { recursive: true, force: true });
+    }
     adb('reverse', '--remove', `tcp:${port}`);
     server.closeAllConnections();
     await new Promise(resolve => server.close(resolve));

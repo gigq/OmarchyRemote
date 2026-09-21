@@ -753,6 +753,7 @@ public final class ShellActivity extends Activity {
     boolean loading;
     boolean hiddenControls;
     boolean requestedFocus;
+    long lastHoverAt;
     AlertDialog findDialog;
     String findQuery = "";
     float radius;
@@ -779,6 +780,24 @@ public final class ShellActivity extends Activity {
           (view, event) -> {
             if (event.getAction() == android.view.MotionEvent.ACTION_DOWN)
               emit(object("focused", true));
+            return false;
+          });
+      web.setOnHoverListener(
+          (view, event) -> {
+            int action = event.getActionMasked();
+            if ((action == MotionEvent.ACTION_HOVER_ENTER
+                    || action == MotionEvent.ACTION_HOVER_MOVE)
+                && event.getToolType(0) == MotionEvent.TOOL_TYPE_MOUSE
+                && event.getButtonState() == 0
+                && !requestedFocus) {
+              long now = SystemClock.uptimeMillis();
+              if (action == MotionEvent.ACTION_HOVER_ENTER || now - lastHoverAt >= 100) {
+                lastHoverAt = now;
+                // The shell owns the opt-in preference and overlay/focus guards.
+                emit(object("hovered", true));
+              }
+            }
+            // Websites still receive their normal pointer and CSS hover events.
             return false;
           });
       web.setOnScrollChangeListener(
