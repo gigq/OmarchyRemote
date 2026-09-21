@@ -289,8 +289,61 @@ print(json.dumps(result))
     throw error;
   });
 
+  // Restore the real shell registry before crossing from the native website to
+  // a newly launched host PTY. No focus command or tap may rescue typed keys.
+  await shell(`HyprlandDesk.nativeKey=androidQAOriginalKey;
+    delete window.androidQAOriginalKey;
+    window.webkit.messageHandlers.shellKeyboard.postMessage({commands:HyprlandDesk.actions().filter(a=>a.code)});
+    androidQAInput.remove()`);
+  const terminalText = () =>
+    shell('document.querySelector("#remote-terminal-app")?.innerText.trim() || ""');
+  assert.equal(await terminalText(), '', 'The fixture must own every Terminal it closes');
+  const pageValue = await page('document.querySelector("input").value');
+  for (let round = 0; round < 3; round++) {
+    await command('layout', { ...layout, focused: true });
+    await page('document.querySelector("input").focus()');
+    try {
+      adb(
+        'shell',
+        `input keycombination KEYCODE_CTRL_LEFT KEYCODE_ALT_LEFT KEYCODE_ENTER; input text fromwebsite${round}`
+      );
+      await until(async () => (await terminalText()).includes(`fromwebsite${round}`));
+      assert.equal(
+        await page('document.querySelector("input").value'),
+        pageValue,
+        'Launch typing must not leak back into the website'
+      );
+    } finally {
+      adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_ALT_LEFT', 'KEYCODE_W');
+      await until(async () => (await terminalText()) === '');
+    }
+  }
+
+  await command('layout', { ...layout, focused: true });
+  await page(
+    'document.cookie="android_qa_session=retained; SameSite=Lax; path=/";document.querySelector("a").click()'
+  );
+  await until(() => page('location.pathname==="/next" && document.readyState==="complete"'));
+  assert.ok(
+    await page('document.cookie.includes("android_qa_session=retained")'),
+    'Inline new-window navigation retains this website session'
+  );
+  assert.equal(await page('typeof AndroidShell'), 'undefined');
+  assert.ok(
+    adb('shell', 'dumpsys', 'window').includes('mCurrentFocus=Window'),
+    'Android reports a foreground window'
+  );
+  assert.match(
+    adb('shell', 'dumpsys', 'window').match(/mCurrentFocus=.*$/m)?.[0] || '',
+    /dev\.omarchy\.remote/,
+    'New-window links must not launch an external browser'
+  );
+  await command('back');
+  await until(() => page('location.pathname==="/two"'));
+  await page('document.cookie="android_qa_session=; Max-Age=0; path=/"');
+
   console.log(
-    'PASS: isolated website, SPA history, back/forward, top-only toolbar reveal, full-page zoom and reload/reset, dark mode, find matches, shell/page keyboard focus, native shortcuts and clipboard'
+    'PASS: isolated website, SPA history, back/forward, top-only toolbar reveal, full-page zoom and reload/reset, dark mode, find matches, shell/page keyboard focus, native shortcuts, clipboard, immediate website-to-Terminal typing and inline new-window navigation with session retention'
   );
 } finally {
   await shell(
