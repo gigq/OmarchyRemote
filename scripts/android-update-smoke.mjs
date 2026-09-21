@@ -2,9 +2,11 @@
 import assert from 'node:assert/strict';
 import { execFileSync, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { createHash, randomBytes } from 'node:crypto';
+import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 const adbPath = process.env.ADB || '/opt/android-sdk/platform-tools/adb';
 const devices = execFileSync(adbPath, ['devices'], { encoding: 'utf8' })
   .split('\n')
@@ -53,14 +55,138 @@ function tapNode(match) {
     String(Math.round((bounds[1] + bounds[3]) / 2))
   );
 }
+const log = message => console.log(`UPDATE_QA: ${message}`);
+const installerIsTop = () =>
+  /topResumedActivity=.*com\.google\.android\.packageinstaller/.test(
+    adb('shell', 'dumpsys', 'activity', 'activities')
+  );
+function dismissInstaller() {
+  if (!installerIsTop()) return;
+  try {
+    if (xml().includes('App installed.')) tapNode(node => node.includes('text="Done"'));
+    else adb('shell', 'input', 'keyevent', 'KEYCODE_BACK');
+  } catch {
+    adb('shell', 'am', 'force-stop', 'com.google.android.packageinstaller');
+  }
+}
 const apk = readFileSync(
   process.env.ANDROID_UPDATE_APK || 'android/app/build/outputs/apk/debug/app-debug.apk'
 );
 const hash = createHash('sha256').update(apk).digest('hex');
+const sdkRoot = process.env.ANDROID_SDK_ROOT || '/opt/android-sdk';
+const installedVersionCode = Number(
+  adb('shell', 'dumpsys', 'package', 'dev.omarchy.remote').match(/versionCode=(\d+)/)?.[1]
+);
+assert.ok(Number.isSafeInteger(installedVersionCode), 'Installed app version code is unavailable');
+// Build negative artifacts in a temporary project so the installed app and shared Gradle outputs
+// remain untouched. The ephemeral signing key is never printed or retained.
+function buildNegativeApks(versionCode) {
+  const temporaryRoot = mkdtempSync(join(tmpdir(), 'android-update-qa-'));
+  try {
+    const temporaryAndroid = join(temporaryRoot, 'android');
+    const copyFilter = source => !/(^|[/\\])(?:build|\.gradle)(?:[/\\]|$)/.test(source);
+    cpSync('android', temporaryAndroid, { recursive: true, filter: copyFilter });
+    cpSync('public', join(temporaryRoot, 'public'), { recursive: true });
+    mkdirSync(join(temporaryRoot, 'ios', 'WebOverrides'), { recursive: true });
+    cpSync('ios/WebOverrides/native.css', join(temporaryRoot, 'ios', 'WebOverrides', 'native.css'));
+    mkdirSync(join(temporaryRoot, 'scripts'), { recursive: true });
+    cpSync('scripts/prepare-native.py', join(temporaryRoot, 'scripts', 'prepare-native.py'));
+    const buildEnvironment = Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => !key.startsWith('OMARCHY_ANDROID_'))
+    );
+    const build = applicationId => {
+      execFileSync(
+        join(temporaryAndroid, 'gradlew'),
+        [
+          '--no-daemon',
+          '--offline',
+          '--project-cache-dir',
+          join(temporaryRoot, 'gradle-cache'),
+          ':app:clean',
+          ':app:assembleDebug',
+          `-PapplicationId=${applicationId}`,
+          `-PversionCode=${versionCode}`,
+          '-PversionName=update-qa',
+          '-PremoteUrl=http://127.0.0.1:4187',
+        ],
+        { cwd: temporaryAndroid, env: buildEnvironment, stdio: 'ignore' }
+      );
+      return join(temporaryAndroid, 'app/build/outputs/apk/debug/app-debug.apk');
+    };
+    const wrongPackage = readFileSync(build('dev.omarchy.remote.updateqa'));
+    const signedSourcePath = build('dev.omarchy.remote');
+    const password = randomBytes(24).toString('hex');
+    const signingEnvironment = {
+      ...buildEnvironment,
+      ANDROID_UPDATE_QA_PASSWORD: password,
+    };
+    const keystore = join(temporaryRoot, 'wrong-signing-key.jks');
+    execFileSync(
+      'keytool',
+      [
+        '-genkeypair',
+        '-keystore',
+        keystore,
+        '-storepass:env',
+        'ANDROID_UPDATE_QA_PASSWORD',
+        '-keypass:env',
+        'ANDROID_UPDATE_QA_PASSWORD',
+        '-alias',
+        'updateqa',
+        '-keyalg',
+        'RSA',
+        '-keysize',
+        '2048',
+        '-validity',
+        '2',
+        '-dname',
+        'CN=Temporary Android Update QA',
+      ],
+      { env: signingEnvironment, stdio: 'ignore' }
+    );
+    const wrongSigningPath = join(temporaryRoot, 'wrong-signing.apk');
+    cpSync(signedSourcePath, wrongSigningPath);
+    execFileSync(
+      join(sdkRoot, 'build-tools/36.0.0/apksigner'),
+      [
+        'sign',
+        '--ks',
+        keystore,
+        '--ks-key-alias',
+        'updateqa',
+        '--ks-pass',
+        'env:ANDROID_UPDATE_QA_PASSWORD',
+        '--key-pass',
+        'env:ANDROID_UPDATE_QA_PASSWORD',
+        wrongSigningPath,
+      ],
+      { env: signingEnvironment, stdio: 'ignore' }
+    );
+    return {
+      wrongPackage,
+      wrongSigning: readFileSync(wrongSigningPath),
+    };
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+}
+const negativeApks = buildNegativeApks(installedVersionCode + 1);
+const builds = new Map([[hash, apk]]);
+const addBuild = bytes => {
+  const id = createHash('sha256').update(bytes).digest('hex');
+  builds.set(id, bytes);
+  return id;
+};
+const wrongPackageHash = addBuild(negativeApks.wrongPackage);
+const wrongSigningHash = addBuild(negativeApks.wrongSigning);
+assert.notEqual(wrongPackageHash, hash);
+assert.notEqual(wrongSigningHash, hash);
+assert.notEqual(wrongPackageHash, wrongSigningHash);
 const server = createServer((req, res) => {
   if (req.url.startsWith('/builds/')) {
+    const buildHash = req.url.split('/')[2];
     res.setHeader('Content-Type', 'application/vnd.android.package-archive');
-    res.end(apk);
+    res.end(builds.get(buildHash) || apk);
   } else {
     res.setHeader('Content-Type', 'text/html');
     res.end(
@@ -89,12 +215,19 @@ const install = async id => {
   ]);
   return JSON.parse(stdout).result.value;
 };
+let primaryError;
 try {
   hosts({ action: 'save', name: 'Android update QA', url: host });
   connect(host);
   await until(() => evaluate('location.href') === host);
   assert.match((await install('../bad')).error, /Invalid build identity/);
+  log('wrong identity rejected');
   assert.match((await install('0'.repeat(64))).error, /checksum mismatch/);
+  log('wrong checksum rejected');
+  assert.match((await install(wrongPackageHash)).error, /different app/);
+  log('wrong package rejected');
+  assert.match((await install(wrongSigningHash)).error, /signing key does not match/);
+  log('wrong signing key rejected');
   let result = await install(hash);
   if (result.permissionRequired) {
     await until(() => xml().includes('Allow from this source'));
@@ -106,8 +239,10 @@ try {
     result = await install(hash);
   }
   assert.equal(result.opened, true, JSON.stringify(result));
+  log('valid installer opened');
   await until(() => /text="(Update|Install)"/.test(xml()));
   tapNode(node => node.includes('text="Cancel"'));
+  log('installer cancellation completed');
   assert.equal((await install(hash)).opened, true);
   await until(() => /text="(Update|Install)"/.test(xml()));
   const before = adb('shell', 'dumpsys', 'package', 'dev.omarchy.remote').match(
@@ -120,6 +255,9 @@ try {
       before
   );
   await until(() => xml().includes('App installed.'));
+  log('valid APK installed');
+  dismissInstaller();
+  await until(() => !installerIsTop());
   adb(
     'shell',
     'am',
@@ -143,11 +281,17 @@ try {
   });
   const installedPath = adb('shell', 'pm', 'path', 'dev.omarchy.remote').replace(/^package:/, '');
   assert.equal(adb('shell', 'sha256sum', installedPath).split(/\s+/)[0], hash);
+  log('installed APK hash verified');
   console.log(
     'PASS: invalid identity/checksum rejection, permission retry, installer cancellation, confirmed APK update and retained host (permission retry when required)'
   );
+} catch (error) {
+  primaryError = error;
+  throw error;
 } finally {
+  let cleanupError;
   try {
+    dismissInstaller();
     adb(
       'shell',
       'am',
@@ -175,9 +319,23 @@ try {
       return false;
     });
     hosts({ action: 'remove', id: host });
+  } catch (error) {
+    cleanupError = error;
+    console.error(`UPDATE_QA cleanup warning: ${error.stack || error}`);
   } finally {
-    adb('reverse', '--remove', `tcp:${port}`);
-    server.closeAllConnections();
-    server.close();
+    try {
+      adb('reverse', '--remove', `tcp:${port}`);
+    } catch (error) {
+      cleanupError ||= error;
+      console.error(`UPDATE_QA reverse cleanup warning: ${error.stack || error}`);
+    }
+    try {
+      server.closeAllConnections();
+      server.close();
+    } catch (error) {
+      cleanupError ||= error;
+      console.error(`UPDATE_QA server cleanup warning: ${error.stack || error}`);
+    }
   }
+  if (cleanupError && !primaryError) throw cleanupError;
 }

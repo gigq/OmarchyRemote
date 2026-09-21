@@ -305,3 +305,5 @@ Android takes native shell focus at the start of a touch gesture, preserving the
 Android weather units follow the device’s regional temperature preference, including explicit Celsius/Fahrenheit overrides, with locale defaults when no override is set.
 
 Android message input retains native Gboard autocorrection and clipboard Undo. Emulator checks cover real touch typing and finger scrolling in Herdr and Terminal using isolated sessions.
+
+Android update validation covers wrong package and signing-key rejection even when the download checksum is valid, plus cancellation and successful installation.
