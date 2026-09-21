@@ -307,3 +307,5 @@ Android weather units follow the device’s regional temperature preference, inc
 Android message input retains native Gboard autocorrection and clipboard Undo. Emulator checks cover real touch typing and finger scrolling in Herdr and Terminal using isolated sessions.
 
 Android update validation covers wrong package and signing-key rejection even when the download checksum is valid, plus cancellation and successful installation.
+
+Signed release validation also connects to a real private HTTPS host and verifies live Home survives an in-place update. The userdebug emulator’s forced WebView debugging is recorded separately from the release APK’s nondebuggable configuration.

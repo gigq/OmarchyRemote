@@ -331,3 +331,5 @@ Android weather units follow the device’s regional temperature preference, inc
 `node scripts/android-ime-scroll-smoke.mjs` checks real English Gboard autocorrection, repeated clipboard/Undo and finger scrolling in fresh Herdr and Terminal sessions on the phone emulator. It requires Home-only state at 1080×2400/density 420 and removes its owned sessions afterward.
 
 `node scripts/android-update-smoke.mjs` builds disposable wrong-package and wrong-signing-key APKs to verify rejection with valid checksums, then checks cancellation and a valid update. It restores the original host and cleans its temporary artifacts.
+
+Set `ANDROID_RELEASE_HOST_URL` to a reachable private HTTPS host when running `python scripts/android-release-smoke.py` to verify live Home before and after the signed update. Userdebug Android images force WebView debugging independently of the release APK; the fixture records that platform limitation.
