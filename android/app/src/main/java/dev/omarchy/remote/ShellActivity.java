@@ -26,6 +26,11 @@ public final class ShellActivity extends Activity {
   private final DeviceKeys deviceKeys = new DeviceKeys();
   private final Set<Integer> consumedKeys = new HashSet<>();
   private boolean shellEditing;
+  private volatile boolean bundled;
+  private boolean foreground;
+  private boolean probing;
+  private int retrySeconds = 3;
+  private final Runnable reconnect = this::probeHost;
   private WebView shell;
   private android.content.SharedPreferences prefs;
   private JSONObject directory;
@@ -196,6 +201,9 @@ public final class ShellActivity extends Activity {
   }
 
   private void loadShell(boolean picker) {
+    handler.removeCallbacks(reconnect);
+    bundled = false;
+    retrySeconds = 3;
     deviceKeys.register(new JSONArray());
     consumedKeys.clear();
     shellEditing = false;
@@ -269,6 +277,8 @@ public final class ShellActivity extends Activity {
                     .toString());
           }
         });
+    WebViewAssetLoader.AssetsPathHandler bundledAssets =
+        new WebViewAssetLoader.AssetsPathHandler(this);
     shell.setWebViewClient(
         new WebViewClient() {
           @Override
@@ -280,7 +290,16 @@ public final class ShellActivity extends Activity {
           @Override
           public WebResourceResponse shouldInterceptRequest(
               WebView view, WebResourceRequest request) {
-            return assets.shouldInterceptRequest(request.getUrl());
+            Uri url = request.getUrl();
+            if (bundled
+                && !selected.isEmpty()
+                && origin(url.toString()).equals(origin(selected))
+                && url.getPath() != null
+                && url.getPath().startsWith("/native/")) {
+              String path = url.getPath().substring("/native/".length());
+              return bundledAssets.handle("Web/" + (path.isEmpty() ? "index.html" : path));
+            }
+            return assets.shouldInterceptRequest(url);
           }
 
           @Override
@@ -296,6 +315,8 @@ public final class ShellActivity extends Activity {
 
           @Override
           public void onPageFinished(WebView view, String url) {
+            if (view != shell) return;
+            evaluate("window.__OMARCHY_BUNDLED__=" + bundled + ";", null);
             publishHardwareKeyboard();
             Intent state = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
             if (state != null) battery.onReceive(ShellActivity.this, state);
@@ -304,11 +325,99 @@ public final class ShellActivity extends Activity {
           @Override
           public void onReceivedError(
               WebView view, WebResourceRequest request, WebResourceError error) {
-            if (request.isForMainFrame() && !origin(request.getUrl().toString()).equals(ASSET))
-              view.loadUrl(ASSET + "/assets/Web/index.html");
+            if (request.isForMainFrame()) fallback(view);
+          }
+
+          @Override
+          public void onReceivedHttpError(
+              WebView view, WebResourceRequest request, WebResourceResponse response) {
+            if (request.isForMainFrame()) fallback(view);
+          }
+
+          @Override
+          public void onReceivedSslError(
+              WebView view, SslErrorHandler ssl, android.net.http.SslError error) {
+            ssl.cancel();
+            fallback(view);
           }
         });
     shell.loadUrl(picker ? ASSET + "/assets/Web/hosts.html" : selected);
+  }
+
+  private void fallback(WebView view) {
+    if (view != shell || bundled || selected.isEmpty() || directory.optBoolean("disconnected"))
+      return;
+    bundled = true;
+    view.loadUrl(selected);
+    handler.removeCallbacks(reconnect);
+    if (foreground) handler.postDelayed(reconnect, retrySeconds * 1000L);
+  }
+
+  private void probeHost() {
+    if (!foreground || !bundled || probing || selected.isEmpty()) return;
+    probing = true;
+    String host = selected;
+    WebView target = shell;
+    new Thread(
+            () -> {
+              boolean ready = false;
+              java.net.HttpURLConnection connection = null;
+              try {
+                connection = (java.net.HttpURLConnection) new java.net.URL(host).openConnection();
+                connection.setRequestMethod("HEAD");
+                connection.setConnectTimeout(3000);
+                connection.setReadTimeout(3000);
+                connection.setInstanceFollowRedirects(false);
+                ready =
+                    connection.getResponseCode() == 200
+                        && String.valueOf(connection.getContentType()).startsWith("text/html");
+              } catch (IOException ignored) {
+                // Stay in the usable bundled shell until this exact host becomes reachable.
+              } finally {
+                if (connection != null) connection.disconnect();
+              }
+              boolean available = ready;
+              handler.post(
+                  () -> {
+                    probing = false;
+                    if (!foreground || !bundled) return;
+                    if (target == shell && host.equals(selected) && available) {
+                      loadShell(false);
+                    } else {
+                      retrySeconds = Math.min(30, retrySeconds * 2);
+                      handler.postDelayed(reconnect, retrySeconds * 1000L);
+                    }
+                  });
+            },
+            "host-reconnect")
+        .start();
+  }
+
+  @Override
+  protected void onResume() {
+    super.onResume();
+    foreground = true;
+    if (shell != null) {
+      shell.onResume();
+      evaluate(
+          "window.dispatchEvent(new Event('online'));window.dispatchEvent(new Event('focus'));",
+          null);
+    }
+    for (Page page : pages.values()) page.web.onResume();
+    handler.removeCallbacks(reconnect);
+    if (bundled) handler.post(reconnect);
+  }
+
+  @Override
+  protected void onPause() {
+    foreground = false;
+    handler.removeCallbacks(reconnect);
+    if (shell != null) {
+      evaluate("window.dispatchEvent(new Event('pagehide'));", null);
+      shell.onPause();
+    }
+    for (Page page : pages.values()) page.web.onPause();
+    super.onPause();
   }
 
   private interface Reply {
@@ -833,6 +942,8 @@ public final class ShellActivity extends Activity {
 
   @Override
   protected void onDestroy() {
+    foreground = false;
+    handler.removeCallbacks(reconnect);
     deviceLocation.cancel();
     deviceFiles.cancel();
     unregisterReceiver(battery);

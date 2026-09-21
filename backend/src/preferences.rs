@@ -20,6 +20,7 @@ pub const KEYS: &[&str] = &[
     "omarchy-wallpapers",
     "omarchy-home-pins",
     "omarchy-widgets",
+    "omarchy-widget-catalog",
     "omarchy-widget-current",
     "omarchy-weather-location",
     "omarchy-weather-unit-mode",
@@ -311,7 +312,13 @@ mod tests {
             let change = || DeviceChange {
                 name: "iPad".into(),
                 revision: 0,
-                changes: BTreeMap::from([("omarchy-theme".into(), Some("tokyo-night".into()))]),
+                changes: BTreeMap::from([
+                    ("omarchy-theme".into(), Some("tokyo-night".into())),
+                    (
+                        "omarchy-widget-catalog".into(),
+                        Some("[\"weather\",\"herdr\"]".into()),
+                    ),
+                ]),
             };
             s.save_device(&a, change()).unwrap();
             assert!(s.save_device(&a, change()).unwrap_err().is::<Conflict>());
@@ -322,6 +329,10 @@ mod tests {
         assert_eq!(
             s.device(&a).unwrap()["values"]["omarchy-theme"],
             "tokyo-night"
+        );
+        assert_eq!(
+            s.device(&a).unwrap()["values"]["omarchy-widget-catalog"],
+            "[\"weather\",\"herdr\"]"
         );
         s.change_app(AppChange {
             action: "remove".into(),

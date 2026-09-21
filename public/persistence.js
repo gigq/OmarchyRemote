@@ -6,6 +6,7 @@
     'omarchy-wallpapers',
     'omarchy-home-pins',
     'omarchy-widgets',
+    'omarchy-widget-catalog',
     'omarchy-widget-current',
     'omarchy-weather-location',
     'omarchy-weather-unit-mode',
