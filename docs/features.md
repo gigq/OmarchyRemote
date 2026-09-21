@@ -285,3 +285,5 @@ Programmatically focused app containers use the existing themed active-window bo
 Android rejects invalid host certificates for both WebView requests and automatic reconnect probes. The bundled interface remains available without accepting the certificate, including the saved-host picker and host-scoped local preferences. The native host dialog and saved-host connection row are covered by the untrusted-HTTPS emulator check.
 
 Android Herdr input has an emulator check for real Gboard taps and keyboard Send, including the resulting host output, cleared draft and dismissed keyboard. Predictive correction and composing-script behavior remain separate Android verification work.
+
+Android saved web apps retain their session cookies and device catalog/pins after process death, including when the catalog cannot be fetched. Their native lifecycle check uses an isolated catalog, follows new-window links inline, returns through Android Back and uninstalls the fixture. Websites without an authored background use the browser's white canvas so default black text remains legible; the surrounding shell stays themed.

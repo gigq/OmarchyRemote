@@ -733,6 +733,8 @@ public final class ShellActivity extends Activity {
     Page(String id) {
       this.id = id;
       web = makeWebView();
+      // Unstyled websites use a white canvas behind their default black text.
+      web.setBackgroundColor(Color.WHITE);
       // Focusing the window must preserve the page's caret, not select its first field.
       web.getSettings().setNeedInitialFocus(false);
       web.setVisibility(View.GONE);
