@@ -471,3 +471,27 @@ test('Android browser Command aliases share collision detection with Ctrl+Alt bi
   });
   expect(result).toEqual({ matches: true, second: null, desktopMatch: false });
 });
+
+test('native Back dismisses shell overlays before leaving the app', async ({ page }) => {
+  const states = await page.evaluate(() => {
+    logic.set({ launch: true, kb: true, query: 'test' });
+    const launcher = HyprlandDesk.nativeBack();
+    const launchClosed = !logic.state.launch && !logic.state.kb && logic.state.query === '';
+    logic.set({ ov: true });
+    const expo = HyprlandDesk.nativeBack();
+    const expoClosed = !logic.state.ov;
+    const root = HyprlandDesk.nativeBack();
+    logic.set({ kb: true });
+    const keyboard = HyprlandDesk.nativeBack({ keyboard: true });
+    return { launcher, launchClosed, expo, expoClosed, root, keyboard, hidden: !logic.state.kb };
+  });
+  expect(states).toEqual({
+    launcher: true,
+    launchClosed: true,
+    expo: true,
+    expoClosed: true,
+    root: false,
+    keyboard: true,
+    hidden: true,
+  });
+});

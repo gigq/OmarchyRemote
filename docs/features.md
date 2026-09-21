@@ -261,3 +261,5 @@ The Android host reuses the same shell and Rust backend, with Android WebViews f
 Device backups include the widget catalog history as well as the visible widget order. Restoring a backup therefore keeps intentionally hidden widgets hidden.
 
 On Android, hardware typing immediately after an app-launch shortcut waits briefly for the validated native input focus transfer. A superseding shortcut, backgrounding, or a two-second timeout discards pending input rather than delivering it to a different window. Terminal then uses its existing connection-startup input buffer.
+
+Android Back dismisses visible keyboard input first, then launcher/Expo/shortcut overlays, then navigates the focused website’s history. At the root it backgrounds the task, preserving workspaces for resume. WebViews route Back before the input method only when the keyboard is not visible, so keyboard dismissal remains native.

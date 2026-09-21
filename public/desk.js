@@ -1580,6 +1580,21 @@
   window.HyprlandDesk = {
     attach: logic => (activeDesk = new Desk(logic)),
     nativeKey,
+    nativeBack: ({ keyboard = false } = {}) => {
+      if (!activeDesk) return false;
+      const { logic } = activeDesk;
+      if (keyboard) {
+        document.activeElement?.blur();
+        logic.set({ kb: false });
+        return true;
+      }
+      if (activeDesk.sheet) activeDesk.closeSheet();
+      else if (logic.state.launch) logic.set({ launch: false, kb: false, query: '' });
+      else if (logic.state.ov) logic.set({ ov: false });
+      else if (logic.state.map) logic.set({ map: false });
+      else return false;
+      return true;
+    },
     actionKeys,
     actions: () => activeDesk?.actions() || [],
     nativePointer: event => {

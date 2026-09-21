@@ -91,7 +91,12 @@ try {
       throw error;
     }
   );
-  await command('back');
+  if (await shell('(window.__HYPRLAND_KEYBOARD__?.inset || 0) > 0')) {
+    adb('shell', 'input', 'keyevent', 'KEYCODE_BACK');
+    await until(() => shell('(window.__HYPRLAND_KEYBOARD__?.inset || 0) === 0'));
+  }
+  await command('focus');
+  adb('shell', 'input', 'keyevent', 'KEYCODE_BACK');
   await until(() => shell('androidQAEvents.some(e=>e.url?.endsWith("/one") && e.forward)'));
   await command('forward');
   await until(() => page('location.pathname==="/two"'));

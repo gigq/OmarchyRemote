@@ -139,7 +139,20 @@ public final class ShellActivity extends Activity {
   }
 
   private WebView makeWebView() {
-    WebView web = new WebView(this);
+    WebView web =
+        new WebView(this) {
+          @Override
+          public boolean onKeyPreIme(int key, KeyEvent event) {
+            WindowInsets insets = root.getRootWindowInsets();
+            if (key == KeyEvent.KEYCODE_BACK
+                && insets != null
+                && !insets.isVisible(WindowInsets.Type.ime())) {
+              if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) onBackPressed();
+              return true;
+            }
+            return super.onKeyPreIme(key, event);
+          }
+        };
     web.setBackgroundColor(Color.rgb(25, 23, 36));
     web.getSettings().setJavaScriptEnabled(true);
     web.getSettings().setDomStorageEnabled(true);
@@ -907,13 +920,27 @@ public final class ShellActivity extends Activity {
 
   @Override
   public void onBackPressed() {
-    for (Page page : pages.values())
-      if (page.web.hasFocus() && page.web.getVisibility() == View.VISIBLE && page.web.canGoBack()) {
-        page.web.goBack();
-        return;
-      }
+    WindowInsets insets = root.getRootWindowInsets();
+    if (insets != null && insets.isVisible(WindowInsets.Type.ime())) {
+      ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
+          .hideSoftInputFromWindow(root.getWindowToken(), 0);
+      evaluate("window.HyprlandDesk?.nativeBack({keyboard:true})", null);
+      return;
+    }
     evaluate(
-        "document.activeElement?.blur();window.HyprlandDesk?.nativeKey({code:'Escape'});", null);
+        "window.HyprlandDesk?.nativeBack()",
+        handled -> {
+          if ("true".equals(handled) || !foreground) return;
+          for (Page page : pages.values()) {
+            if (page.web.hasFocus()
+                && page.web.getVisibility() == View.VISIBLE
+                && page.web.canGoBack()) {
+              page.web.goBack();
+              return;
+            }
+          }
+          moveTaskToBack(true);
+        });
   }
 
   private void cancelLaunchFocus() {
@@ -959,6 +986,10 @@ public final class ShellActivity extends Activity {
   @Override
   public boolean dispatchKeyEvent(KeyEvent event) {
     int key = event.getKeyCode();
+    if (key == KeyEvent.KEYCODE_BACK) {
+      if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) onBackPressed();
+      return true;
+    }
     if (event.getAction() == KeyEvent.ACTION_UP && consumedKeys.remove(key)) return true;
     if (shell == null) return super.dispatchKeyEvent(event);
     boolean textKey =

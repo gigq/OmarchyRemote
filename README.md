@@ -271,7 +271,7 @@ Open **Builds** from the app launcher, or pin it through Home’s app picker. A 
 
 ### Android development (parity work in progress)
 
-`android/` builds an Android 11+ native host for the same shell and backend. The initial implementation includes trusted shell messaging, saved hosts and preferences, native keyboard/battery integration, device weather location, Android file upload/save pickers, and independent browser WebViews. An unreachable host falls back to bundled UI at the same origin and retries automatically while foregrounded; returning to the app also prompts reconnection. Full iPhone feature parity is **not yet verified**; [the Android parity checklist](docs/android-parity.md) tracks the remaining work.
+`android/` builds an Android 11+ native host for the same shell and backend. The initial implementation includes trusted shell messaging, saved hosts and preferences, native keyboard/battery integration, device weather location, Android file upload/save pickers, and independent browser WebViews. Android Back dismisses the keyboard and shell overlays before navigating an embedded website; at the root it backgrounds the task. An unreachable host falls back to bundled UI at the same origin and retries automatically while foregrounded; returning to the app also prompts reconnection. Full iPhone feature parity is **not yet verified**; [the Android parity checklist](docs/android-parity.md) tracks the remaining work.
 
 With JDK 17+ and Android SDK platform/build-tools 36 installed, create an ignored `android/local.properties` containing your `sdk.dir`, then run:
 
