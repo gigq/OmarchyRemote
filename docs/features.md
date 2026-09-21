@@ -281,3 +281,5 @@ Android’s file action offers **Save to device** and **Share…**. Save uses th
 Android’s end-to-end Browser check uses a separate Vivaldi profile and native messaging bridge. Navigation in the embedded page updates the exact desktop tab, while the close-tab shortcut closes that tab and leaves the Browser app window open. Native saved-host checks cover unsafe address rejection, returning to the picker after a disconnected restart, and preserving preferences within their host scope.
 
 Programmatically focused app containers use the existing themed active-window border, avoiding a second square focus outline inside rounded windows on Android. Focus styling on buttons and text fields is unchanged.
+
+Android rejects invalid host certificates for both WebView requests and automatic reconnect probes. The bundled interface remains available without accepting the certificate, including the saved-host picker and host-scoped local preferences. The native host dialog and saved-host connection row are covered by the untrusted-HTTPS emulator check.
