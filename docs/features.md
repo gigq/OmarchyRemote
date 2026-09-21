@@ -265,3 +265,5 @@ On Android, hardware typing immediately after an app-launch, window-focus, or wo
 Android Back dismisses visible keyboard input first, then launcher/Expo/shortcut overlays, then navigates the focused website’s history. At the root it backgrounds the task, preserving workspaces for resume. WebViews route Back before the input method only when the keyboard is not visible, so keyboard dismissal remains native.
 
 Android Browser supports whole-document zoom from 25% to 500%, including images and layout, with reset and reload persistence. The Android host uses CSS root zoom rather than text-only scaling; viewport media-query breakpoints remain unchanged.
+
+On Android with a hardware keyboard, selecting a Browser or saved web-app window transfers native keyboard focus to its page. Hiding or deselecting it releases focus; repeated layout animation updates do not steal focus from page controls.

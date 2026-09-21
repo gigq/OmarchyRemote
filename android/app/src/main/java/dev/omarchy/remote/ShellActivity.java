@@ -704,6 +704,7 @@ public final class ShellActivity extends Activity {
     boolean dark;
     boolean loading;
     boolean hiddenControls;
+    boolean requestedFocus;
     AlertDialog findDialog;
     String findQuery = "";
     float radius;
@@ -712,6 +713,8 @@ public final class ShellActivity extends Activity {
     Page(String id) {
       this.id = id;
       web = makeWebView();
+      // Focusing the window must preserve the page's caret, not select its first field.
+      web.getSettings().setNeedInitialFocus(false);
       web.setVisibility(View.GONE);
       web.setClipToOutline(true);
       web.setOutlineProvider(
@@ -794,6 +797,9 @@ public final class ShellActivity extends Activity {
 
     void layout(JSONObject body) {
       boolean visible = body.optBoolean("visible");
+      // Release focus before GONE clears ownership, otherwise the shell can look
+      // focused in JavaScript while Android still has no input target.
+      if (!visible) updateFocus(false);
       web.setVisibility(visible ? View.VISIBLE : View.GONE);
       if (!visible) {
         closeFind();
@@ -817,6 +823,20 @@ public final class ShellActivity extends Activity {
       web.setAlpha((float) body.optDouble("opacity", 1));
       radius = (float) body.optDouble("radius") * scale;
       web.invalidateOutline();
+      updateFocus(body.optBoolean("focused"));
+    }
+
+    void updateFocus(boolean focused) {
+      boolean gainingFocus = focused && !requestedFocus;
+      requestedFocus = focused;
+      if (!focused) {
+        // Only relinquish this page; sibling layout messages can arrive in either order.
+        if (web.hasFocus()) shell.requestFocus();
+      } else if (gainingFocus
+          && getResources().getConfiguration().keyboard == Configuration.KEYBOARD_QWERTY) {
+        // Layout animation frames must not steal focus back from page controls/dialogs.
+        web.requestFocus();
+      }
     }
 
     void openFind() {

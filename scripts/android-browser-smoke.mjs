@@ -124,17 +124,17 @@ try {
         [
           '-c',
           `
-import io,json,sys
+import io,json,re,sys
 from PIL import Image
 im=Image.open(io.BytesIO(sys.stdin.buffer.read())).convert('RGB')
 result=[]
 for color in [(0,0,255),(255,0,0)]:
-    best=0
-    for y in range(im.height):
-        run=0
-        for x in range(im.width):
-            run=run+1 if im.getpixel((x,y))==color else 0
-            best=max(best,run)
+    pattern=re.compile(b"(?:"+re.escape(bytes(color))+b")+")
+    rows=im.tobytes()
+    stride=im.width*3
+    best=max((len(match.group())//3 for y in range(im.height)
+              for match in pattern.finditer(rows[y*stride:(y+1)*stride])
+              if match.start()%3==0),default=0)
     result.append(best)
 print(json.dumps(result))
 `,
@@ -242,6 +242,53 @@ print(json.dumps(result))
   adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_V');
   await until(() => page('document.querySelector("input").value==="pagefocuspagefocus"'));
   assert.equal(await shell('androidQAKeys.length'), 3);
+  // The shell publishes active-window focus in layout; no separate focus command
+  // or tap is sent during these transitions.
+  await page('document.querySelector("input").setSelectionRange(18,18)');
+  const layout = { visible: true, rect: [12, 70, 388, 750], viewport: 412, radius: 16 };
+  await command('layout', { ...layout, focused: false });
+  await shell('androidQAInput.focus()');
+  adb('shell', 'input', 'text', 'layoutshell');
+  await until(() => shell('androidQAInput.value === "shellfocuslayoutshell"'));
+  await command('layout', { ...layout, focused: true });
+  adb('shell', 'input', 'text', 'layoutpage');
+  await until(() =>
+    page('document.querySelector("input").value === "pagefocuspagefocuslayoutpage"')
+  ).catch(async error => {
+    console.error({
+      page: await page(
+        '({value:document.querySelector("input").value,active:document.activeElement.tagName,focus:document.hasFocus()})'
+      ),
+      shell: await shell('({value:androidQAInput.value,focus:document.hasFocus()})'),
+    });
+    throw error;
+  });
+  const width = await page('innerWidth');
+  await command('layout', { ...layout, focused: true, rect: [-160, 70, 388, 750] });
+  assert.equal(
+    await page('innerWidth'),
+    width,
+    'Sliding partially offscreen preserves the page viewport'
+  );
+  await command('layout', { ...layout, focused: true });
+  await command('layout', { visible: false });
+  await shell('androidQAInput.focus()');
+  adb('shell', 'input', 'text', 'hiddenpage');
+  await until(() => shell('androidQAInput.value === "shellfocuslayoutshellhiddenpage"')).catch(
+    async error => {
+      console.error('hidden', await shell('androidQAInput.value'));
+      throw error;
+    }
+  );
+  await command('layout', { ...layout, focused: true });
+  adb('shell', 'input', 'text', 'restoredpage');
+  await until(() =>
+    page('document.querySelector("input").value.endsWith("layoutpagerestoredpage")')
+  ).catch(async error => {
+    console.error('restored', await page('document.querySelector("input").value'));
+    throw error;
+  });
+
   console.log(
     'PASS: isolated website, SPA history, back/forward, top-only toolbar reveal, full-page zoom and reload/reset, dark mode, find matches, shell/page keyboard focus, native shortcuts and clipboard'
   );
