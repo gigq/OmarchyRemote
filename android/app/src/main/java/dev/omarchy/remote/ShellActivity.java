@@ -22,6 +22,7 @@ public final class ShellActivity extends Activity {
   private final Map<String, Page> pages = new LinkedHashMap<>();
   private FrameLayout root;
   private DeviceLocation deviceLocation;
+  private DeviceFiles deviceFiles;
   private WebView shell;
   private android.content.SharedPreferences prefs;
   private JSONObject directory;
@@ -44,6 +45,7 @@ public final class ShellActivity extends Activity {
   public void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     deviceLocation = new DeviceLocation(this);
+    deviceFiles = new DeviceFiles(this);
     prefs = getSharedPreferences("shell", MODE_PRIVATE);
     directory = json(prefs.getString("hosts", "{\"hosts\":[]}"));
     selected = directory.optString("selected", "");
@@ -192,6 +194,7 @@ public final class ShellActivity extends Activity {
 
   private void loadShell(boolean picker) {
     deviceLocation.cancel();
+    deviceFiles.cancel();
     for (Page page : pages.values()) {
       root.removeView(page.web);
       page.web.destroy();
@@ -261,6 +264,12 @@ public final class ShellActivity extends Activity {
         });
     shell.setWebViewClient(
         new WebViewClient() {
+          @Override
+          public void onPageStarted(WebView view, String url, Bitmap favicon) {
+            deviceFiles.cancel();
+            deviceLocation.cancel();
+          }
+
           @Override
           public WebResourceResponse shouldInterceptRequest(
               WebView view, WebResourceRequest request) {
@@ -333,6 +342,9 @@ public final class ShellActivity extends Activity {
               });
         }
         reply.send(true);
+        break;
+      case "shellFiles":
+        deviceFiles.dispatch(body, reply::send);
         break;
       case "weatherDevice":
         if (body.optString("action").equals("locale"))
@@ -692,6 +704,7 @@ public final class ShellActivity extends Activity {
   @Override
   protected void onActivityResult(int request, int result, Intent data) {
     super.onActivityResult(request, result, data);
+    if (request == DeviceFiles.SAVE_REQUEST) deviceFiles.result(result, data);
     if (request == 10 && fileCallback != null) {
       fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result, data));
       fileCallback = null;
@@ -707,6 +720,7 @@ public final class ShellActivity extends Activity {
   @Override
   protected void onDestroy() {
     deviceLocation.cancel();
+    deviceFiles.cancel();
     unregisterReceiver(battery);
     if (fileCallback != null) fileCallback.onReceiveValue(null);
     for (Page page : pages.values()) page.web.destroy();

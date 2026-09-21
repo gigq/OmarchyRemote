@@ -27,6 +27,38 @@
   ]) {
     window.webkit.messageHandlers[channel] = { postMessage: body => send(channel, body) };
   }
+  const canSave = data => data?.files?.length === 1 && data.files[0] instanceof File;
+  Object.defineProperty(navigator, 'canShare', { value: canSave, configurable: true });
+  Object.defineProperty(navigator, 'share', {
+    configurable: true,
+    value: async data => {
+      if (!canSave(data)) throw new TypeError('Choose one file to save.');
+      const file = data.files[0];
+      const { token } = await send('shellFiles', {
+        action: 'begin',
+        name: file.name,
+        type: file.type,
+        size: file.size,
+      });
+      try {
+        for (let offset = 0; offset < file.size; offset += 196608) {
+          const chunk = file.slice(offset, offset + 196608);
+          const encoded = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result.split(',')[1]);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(chunk);
+          });
+          await send('shellFiles', { action: 'append', token, offset, data: encoded });
+        }
+        const result = await send('shellFiles', { action: 'save', token });
+        if (result.cancelled) throw new DOMException('Save cancelled', 'AbortError');
+      } catch (error) {
+        await send('shellFiles', { action: 'cancel', token }).catch(() => {});
+        throw error;
+      }
+    },
+  });
   window.__OMARCHY_PLATFORM__ = 'android';
   window.__HYPRLAND_NATIVE__ = true;
   window.__HYPRLAND_NATIVE_FOCUS__ = true;
