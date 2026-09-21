@@ -1,0 +1,80 @@
+.builds-app {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  gap: 12px;
+  min-height: 0;
+}
+.builds-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+.builds-status {
+  font-size: 12px;
+  color: var(--theme-muted);
+  margin: 0;
+}
+.builds-status:empty {
+  display: none;
+}
+.builds-content {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+.builds-card {
+  padding: 20px;
+  margin-bottom: 12px;
+  background: var(--theme-surface);
+  border-radius: 16px;
+  line-height: 1.6;
+  font-size: 13px;
+}
+.builds-card h2 {
+  font-size: 24px;
+  line-height: 1.2;
+  margin: 8px 0 16px;
+}
+.builds-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 10px;
+  color: var(--theme-cyan);
+  margin: 0;
+}
+.builds-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 14px;
+  margin: 8px 8px 8px 0;
+  border: 1px solid var(--theme-border);
+  border-radius: 10px;
+  background: var(--theme-background);
+  color: var(--theme-foreground);
+  text-decoration: none;
+  font: inherit;
+  cursor: pointer;
+}
+.builds-action:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 2px;
+}
+.builds-steps {
+  padding-left: 20px;
+}
+.builds-steps li {
+  margin: 12px 0;
+}
+.builds-card code,
+.builds-steps {
+  overflow-wrap: anywhere;
+}
+.builds-notes {
+  white-space: pre-line;
+}
+.builds-meta {
+  font-size: 11px;
+}

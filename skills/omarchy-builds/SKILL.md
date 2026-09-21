@@ -5,6 +5,8 @@ description: Publish validated native Omarchy Remote iPhone and iPad builds to a
 
 # Omarchy Remote build publishing
 
+Users open **Builds** from the Omarchy Remote app launcher or pin it through Home’s app picker. An empty host shows a setup landing page and this skill; publishing the first build fills that app’s dashboard.
+
 Run from the user's Omarchy Remote checkout. Read its `AGENTS.md` first. The host's existing app server serves `/builds/`; this is a reusable part of the repository, not a separate hosted service.
 
 ## Publish

@@ -141,6 +141,13 @@
     surface: 'terminal',
     native: true,
   });
+  define('builds', {
+    name: 'Builds',
+    color: 'var(--theme-cyan)',
+    glyph: 'bd',
+    description: 'build dashboard and agent publishing',
+    offline: true,
+  });
   define('settings', {
     name: 'settings',
     color: 'var(--theme-accent)',

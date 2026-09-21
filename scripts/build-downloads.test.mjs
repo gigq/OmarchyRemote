@@ -18,7 +18,7 @@ test('fresh hosts show setup and private files cannot escape the download direct
   try {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const base = `http://127.0.0.1:${server.address().port}`;
-    assert.match(await (await fetch(base + '/builds/')).text(), /No builds yet/);
+    assert.match(await (await fetch(base + '/builds/')).text(), /A home for your builds/);
     assert.deepEqual(await (await fetch(base + '/builds/catalog.json')).json(), []);
     assert.match(await (await fetch(base + '/builds/SKILL.md')).text(), /name: omarchy-builds/);
     const hash = 'a'.repeat(64);

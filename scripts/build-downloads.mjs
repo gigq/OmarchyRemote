@@ -39,7 +39,7 @@ export async function serveBuildDownload(req, res, pathname) {
         await readFile(new URL('../deploy/builds-template.html', import.meta.url), 'utf8')
       ).replace(
         '<!-- BUILD_CARDS -->',
-        '<article class="build"><h2>No builds yet</h2><p>Use the agent skill below to publish your first signed iOS build.</p></article>'
+        await readFile(new URL('../deploy/builds-welcome.html', import.meta.url), 'utf8')
       );
       type = 'text/html; charset=utf-8';
     } else if (relative === 'catalog.json') {
