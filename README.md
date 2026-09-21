@@ -249,3 +249,20 @@ also appear in Search actions and work with tiles, floating windows, and scratch
 shortcut, disable a binding, or restore defaults. Shell and Browser bindings are
 checked together for conflicts. Changes save per device and update keyboard help,
 the action palette, and native registrations immediately (build 33 recommended).
+
+### Publish a native build for remote installation
+
+The existing private HTTPS app host also serves `/builds/`: a simple download dashboard with the latest build, notes, older builds, and an **Install on device** link. Use Safari with Tailscale connected. This works away from home without opening a public port. Devices must already be covered by the provisioning profile and have Developer Mode enabled. Website installation uses an HTTPS manifest; verify acceptance on the device separately from download availability ([Apple's manifest documentation](https://support.apple.com/guide/deployment/depce7cefc4d/web)).
+
+After validating a signed iOS IPA on the Mac, publish its exact bytes:
+
+```sh
+python scripts/publish-native-build.py /path/to/App.ipa \
+  --base-url "${OMARCHY_DOWNLOAD_BASE_URL}" \
+  --commit <source-commit> \
+  --notes 'What changed in this build'
+```
+
+Set `OMARCHY_DOWNLOAD_BASE_URL` to your private app HTTPS URL plus `/builds` (no trailing slash required). The publisher reads the actual version, build, device families and profile expiry from the IPA, checks its CMS envelope and refuses expired profiles. It does not replace Mac code-signature validation. Downloads stay in `~/.local/share/omarchy-remote/builds`, outside the checkout, with SHA-256 identities and no automatic pruning. To move that directory, set `OMARCHY_BUILDS_DIR` identically for the publisher and dev service. Publish each new signed build with its source revision and notes; no service restart is needed to update the page. Changing the download host requires regenerating manifests for retained builds by publishing those IPAs with the new base URL.
+
+The portable publishing skill is included at [`skills/omarchy-builds/SKILL.md`](skills/omarchy-builds/SKILL.md) and downloadable from the dashboard. Copy that folder into your agent's skills directory, such as `~/.codex/skills/` or `~/.claude/skills/`. It uses this checkout's publisher and your host configuration; it contains no fixed host or signing identity. The server is read-only: agents publish locally on the host or over the user's existing SSH connection, rather than exposing an upload API.

@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { serveBuildDownload } from './build-downloads.mjs';
 import { watchSources } from './source-watch.mjs';
 import { readFileSync, existsSync } from 'node:fs';
 import { readFile, realpath, stat } from 'node:fs/promises';
@@ -106,6 +107,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     const url = new URL(req.url, 'http://localhost');
+    if (await serveBuildDownload(req, res, url.pathname)) return;
     if (url.pathname === '/__dev/events' && req.method === 'GET') {
       res.writeHead(200, {
         ...headers,

@@ -10,7 +10,7 @@
     "format": "prettier --write . && node scripts/format-template.mjs",
     "format:check": "prettier --check . && node scripts/format-template.mjs --check",
     "lint": "npm run format:check && cargo fmt --manifest-path backend/Cargo.toml --check && cargo clippy --manifest-path backend/Cargo.toml --all-targets -- -D warnings",
-    "test": "npm run format:check && node --test scripts/worker.test.mjs scripts/keyboard.test.mjs scripts/remote-client.test.mjs scripts/source-watch.test.mjs",
+    "test": "npm run format:check && node --test scripts/worker.test.mjs scripts/keyboard.test.mjs scripts/remote-client.test.mjs scripts/source-watch.test.mjs scripts/build-downloads.test.mjs",
     "test:live": "node --test scripts/live-server.test.mjs",
     "test:backend": "node --test scripts/backend.test.mjs",
     "test:ui": "playwright test",

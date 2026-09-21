@@ -243,3 +243,11 @@ and Settings remains a regular app. The middle of the in-app top bar still opens
 the launcher; pulling down at either corner does nothing in the shell. Native
 build 35 defers only the bottom edge, letting iOS handle its top-edge gestures
 without the app’s previous extra swipe requirement.
+
+## Native build downloads
+
+The host's `/builds/` page lists published iPhone/iPad builds with release notes, source revision, profile expiry, SHA-256 checksum, a direct IPA download, and an iOS manifest install link. Open it in Safari with Tailscale connected when away from the local network. Installation still requires a device covered by the signing profile and Developer Mode; hosting does not register new devices or renew signing. An available download is not proof that iOS accepted installation.
+
+Already validated IPAs are published with `scripts/publish-native-build.py`; the catalog lives outside Git in `~/.local/share/omarchy-remote/builds` (override with `OMARCHY_BUILDS_DIR` for both publisher and server). Builds are retained by SHA-256, and re-publishing identical bytes updates notes without duplicating the entry. The server exposes only the page, catalog, IPA and manifest files. No signing credentials or validation logs are published.
+
+The dashboard includes a downloadable `omarchy-builds` agent skill. It ships with the repository so other hosts can use the same publishing workflow with their own addresses and signing identities.

@@ -28,6 +28,7 @@ The two user services from `deploy/install.sh` are `omarchy-remote.service` (the
 - Build changed Rust with `cargo build --release --manifest-path backend/Cargo.toml`, then restart `omarchy-remote.service`. This ends backend-owned shells; finish isolated tests before restarting.
 - The live server disables service-worker caching. `/native/` serves `ios/Generated/Web`, which `scripts/prepare-native.py` generates from `public/`; do not edit it directly.
 - `public/themes-data.js` (palettes) and the ignored `public/backgrounds/` (WebP wallpapers plus `catalog.js`) come from `python scripts/import-themes.py`, which `deploy/install.sh` runs. Do not hand-edit either.
+- After validating a new signed iOS IPA, publish it with `scripts/publish-native-build.py` (source commit and release notes required) to the existing `/builds/` dashboard. Use `OMARCHY_DOWNLOAD_BASE_URL` or an explicit private HTTPS base URL; retain IPAs outside Git and report hosting separately from installation.
 - Swift changes need a new signed build and device installation. `npm run test:live` exercises the running server; `npm run build && npm test` validates the separate PWA build.
 
 # Host app integration
