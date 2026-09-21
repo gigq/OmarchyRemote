@@ -1143,8 +1143,20 @@ public final class ShellActivity extends Activity {
     super.onActivityResult(request, result, data);
     if (request == DeviceFiles.SAVE_REQUEST) deviceFiles.result(result, data);
     if (request == 10 && fileCallback != null) {
-      fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result, data));
+      ValueCallback<Uri[]> callback = fileCallback;
       fileCallback = null;
+      // Multi-selection is returned as ClipData, with no single data URI.
+      // Some WebView versions' default parser only reads the single URI.
+      if (result == RESULT_OK && data != null && data.getClipData() != null) {
+        ArrayList<Uri> selected = new ArrayList<>();
+        for (int index = 0; index < data.getClipData().getItemCount(); index++) {
+          Uri uri = data.getClipData().getItemAt(index).getUri();
+          if (uri != null) selected.add(uri);
+        }
+        callback.onReceiveValue(selected.isEmpty() ? null : selected.toArray(new Uri[0]));
+      } else {
+        callback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result, data));
+      }
     }
   }
 
