@@ -46,3 +46,45 @@ for (const viewport of [
     await page.screenshot({ path: `artifacts/browser/builds-app-published-${viewport.width}.png` });
   });
 }
+
+test('native Install sends only the build identity and reports handoff or failure accurately', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1194, height: 834 });
+  const id = 'b'.repeat(64);
+  await page.addInitScript(() => {
+    window.installRequests = [];
+    window.acceptInstall = true;
+    window.webkit = {
+      messageHandlers: {
+        shellInstallBuild: {
+          postMessage: async message => {
+            window.installRequests.push(message);
+            return { opened: window.acceptInstall };
+          },
+        },
+      },
+    };
+  });
+  await page.route('**/builds/catalog.json', route =>
+    route.fulfill({
+      json: [{ id, build: '37', version: '0.2.0', notes: 'Native installation', bytes: 100 }],
+    })
+  );
+  await page.goto('/');
+  await page.keyboard.press('Meta+k');
+  await page.getByRole('searchbox', { name: 'Search apps, panes and files' }).fill('Builds');
+  await page.getByRole('button', { name: /Builds.*build dashboard/ }).click();
+  const app = page.locator('#remote-builds-app');
+  const install = app.getByRole('button', { name: 'Install build 37' });
+  await expect(install).toBeVisible();
+  expect(await page.evaluate(() => window.installRequests)).toEqual([]);
+  await install.click();
+  expect(await page.evaluate(() => window.installRequests)).toEqual([{ build: id }]);
+  await expect(app.getByRole('status')).toContainText('Install request sent to iOS');
+  await expect(install).toBeEnabled();
+  await page.evaluate(() => (window.acceptInstall = false));
+  await install.click();
+  await expect(app.getByRole('status')).toContainText('could not open the installer');
+  await expect(install).toBeEnabled();
+});

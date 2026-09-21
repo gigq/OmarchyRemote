@@ -127,6 +127,15 @@
           node('code', '', build.sha256)
         );
         card.append(details);
+        if (window.webkit?.messageHandlers?.shellInstallBuild) {
+          const install = button(
+            'Install',
+            () => this.installBuild(build.id, install),
+            'builds-action'
+          );
+          install.setAttribute('aria-label', 'Install build ' + build.build);
+          card.append(install);
+        }
         this.content.append(card);
       }
       const actions = node('section', 'builds-card');
@@ -138,7 +147,9 @@
         node(
           'p',
           '',
-          'Open this host’s dashboard in Safari to install a build. Keep Tailscale connected.'
+          window.webkit?.messageHandlers?.shellInstallBuild
+            ? 'Tap Install on a build and confirm the iOS prompt. Keep Tailscale connected. Updating this app may close it while iOS replaces it.'
+            : 'This app version needs Safari to install a build. Copy the dashboard link below. Keep Tailscale connected.'
         )
       );
       if (url) {
@@ -165,6 +176,24 @@
       }
       actions.append(this.skillLink());
       this.content.append(actions);
+    }
+    async installBuild(id, control) {
+      control.disabled = true;
+      this.status.textContent = 'Requesting installation…';
+      try {
+        const result = await window.webkit.messageHandlers.shellInstallBuild.postMessage({
+          build: id,
+        });
+        if (result?.opened !== true)
+          throw Error('iOS could not open the installer. Use the dashboard link in Safari.');
+        this.status.textContent =
+          'Install request sent to iOS. Confirm the system prompt, then check the Home Screen for progress.';
+      } catch (error) {
+        this.status.textContent =
+          error.message || 'Could not start installation. Try the dashboard link in Safari.';
+      } finally {
+        control.disabled = false;
+      }
     }
     dispose() {
       this.disposed = true;

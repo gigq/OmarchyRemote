@@ -54,6 +54,52 @@ enum ShellSource {
 }
 
 @MainActor
+private final class ShellInstallBuildBridge: NSObject, WKScriptMessageHandlerWithReply {
+    static func installURL(build: String, host: URL?) -> URL? {
+        guard build.count == 64,
+            build.utf8.allSatisfy({
+                (48...57).contains($0) || (97...102).contains($0)
+            }), let host, host.scheme == "https", host.host != nil, host.user == nil, host.password == nil,
+            var manifest = URLComponents(url: host, resolvingAgainstBaseURL: false)
+        else { return nil }
+        manifest.path = "/builds/" + build + "/manifest.plist"
+        manifest.query = nil
+        manifest.fragment = nil
+        guard let url = manifest.url else { return nil }
+        var install = URLComponents()
+        install.scheme = "itms-services"
+        install.host = ""
+        install.queryItems = [
+            URLQueryItem(name: "action", value: "download-manifest"),
+            URLQueryItem(name: "url", value: url.absoluteString),
+        ]
+        return install.url
+    }
+
+    func userContentController(
+        _ controller: WKUserContentController, didReceive message: WKScriptMessage,
+        replyHandler: @escaping @MainActor @Sendable (Any?, String?) -> Void
+    ) {
+        guard message.frameInfo.isMainFrame,
+            ShellSource.trusts(message.frameInfo.securityOrigin),
+            let body = message.body as? [String: Any], body.count == 1,
+            let build = body["build"] as? String,
+            let url = Self.installURL(build: build, host: ShellSource.liveURL)
+        else {
+            replyHandler(nil, "Invalid build or untrusted host")
+            return
+        }
+        UIApplication.shared.open(url, options: [:]) { opened in
+            if opened {
+                replyHandler(["opened": true], nil)
+            } else {
+                replyHandler(nil, "This device could not open the system installer")
+            }
+        }
+    }
+}
+
+@MainActor
 private final class ShellHostsBridge: NSObject, WKScriptMessageHandlerWithReply {
     weak var owner: ShellViewController?
     func userContentController(
@@ -697,6 +743,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
     private let keyboardState = ShellKeyboardStateBridge()
     private let storageBridge = ShellStorageBridge()
     private let hostsBridge = ShellHostsBridge()
+    private let installBuildBridge = ShellInstallBuildBridge()
     private var showingHosts = false
     private var shellBottom: NSLayoutConstraint?
     private var pickerBottom: NSLayoutConstraint?
@@ -896,6 +943,8 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         hostsBridge.owner = self
         configuration.userContentController.addScriptMessageHandler(
             hostsBridge, contentWorld: .page, name: "shellHosts")
+        configuration.userContentController.addScriptMessageHandler(
+            installBuildBridge, contentWorld: .page, name: "shellInstallBuild")
         refreshDeviceIdentity(in: configuration.userContentController)
         keyboardState.owner = self
         configuration.userContentController.add(keyboardState, name: "shellKeyboard")
