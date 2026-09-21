@@ -72,7 +72,20 @@ test('native focus follows active apps, survives closing Terminal and rejects st
   ).toBe(true);
   expect(await deliver(herdRequest)).toBe(true);
   await expect(composer).toBeFocused();
-  await page.keyboard.type('unsent draft');
+  expect(
+    await page.evaluate(
+      token => HyprlandRemote.replayInput(token - 1, [{ text: 'stale' }]),
+      herdRequest
+    )
+  ).toBe(false);
+  expect(
+    await page.evaluate(
+      token =>
+        HyprlandRemote.replayInput(token, [{ text: 'unsent draftx' }, { code: 'Backspace' }]),
+      herdRequest
+    )
+  ).toBe(true);
+  await expect(composer).toHaveValue('unsent draft');
   await page.keyboard.press('Meta+Enter');
   const terminal = page.locator('#remote-terminal-app textarea.native-input');
   await expect.poll(latest).not.toBe(herdRequest);
@@ -92,6 +105,12 @@ test('native focus follows active apps, survives closing Terminal and rejects st
   const previous = await latest();
   await page.keyboard.press('Meta+k');
   expect(await deliver(previous)).toBe(false);
+  expect(
+    await page.evaluate(
+      token => HyprlandRemote.replayInput(token, [{ text: 'wrong window' }]),
+      previous
+    )
+  ).toBe(false);
   const launcher = page.getByRole('searchbox', { name: 'Search apps, panes and files' });
   await expect(launcher).toBeFocused();
   await launcher.fill('Foreman QA');

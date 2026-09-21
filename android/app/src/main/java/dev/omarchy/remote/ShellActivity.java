@@ -26,6 +26,10 @@ public final class ShellActivity extends Activity {
   private final DeviceKeys deviceKeys = new DeviceKeys();
   private final Set<Integer> consumedKeys = new HashSet<>();
   private boolean shellEditing;
+  private boolean awaitingLaunchFocus;
+  private int launchGeneration;
+  private final ArrayList<KeyEvent> launchKeys = new ArrayList<>();
+  private final Runnable abandonLaunchKeys = () -> cancelLaunchFocus();
   private volatile boolean bundled;
   private boolean foreground;
   private boolean probing;
@@ -202,6 +206,7 @@ public final class ShellActivity extends Activity {
 
   private void loadShell(boolean picker) {
     handler.removeCallbacks(reconnect);
+    cancelLaunchFocus();
     bundled = false;
     retrySeconds = 3;
     deviceKeys.register(new JSONArray());
@@ -410,6 +415,7 @@ public final class ShellActivity extends Activity {
 
   @Override
   protected void onPause() {
+    cancelLaunchFocus();
     foreground = false;
     handler.removeCallbacks(reconnect);
     if (shell != null) {
@@ -443,6 +449,7 @@ public final class ShellActivity extends Activity {
         if (body.has("commands")) deviceKeys.register(body.optJSONArray("commands"));
         if (body.has("focusRequest")) {
           int token = body.optInt("focusRequest");
+          int generation = launchGeneration;
           evaluate(
               "window.HyprlandRemote?.focusFromNative(" + token + ",false)",
               result -> {
@@ -450,7 +457,11 @@ public final class ShellActivity extends Activity {
                   shell.requestFocus();
                   evaluate(
                       "window.HyprlandRemote?.focusFromNative(" + token + ",true)",
-                      ignored -> {
+                      focused -> {
+                        if (generation == launchGeneration) {
+                          if ("true".equals(focused)) drainLaunchKeys(token, generation);
+                          else cancelLaunchFocus();
+                        }
                         if (getResources().getConfiguration().keyboard
                             != Configuration.KEYBOARD_QWERTY)
                           ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
@@ -905,12 +916,64 @@ public final class ShellActivity extends Activity {
         "document.activeElement?.blur();window.HyprlandDesk?.nativeKey({code:'Escape'});", null);
   }
 
+  private void cancelLaunchFocus() {
+    handler.removeCallbacks(abandonLaunchKeys);
+    awaitingLaunchFocus = false;
+    launchGeneration++;
+    launchKeys.clear();
+  }
+
+  private void drainLaunchKeys(int token, int generation) {
+    if (!awaitingLaunchFocus || generation != launchGeneration) return;
+    if (launchKeys.isEmpty()) {
+      cancelLaunchFocus();
+      return;
+    }
+    JSONArray keys = new JSONArray();
+    for (KeyEvent event : launchKeys) {
+      if (event.getAction() != KeyEvent.ACTION_DOWN) continue;
+      String special =
+          switch (event.getKeyCode()) {
+            case KeyEvent.KEYCODE_ENTER -> "Enter";
+            case KeyEvent.KEYCODE_DEL -> "Backspace";
+            case KeyEvent.KEYCODE_TAB -> "Tab";
+            default -> null;
+          };
+      if (special != null) keys.put(object("code", special));
+      else {
+        int character = event.getUnicodeChar();
+        if (Character.isValidCodePoint(character))
+          keys.put(object("text", new String(Character.toChars(character))));
+      }
+    }
+    launchKeys.clear();
+    evaluate(
+        "window.HyprlandRemote?.replayInput(" + token + "," + keys + ")",
+        result -> {
+          if (generation != launchGeneration) return;
+          if ("true".equals(result)) drainLaunchKeys(token, generation);
+          else cancelLaunchFocus();
+        });
+  }
+
   @Override
   public boolean dispatchKeyEvent(KeyEvent event) {
     int key = event.getKeyCode();
     if (event.getAction() == KeyEvent.ACTION_UP && consumedKeys.remove(key)) return true;
-    if (event.getAction() != KeyEvent.ACTION_DOWN || shell == null)
-      return super.dispatchKeyEvent(event);
+    if (shell == null) return super.dispatchKeyEvent(event);
+    boolean textKey =
+        !event.isCtrlPressed()
+            && !event.isAltPressed()
+            && !event.isMetaPressed()
+            && (event.getUnicodeChar() >= 32
+                || key == KeyEvent.KEYCODE_ENTER
+                || key == KeyEvent.KEYCODE_DEL
+                || key == KeyEvent.KEYCODE_TAB);
+    if (awaitingLaunchFocus && textKey) {
+      if (launchKeys.size() < 256) launchKeys.add(new KeyEvent(event));
+      return true;
+    }
+    if (event.getAction() != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event);
     if (event.getRepeatCount() > 0 && consumedKeys.contains(key)) return true;
     boolean pageFocused =
         pages.values().stream()
@@ -918,9 +981,21 @@ public final class ShellActivity extends Activity {
     JSONObject action = deviceKeys.match(event, shellEditing || pageFocused);
     if (action == null) return super.dispatchKeyEvent(event);
     consumedKeys.add(key);
-    if (action.optBoolean("focusShell")) shell.requestFocus();
+    cancelLaunchFocus();
+    if (action.optBoolean("focusShell")) {
+      shell.requestFocus();
+      if (action.optString("group").equals("Apps")) {
+        awaitingLaunchFocus = true;
+        handler.postDelayed(abandonLaunchKeys, 2000);
+      }
+    }
     // Send the registry chord, including the canonical form of Ctrl+Alt shell aliases.
-    evaluate("window.HyprlandDesk?.nativeKey(" + action + ")", null);
+    evaluate(
+        "window.HyprlandDesk?.nativeKey("
+            + action
+            + ");"
+            + (awaitingLaunchFocus ? "window.HyprlandRemote?.requestInputFocus();" : ""),
+        null);
     return true;
   }
 

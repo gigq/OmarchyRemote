@@ -1648,6 +1648,43 @@
   }
   window.HyprlandRemote = {
     attach: logic => new HostBridge(logic),
+    replayInput: (token, keys) => {
+      const input = activeBridge?.currentInput();
+      if (!input || token !== activeBridge.focusSerial || document.activeElement !== input.field)
+        return false;
+      for (const key of keys) {
+        if (token !== activeBridge.focusSerial || document.activeElement !== input.field)
+          return false;
+        if (key.code === 'Backspace' && input.message) {
+          const field = input.field;
+          let start = field.selectionStart;
+          const end = field.selectionEnd;
+          if (start === end && start > 0)
+            start -= Array.from(field.value.slice(0, start)).at(-1).length;
+          field.setRangeText('', start, end, 'end');
+          input.saveDraft();
+        } else if (key.text) {
+          if (input.message) {
+            input.field.setRangeText(
+              key.text,
+              input.field.selectionStart,
+              input.field.selectionEnd,
+              'end'
+            );
+            input.saveDraft();
+          } else input.sendText(key.text);
+        } else if (key.code) {
+          input.field.dispatchEvent(
+            new KeyboardEvent('keydown', { key: key.code, bubbles: true, cancelable: true })
+          );
+        }
+      }
+      return true;
+    },
+    requestInputFocus: () => {
+      activeBridge?.cancelNativeFocus();
+      activeBridge?.reconcileFocus();
+    },
     focusFromNative: (token, perform = true) =>
       activeBridge?.focusFromNative(token, perform) || false,
     HerdrApp,
