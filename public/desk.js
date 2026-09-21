@@ -404,7 +404,7 @@
             d.logic.remote?.app(current);
           if (b.reopen && front?.reopen) front.reopen();
           else d.logic.openApp(app.key);
-          if (app.native) d.logic.set({ kb: true, sup: false });
+          if (app.native) d.logic.set({ kb: true });
         },
       }))
     );
@@ -513,7 +513,7 @@
       keys: 'E',
       code: /^KeyE$/,
       label: 'Expo overview',
-      run: d => d.logic.set({ ov: !d.logic.state.ov, kb: false, sup: false, launch: false }),
+      run: d => d.logic.set({ ov: !d.logic.state.ov, kb: false, launch: false }),
     },
     {
       group: 'Windows',
@@ -1446,7 +1446,7 @@
       if (!s.desk) {
         if (dir === 'left') this.logic.go(s.ws - 1);
         else if (dir === 'right') this.logic.go(s.ws + 1);
-        else if (dir === 'up') this.logic.set({ ov: true, kb: false, sup: false });
+        else if (dir === 'up') this.logic.set({ ov: true, kb: false });
         else this.logic.go(0);
         return;
       }

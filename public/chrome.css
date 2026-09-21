@@ -159,12 +159,6 @@
   white-space: nowrap;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
 }
-.kbd.super {
-  font-size: 8px;
-  padding: 0 4px;
-  line-height: 12px;
-  background: transparent;
-}
 .tag {
   font-size: 9px;
   font-weight: 600;

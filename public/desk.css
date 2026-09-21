@@ -288,7 +288,7 @@ html.desk-mode {
   position: static;
 }
 
-/* Launcher and the SUPER keyboard hang from the centre of the wider bar. */
+/* The launcher hangs from the centre of the wider bar. */
 .desk-mode .shell-overlay {
   left: calc(50% - 300px) !important;
   right: auto !important;
@@ -297,16 +297,6 @@ html.desk-mode {
   box-sizing: border-box;
   border-top: 1px solid var(--theme-border) !important;
   border-radius: 22px !important;
-}
-.desk-mode .custom-keyboard {
-  left: calc(50% - 270px) !important;
-  right: auto !important;
-  width: 540px;
-  box-sizing: border-box;
-  border: 1px solid var(--theme-border);
-  border-bottom: 0;
-  border-radius: 18px 18px 0 0;
-  padding-bottom: 18px !important;
 }
 
 /* ⌘/ shortcut sheet. */

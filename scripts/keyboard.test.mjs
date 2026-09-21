@@ -25,74 +25,7 @@ function terminal() {
   c.set({ kb: true });
   return c;
 }
-function type(c, text) {
-  for (const ch of text) c.type(ch === ' ' ? 'space' : ch);
-}
-test('launcher and super routing remain functional', () => {
-  const c = terminal();
-  c.set({ launch: true });
-  type(c, 'term');
-  assert.equal(c.state.query, 'term');
-  c.type('⏎');
-  assert.equal(c.cur(), 'terminal');
-  c.set({ sup: true });
-  const w = c
-    .renderVals()
-    .kbRows.flatMap(r => r.keys)
-    .find(k => k.l === 'files');
-  w.on();
-  assert.equal(c.cur(), 'files');
-});
-test('held delete repeats in the launcher and pointer cancellation stops it', async () => {
-  const c = terminal();
-  c.set({ launch: true });
-  type(c, 'abcdefghij');
-  const event = {
-    button: 0,
-    pointerId: 1,
-    preventDefault() {},
-    stopPropagation() {},
-    currentTarget: { setPointerCapture() {} },
-  };
-  c.pressKey(event, () => c.type('⌫'), true);
-  assert.equal(c.state.query, 'abcdefghi');
-  await new Promise(r => setTimeout(r, 550));
-  c.keyEnd();
-  const count = c.state.query.length;
-  assert.ok(count < 9);
-  await new Promise(r => setTimeout(r, 100));
-  assert.equal(c.state.query.length, count);
-});
-
-test('shifted symbols are inserted and shift resets', () => {
-  const c = terminal();
-  c.set({ launch: true });
-  c.type('⇧');
-  c.type('1');
-  c.type('2');
-  assert.equal(c.state.query, '!2');
-  c.type('⇧');
-  c.type('/');
-  assert.equal(c.state.query, '!2?');
-});
-
-test('typing on the terminal card goes to the host bridge, not local state', () => {
-  const sent = [];
-  const c = terminal();
-  c.remote = { key: (l, mods) => sent.push([l, mods.ctrl]) };
-  c.set({ ctl: true });
-  c.type('c');
-  type(c, 'ls');
-  assert.deepEqual(sent, [
-    ['c', true],
-    ['l', false],
-    ['s', false],
-  ]);
-  assert.equal(c.state.ctl, false);
-  assert.equal(c.state.query, '');
-});
-
-test('bottom swipes favor expo while keyboard stays in the outer corners', () => {
+test('bottom swipes favor expo while either corner opens native input', () => {
   for (const width of [375, 402, 440]) {
     for (const fraction of [0.15, 0.25, 0.33, 0.5, 0.67, 0.75, 0.85]) {
       const c = terminal();
@@ -108,7 +41,6 @@ test('bottom swipes favor expo while keyboard stays in the outer corners', () =>
       c.ptr = { x: width * fraction, y: 870, cx: width * fraction, cy: 870, w: width, h: 874 };
       c.up({ clientX: width * fraction, clientY: 700 });
       assert.equal(c.state.kb, true);
-      assert.equal(c.state.sup, fraction > 0.5);
       assert.equal(c.state.ov, false);
     }
   }
@@ -128,4 +60,15 @@ test('workspace limit preserves existing navigation and permits opening after cl
   c.openApp('extra');
   assert.equal(c.state.open.length, 10);
   assert.equal(c.cur(), 'extra');
+});
+
+test('bottom corners do not request a shell keyboard for a non-input app', () => {
+  const c = terminal();
+  c.openApp('browser');
+  for (const x of [20, 380]) {
+    c.ptr = { x, y: 870, cx: x, cy: 870, w: 402, h: 874 };
+    c.up({ clientX: x, clientY: 700 });
+    assert.equal(c.state.kb, false);
+    assert.equal(c.state.ov, false);
+  }
 });

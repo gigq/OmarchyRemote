@@ -1263,7 +1263,7 @@
         if (!this.disposed && this.selected === pane) {
           this.inputStatus.textContent = messages.join(' · ');
           if (this.bridge.logic.cur() === 'herdr' && !this.bridge.logic.state.ov) {
-            this.bridge.logic.set({ kb: true, sup: false });
+            this.bridge.logic.set({ kb: true });
             this.nativeInput.focus();
           }
         }
@@ -1381,14 +1381,14 @@
         send,
         key: (key, mods) => this.key(key, mods),
         focus: () => {
-          if (!this.logic.state.kb) this.logic.set({ kb: true, sup: false });
+          if (!this.logic.state.kb) this.logic.set({ kb: true });
         },
-        hide: () => this.logic.set({ kb: false, sup: false }),
+        hide: () => this.logic.set({ kb: false }),
       });
     }
     keyboard() {
       if (!this.logic.state.ov) {
-        this.logic.set({ kb: true, sup: false });
+        this.logic.set({ kb: true });
         this.currentInput()?.focus();
       }
     }
@@ -1404,8 +1404,7 @@
         this.focusCurrent = current;
         this.cancelNativeFocus();
       }
-      const native = !!HyprlandApps.get(current)?.native && !s.launch && !s.sup;
-      mount('touch-shell')?.classList.toggle('use-native-input', native);
+      const native = !!HyprlandApps.get(current)?.native && !s.launch;
       for (const spec of Object.values(HyprlandApps.catalog)) {
         if (!spec.native) continue;
         const root = mount(spec.mount);
@@ -1464,7 +1463,6 @@
         s.ov ||
         s.launch ||
         s.map ||
-        s.sup ||
         document.querySelector('.desk-sheet,[role="dialog"]')
       ) {
         this.cancelNativeFocus();
@@ -1560,7 +1558,6 @@
         s.ov ||
         s.launch ||
         s.map ||
-        s.sup ||
         document.querySelector('.desk-sheet,[role="dialog"]') ||
         (!s.kb && window.__HYPRLAND_HARDWARE_KEYBOARD__ !== true) ||
         !request.target.isConnected ||

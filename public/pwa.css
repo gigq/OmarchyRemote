@@ -70,68 +70,6 @@ body {
   }
 }
 
-.touch-key {
-  -webkit-tap-highlight-color: transparent;
-  -webkit-touch-callout: none;
-  user-select: none;
-}
-.touch-key {
-  position: relative;
-  overflow: visible;
-}
-.touch-key.key-pressed {
-  z-index: 2;
-  box-shadow: inset 0 0 0 2px var(--theme-rose);
-}
-.touch-key.key-pressed::after {
-  content: attr(data-preview);
-  position: absolute;
-  bottom: calc(100% + 7px);
-  left: 50%;
-  transform: translateX(-50%);
-  min-width: 48px;
-  height: 56px;
-  padding: 0 9px;
-  box-sizing: border-box;
-  border: 1px solid var(--theme-foreground);
-  border-radius: 12px;
-  background: var(--theme-rose);
-  color: var(--theme-background);
-  font-size: 28px;
-  line-height: 56px;
-  font-weight: 500;
-  white-space: nowrap;
-  box-shadow: 0 5px 14px #0008;
-  pointer-events: none;
-}
-.touch-key.key-pressed::before {
-  content: '';
-  position: absolute;
-  bottom: calc(100% + 2px);
-  left: calc(50% - 7px);
-  width: 14px;
-  height: 14px;
-  background: var(--theme-rose);
-  transform: rotate(45deg);
-  pointer-events: none;
-}
-.touch-key.key-pressed[data-preview-size='word']::after {
-  font-size: 16px;
-}
-.touch-key.key-pressed:first-child::after {
-  left: 0;
-  transform: none;
-}
-.touch-key.key-pressed:last-child::after {
-  left: auto;
-  right: 0;
-  transform: none;
-}
-.touch-key:focus-visible {
-  outline: 2px solid var(--theme-green);
-  outline-offset: -2px;
-}
-
 .expo-mode [data-workspace] {
   touch-action: none;
 }

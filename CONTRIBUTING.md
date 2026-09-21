@@ -36,7 +36,6 @@ The shell reads one catalog, `window.HyprlandApps` in `public/apps.js`. Every wo
      surface: 'page', // 'terminal' cards use the terminal background
      native: false, // true: the touch keyboard and hardware keys go to instance.key()
      offline: false, // true: usable without the backend (no "connect to the host" placeholder)
-     typing: null, // keyboard status label while focused (defaults to the name)
    });
    ```
 
@@ -77,7 +76,7 @@ The shell reads one catalog, `window.HyprlandApps` in `public/apps.js`. Every wo
    - **A dedicated API** (the Files, Browser, Herdr pattern). Add a module under `backend/src/`, register its routes under `/api/<app>/…` in `backend/src/main.rs`, and list it in `SERVICES` in `backend/src/apps.rs` so `/api/capabilities` advertises it. Routes inherit the origin and client-header checks, payload limits, and the proxy token from the shared transport; keep filesystem access inside HOME and never expose the environment file.
    - **Nothing** for apps that only need the browser (`offline: true`), like Settings.
 
-4. **Optional shortcuts.** Give the catalog entry `superKeys` (phone SUPER-keyboard keys, with an optional short `superLabel` caption) and `deskKeys` (desk-mode bindings: `{keys, code, label}` plus `shift`, `alt`, or `browserOnly` flags). Both open the app; a desk binding marked `reopen: true` calls the instance's `reopen()` instead when the app is already in front, which is how ⌘T adds a terminal tab. An instance can also implement `shortcut(event)` to handle an unreserved hardware key; shell bindings always take precedence (return `true` when handled) and expose `shortcuts` as `[keys, text]` pairs for the ⌘/ sheet. The shell-level bindings stay in `BINDINGS` in `public/desk.js`.
+4. **Optional shortcuts.** Give the catalog entry `deskKeys` (desk-mode bindings: `{keys, code, label}` plus `shift`, `alt`, or `browserOnly` flags). These open the app; a desk binding marked `reopen: true` calls the instance's `reopen()` instead when the app is already in front, which is how ⌘T adds a terminal tab. An instance can also implement `shortcut(event)` to handle an unreserved hardware key; shell bindings always take precedence (return `true` when handled) and expose `shortcuts` as `[keys, text]` pairs for the ⌘/ sheet. The shell-level bindings stay in `BINDINGS` in `public/desk.js`.
 
    Expose an instance's `actions` as descriptors with `code`, `label`, `group`, modifier booleans (`meta`, `ctrl`, `alt`, `shift`), and `run()` to include its actions in the palette and native keyboard registrations. Derive handling and help from the same descriptors, as Browser does. Omit `code` for palette-only actions. Set `focusShell: true` when a native keyboard action opens a shell input that needs the shell WKWebView to become first responder (build 32 and later).
 

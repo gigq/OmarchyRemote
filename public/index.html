@@ -346,7 +346,7 @@
       <div class="home-time" style="font-size:64px;font-weight:300;letter-spacing:-3px;line-height:.9" data-live-time>—</div>
       <div class="home-date" style="font-size:12px;color:var(--theme-cyan);margin:10px 0 18px" data-live-date>—</div>
       <div style="display:flex;flex-direction:column;gap:10px">
-        <div class="home-app-grid" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-content:start"><sc-for list="{{ homeApps }}" as="ap"><div class="home-tile" sc-camel-on-click="{{ ap.on }}" style="position:relative;height:62px;border-radius:16px;background:var(--theme-surface);border:1px solid var(--theme-border);display:flex;flex-direction:column;justify-content:space-between;padding:10px;cursor:pointer;box-sizing:border-box"><div class="nf home-tile-glyph" style="font-size:17px;line-height:1;color: {{ ap.c }}">{{ ap.g }}</div><div class="home-tile-name" style="font-size:10px;color:var(--theme-secondary)">{{ ap.n }}</div><span class="kbd super home-tile-key" style="display: {{ ap.keyDisplay }}">{{ ap.key }}</span><span class="home-app-badge" style="display: {{ ap.badgeDisplay }}">{{ ap.badge }}</span></div></sc-for><button class="home-pin" sc-camel-on-click="{{ managePins }}" aria-label="Manage pinned apps"><span class="nf"></span><small>pin</small></button></div>
+        <div class="home-app-grid" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-content:start"><sc-for list="{{ homeApps }}" as="ap"><div class="home-tile" sc-camel-on-click="{{ ap.on }}" style="position:relative;height:62px;border-radius:16px;background:var(--theme-surface);border:1px solid var(--theme-border);display:flex;flex-direction:column;justify-content:space-between;padding:10px;cursor:pointer;box-sizing:border-box"><div class="nf home-tile-glyph" style="font-size:17px;line-height:1;color: {{ ap.c }}">{{ ap.g }}</div><div class="home-tile-name" style="font-size:10px;color:var(--theme-secondary)">{{ ap.n }}</div><span class="home-app-badge" style="display: {{ ap.badgeDisplay }}">{{ ap.badge }}</span></div></sc-for><button class="home-pin" sc-camel-on-click="{{ managePins }}" aria-label="Manage pinned apps"><span class="nf"></span><small>pin</small></button></div>
       </div>
       <div id="home-metrics"></div><div id="home-widgets"></div>
       <div class="workspace-label" style="position:absolute;top:0;left:0;right:0;padding:26px 28px;font-size:28px;color:var(--theme-foreground);background:linear-gradient(var(--theme-background) 60%,transparent);opacity:0;pointer-events:none">home</div>
@@ -355,11 +355,6 @@
   </div>
 
   <div class="expo-swipe-hint" aria-hidden="true" style="opacity: {{ swipeHintOpacity }}"></div>
-  <div class="custom-keyboard" style="position:absolute;left:0;right:0;bottom:0;z-index:10;background:var(--theme-surface);border-top:1px solid var(--theme-border);padding:8px 6px 46px;transform: {{ kbTf }};transition: {{ tr }}">
-    <div style="display:flex;justify-content:space-between;align-items:center;height:22px;padding:0 6px 4px;font-size:10px"><span style="color: {{ supC }}">{{ supMsg }}</span><span sc-camel-on-click="{{ kbOff }}" style="color:var(--theme-secondary);cursor:pointer;font-size:12px;padding:0 6px">⌄</span></div>
-    <sc-for list="{{ kbRows }}" as="r" hint-placeholder-count="4"><div style="display:flex;gap:5px;margin-bottom:6px"><sc-for list="{{ r.keys }}" as="k" hint-placeholder-count="10"><button type="button" class="touch-key" aria-label="{{ k.l }}" sc-camel-on-pointer-down="{{ k.down }}" sc-camel-on-pointer-up="{{ keyEnd }}" sc-camel-on-pointer-cancel="{{ keyEnd }}" sc-camel-on-lost-pointer-capture="{{ keyEnd }}" sc-camel-on-click="{{ k.click }}" style="border:0;padding:0;min-width:0;font-family:inherit;touch-action:none;flex: {{ k.w }};height:42px;border-radius:8px;display:grid;place-items:center;font-size: {{ k.fs }};background: {{ k.bg }};color: {{ k.c }};cursor:pointer;transition:background .2s,color .2s">{{ k.l }}</button></sc-for></div></sc-for>
-  </div>
-
   <div class="shell-overlay" style="position:absolute;left:0;right:0;top:52px;z-index:14;background:color-mix(in srgb, var(--theme-terminal) 96%, transparent);border:1px solid var(--theme-border);border-top:0;border-radius:0 0 28px 28px;box-shadow:0 20px 60px rgba(0,0,0,.5);visibility: {{ launchVisibility }};transform: {{ launchTf }};transition: {{ tr }};padding:12px 14px 14px;display:flex;flex-direction:column;gap:6px">
     <div id="dashboard-launcher"></div>
   </div>
@@ -400,12 +395,7 @@ class Component extends DCLogic {
     full: [],
     ov: false,
     kb: false,
-    sup: false,
-    term: false,
-    ctl: false,
     launch: false,
-    query: '',
-    shift: false,
   };
   async componentDidMount() {
     await window.HyprlandPreferences?.ready;
@@ -439,7 +429,6 @@ class Component extends DCLogic {
     document.removeEventListener('hyprland-host', this.hostChanged);
     window.removeEventListener('online', this.hostChanged);
     window.removeEventListener('offline', this.hostChanged);
-    this.keyEnd();
     this.desk?.dispose();
     this.cards?.dispose();
     this.dashboard?.dispose();
@@ -460,7 +449,7 @@ class Component extends DCLogic {
     return s.desk && window.HyprlandDesk ? window.HyprlandDesk.cur(s) : s.open[s.ws];
   }
   reset() {
-    return { ov: false, kb: false, sup: false, ctl: false, launch: false, query: '' };
+    return { ov: false, kb: false, launch: false };
   }
   // Desk mode: workspaces hold several windows; `jump` and `focusApp` address a window by app key.
   jump(key) {
@@ -478,7 +467,7 @@ class Component extends DCLogic {
     else this.set({ ws: window.HyprlandDesk.deskOf(s, key), focus: key, scratchVisible: false });
   }
   openLauncher() {
-    const show = () => this.set({ launch: true, kb: true, sup: false, ov: false });
+    const show = () => this.set({ launch: true, kb: true, ov: false });
     if (window.ReactDOM?.flushSync) window.ReactDOM.flushSync(show);
     else show();
     this.dashboard?.field.focus();
@@ -525,14 +514,12 @@ class Component extends DCLogic {
           ...window.HyprlandDesk.close(s, k),
           ov: expo,
           kb: false,
-          sup: false,
-          ctl: false,
         });
       } else {
         const current = this.cur(),
           open = s.open.filter(x => x !== k),
           ws = current === k ? Math.max(0, s.ws - 1) : open.indexOf(current);
-        this.set({ open, ws, ov: expo, kb: false, sup: false, ctl: false });
+        this.set({ open, ws, ov: expo, kb: false });
       }
     } catch (e) {
       this.expo?.error('Could not close app. Check the host connection and try again.');
@@ -565,11 +552,13 @@ class Component extends DCLogic {
       E = Math.max(24, p.w * 0.08),
       T = 40,
       third = p.w / 3;
-    if (s.launch && dy < -T) return this.set({ launch: false, kb: false, query: '' });
+    if (s.launch && dy < -T) return this.set({ launch: false, kb: false });
     if (p.y > p.h - E && dy < -T) {
       const corner = p.w * 0.15;
-      if (p.x < corner) return this.set({ kb: true, sup: false, ov: false, launch: false });
-      if (p.x > p.w - corner) return this.set({ kb: true, sup: true, ov: false, launch: false });
+      if (p.x < corner || p.x > p.w - corner) {
+        if (this.APPS[this.cur()]?.native) return this.set({ kb: true, ov: false, launch: false });
+        return;
+      }
       return this.set({ ov: !s.ov, kb: false, launch: false });
     }
     // Only the middle of the in-app bar opens the launcher. Corners belong to the OS.
@@ -581,109 +570,6 @@ class Component extends DCLogic {
     if (p.x < E && dx > T) return this.go(s.ws - 1);
     if (p.x > p.w - E && dx < -T) return this.go(s.ws + 1);
   };
-  showKey(e, label) {
-    clearTimeout(this.previewTimer);
-    this.previewKey?.classList.remove('key-pressed');
-    const el = e.currentTarget;
-    el.dataset.preview = label === 'space' ? '␣' : label;
-    el.dataset.previewSize = Array.from(label).length > 2 ? 'word' : 'character';
-    el.classList.add('key-pressed');
-    this.previewKey = el;
-  }
-  keyEnd = e => {
-    if (e) {
-      e.stopPropagation();
-      clearTimeout(this.previewTimer);
-      const el = this.previewKey;
-      this.previewTimer = setTimeout(
-        () => {
-          el?.classList.remove('key-pressed');
-          if (this.previewKey === el) this.previewKey = null;
-        },
-        e.type === 'pointercancel' ? 0 : 140
-      );
-    }
-    clearTimeout(this.repeatDelay);
-    clearInterval(this.repeatTimer);
-    this.repeatDelay = null;
-    this.repeatTimer = null;
-  };
-  pressKey(e, on, repeat) {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    e.stopPropagation();
-    this.ptr = null;
-    this.keyEnd();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    on();
-    if (repeat)
-      this.repeatDelay = setTimeout(() => {
-        this.repeatTimer = setInterval(() => {
-          if (this.state.kb) on();
-          else this.keyEnd();
-        }, 65);
-      }, 400);
-  }
-  shifted(l) {
-    return (
-      {
-        1: '!',
-        2: '@',
-        3: '#',
-        4: '$',
-        5: '%',
-        6: '^',
-        7: '&',
-        8: '*',
-        9: '(',
-        0: ')',
-        '-': '_',
-        '/': '?',
-        ':': ';',
-        ';': ':',
-        '(': '[',
-        ')': ']',
-        $: '~',
-        '&': '|',
-        '@': '`',
-        '"': "'",
-        '.': ',',
-      }[l] || l.toUpperCase()
-    );
-  }
-  type(l) {
-    const s = this.state;
-    if (l === '⇧') return this.set({ shift: !s.shift });
-    if (!s.launch && this.remote && this.APPS[this.cur()]?.native) {
-      this.remote.key(l, { shift: s.shift, ctrl: s.ctl });
-      if (Array.from(l).length === 1) this.set({ shift: false, ctl: false });
-      return;
-    }
-    if (l === 'esc') return this.set({ kb: false, launch: false, sup: false, ctl: false });
-    if (s.launch) {
-      if (l === '⌫') return this.set({ query: Array.from(s.query).slice(0, -1).join('') });
-      if (l === '⏎') {
-        const m = this.matches();
-        if (m[0]) this.openApp(m[0]);
-        return;
-      }
-      if (l === 'space' || Array.from(l).length === 1)
-        this.set({
-          query: s.query + (l === 'space' ? ' ' : s.shift ? this.shifted(l) : l),
-          shift: false,
-        });
-      return;
-    }
-  }
-  matches() {
-    const q = this.state.query.trim().toLowerCase();
-    return Object.keys(this.APPS).filter(
-      k =>
-        k !== 'home' &&
-        !this.APPS[k].baseKey &&
-        (this.APPS[k].name.includes(q) || this.APPS[k].description.includes(q))
-    );
-  }
   // Card geometry for every catalog app (public/cards.js paints it); the desk replaces it above 600 px.
   layout() {
     const s = this.state,
@@ -725,10 +611,8 @@ class Component extends DCLogic {
   renderVals() {
     const s = this.state,
       T = this.T,
-      A = this.APPS,
-      cur = this.cur();
-    const { tr, rad, D } = this.layout(),
-      n = s.open.length;
+      A = this.APPS;
+    const { tr, rad, D } = this.layout();
     const pills = D
       ? D.pills
       : s.open.map((k, i) => ({
@@ -742,143 +626,9 @@ class Component extends DCLogic {
           },
         }));
     const online = typeof navigator === 'undefined' || navigator.onLine !== false;
-    // keyboard
-    const bind = {
-      q: 'close',
-      h: 'ws ←',
-      l: 'ws →',
-      space: 'launch',
-      '←': 'ws ←',
-      '→': 'ws →',
-      '↑': 'expo',
-      '↓': 'home',
-    };
-    const act = {
-      q: () => this.closeWs(),
-      h: () => this.go(s.ws - 1),
-      l: () => this.go(s.ws + 1),
-      '←': () => this.go(s.ws - 1),
-      '→': () => this.go(s.ws + 1),
-      '↑': () => this.set({ ov: true, kb: false, sup: false }),
-      '↓': () => this.go(0),
-      space: () => this.set({ launch: true, sup: false }),
-    };
-    // App keys come from the catalog (`superKeys` in public/apps.js).
-    for (const app of Object.values(A))
-      for (const k of app.superKeys || []) {
-        bind[k] = app.superLabel || app.name;
-        act[k] = () => this.openApp(app.key);
-      }
-    const R = (str, w) => str.split(' ').map(l => ({ l, w: w || 1 }));
-    const key = x => {
-      if (x.l === 'SUPER')
-        return {
-          l: 'super',
-          w: 1.5,
-          fs: '11px',
-          bg: s.sup ? T.rose : T.bd,
-          c: s.sup ? T.bg : T.fg,
-          on: () => this.set({ sup: !this.state.sup }),
-        };
-      if (x.l === 'LAYER')
-        return {
-          l: s.term ? 'abc' : '123',
-          w: 1.5,
-          fs: '11px',
-          bg: T.bd,
-          c: T.iris,
-          on: () => this.set({ term: !this.state.term }),
-        };
-      if (x.l === 'CTRL')
-        return {
-          l: 'ctrl',
-          w: 1,
-          fs: '10px',
-          bg: s.ctl ? T.iris : T.bg,
-          c: s.ctl ? T.bg : T.rose,
-          on: () => this.set({ ctl: !this.state.ctl }),
-        };
-      if (x.l === '⌄')
-        return {
-          l: '⌄',
-          w: 1,
-          fs: '13px',
-          bg: T.sf2,
-          c: T.fg,
-          on: () => this.set({ kb: false, launch: false, sup: false, ctl: false, query: '' }),
-        };
-      const bd = bind[x.l];
-      if (s.sup)
-        return {
-          l: bd || x.l,
-          w: x.w || 1,
-          fs: bd ? '10px' : x.fs || '13px',
-          bg: bd ? T.bg : T.sf2,
-          c: bd ? T.rose : T.mu,
-          on: () => {
-            const f = act[x.l];
-            if (f) {
-              f();
-              this.set({ sup: false });
-            } else this.set({ sup: false });
-          },
-        };
-      if (s.ctl && /^[a-z]$/.test(x.l))
-        return { l: '^' + x.l, w: 1, fs: '12px', bg: T.sf2, c: T.iris, on: () => this.type(x.l) };
-      return {
-        l: s.shift && Array.from(x.l).length === 1 ? this.shifted(x.l) : x.l,
-        w: x.w || 1,
-        fs: x.fs || '13px',
-        bg: x.l === '⇧' && s.shift ? T.iris : x.mod ? T.bg : T.sf2,
-        c: x.mod ? T.rose : T.fg,
-        on: () => this.type(x.l),
-      };
-    };
-    const termRows = [
-      R('1 2 3 4 5 6 7 8 9 0'),
-      R('- / : ; ( ) $ & @ "'),
-      R('CTRL ← ↓ ↑ → ⇧ home end tab ⌫').map(x => ({ ...x, fs: '10px' })),
-    ];
-    const abcRows = [
-      R('q w e r t y u i o p'),
-      R('a s d f g h j k l'),
-      [{ l: '⇧', w: 1.5 }, ...R('z x c v b n m'), { l: '⌫', w: 1.5 }],
-    ];
-    const kbRows = [
-      ...(s.term ? termRows : abcRows),
-      [
-        { l: 'SUPER' },
-        { l: 'LAYER' },
-        { l: 'esc' },
-        { l: 'space', w: 3 },
-        { l: '.' },
-        { l: '⏎', w: 1.5 },
-      ],
-    ].map(r => ({
-      keys: r.map(x => {
-        const k = key(x);
-        return {
-          ...k,
-          down: e => {
-            if (e.button === 0) this.showKey(e, k.l);
-            this.pressKey(e, k.on, !s.sup && ['⌫', '←', '→'].includes(x.l));
-          },
-          click: e => {
-            e.stopPropagation();
-            if (e.detail === 0) {
-              this.showKey(e, k.l);
-              k.on();
-              this.keyEnd(e);
-            }
-          },
-        };
-      }),
-    }));
-    const m = this.matches();
     const homeKeys = s.homePins || window.HyprlandApps.DEFAULT_PINS;
     return {
       swipeHintOpacity: s.ov || s.kb || s.launch ? 0 : 1,
-      keyEnd: this.keyEnd,
       down: this.down,
       up: this.up,
       cancel: this.cancel,
@@ -895,33 +645,13 @@ class Component extends DCLogic {
           g: A[k].icon || A[k].glyph,
           n: A[k].name,
           c: A[k].color,
-          key: A[k].superKeys.find(x => /^[a-z]$/.test(x)) || '',
-          keyDisplay:
-            !s.badges?.[k] && A[k].superKeys.some(x => /^[a-z]$/.test(x)) ? 'block' : 'none',
           op: 1,
           badge: s.badges?.[k] || '',
           badgeDisplay: s.badges?.[k] ? 'block' : 'none',
           on: () => this.openApp(k),
         })),
-      kbOn: () => {
-        if (!this.state.ov) this.set({ kb: true, sup: false });
-      },
-      kbOff: () => this.set({ kb: false, launch: false, sup: false, ctl: false, query: '' }),
-      kbTf: s.kb ? 'translateY(0)' : 'translateY(105%)',
-      kbRows,
-      supC: s.sup ? T.rose : s.ctl ? T.iris : T.mu,
-      supMsg: s.sup
-        ? 'SUPER · tap a key to run its binding'
-        : s.ctl
-          ? 'CTRL held · tap a letter'
-          : s.launch
-            ? 'typing into the launcher'
-            : A[cur]?.native
-              ? window.HyprlandApps.host.name + ' · ' + (A[cur].typing || A[cur].name)
-              : 'touch keyboard',
       launchVisibility: s.launch ? 'visible' : 'hidden',
       launchTf: s.launch ? 'translateY(0)' : 'translateY(-104%)',
-      matchCount: m.length,
     };
   }
 }

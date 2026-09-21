@@ -10,6 +10,10 @@ test('native focus follows active apps, survives closing Terminal and rejects st
     window.focusRequests = [];
     window.webkit = {
       messageHandlers: {
+        browserDevice: {
+          postMessage: async message =>
+            message.action === 'capabilities' ? { embedded: true, webApps: true } : {},
+        },
         shellKeyboard: {
           postMessage: message => {
             if (message.focusRequest) focusRequests.push(message.focusRequest);
@@ -18,6 +22,10 @@ test('native focus follows active apps, survives closing Terminal and rejects st
       },
     };
     localStorage.setItem('omarchy-herdr-pane', 'qa-focus');
+    localStorage.setItem(
+      'omarchy-webapps',
+      JSON.stringify([{ id: 'webapp-focus-qa', name: 'Foreman QA', url: 'https://example.com/' }])
+    );
   });
   const snapshot = {
     workspaces: [{ workspace_id: 'qa', label: 'Focus QA' }],
@@ -84,5 +92,18 @@ test('native focus follows active apps, survives closing Terminal and rejects st
   const previous = await latest();
   await page.keyboard.press('Meta+k');
   expect(await deliver(previous)).toBe(false);
-  await expect(page.getByRole('searchbox', { name: 'Search apps, panes and files' })).toBeFocused();
+  const launcher = page.getByRole('searchbox', { name: 'Search apps, panes and files' });
+  await expect(launcher).toBeFocused();
+  await launcher.fill('Foreman QA');
+  await page.getByRole('button', { name: /Foreman QA.*example.com/ }).click();
+  await expect(page.locator('[data-workspace="webapp-focus-qa"]')).toHaveClass(
+    /native-surface-visible/
+  );
+  await expect(composer).not.toBeFocused();
+  await expect(page.locator('.custom-keyboard,.touch-key')).toHaveCount(0);
+  await page.keyboard.press('Meta+Shift+A');
+  await page.waitForTimeout(400);
+  expect(await deliver(await latest())).toBe(true);
+  await expect(composer).toBeFocused();
+  await expect(composer).toHaveValue('unsent draft');
 });

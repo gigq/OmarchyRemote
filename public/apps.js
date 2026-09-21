@@ -1,5 +1,5 @@
 /* App catalog: the one list the shell reads for workspaces, Home pins, the launcher,
-   Expo cards, desk tiles and SUPER bindings. To add an app, `define` it here and give it
+   Expo cards, desk tiles and hardware shortcuts. To add an app, `define` it here and give it
    behaviour with `HyprlandApps.provide(key, {...})` from its own module (see CONTRIBUTING.md).
    The key doubles as the host app id the backend knows. */
 (() => {
@@ -8,10 +8,8 @@
   // mount: id of the element the app renders into (default remote-<key>-app, class remote-app).
   // native: the touch keyboard and hardware keys are sent to the app (its instance implements key()).
   // offline: the app works without the host backend, so no "connect to the host" placeholder.
-  // typing: keyboard status label while the app has focus (defaults to the app name).
   // glyph: two-letter fallback shown where the Nerd Font is unavailable; icon: the Nerd Font
   //   codepoint (public/assets/nerd-symbols.woff2 is a subset; add glyphs there when adding one).
-  // superKeys: phone SUPER-keyboard keys that open the app; superLabel is the key caption.
   // deskKeys: desk-mode bindings ({keys, code, label, shift?, alt?, browserOnly?}) that open the
   //   app, or call the instance's reopen() when reopen: true and the app is already in front.
   const define = (key, spec) => {
@@ -23,9 +21,6 @@
       icon: '',
       native: false,
       offline: false,
-      typing: null,
-      superKeys: [],
-      superLabel: null,
       deskKeys: [],
       provider: null,
       ...spec,
@@ -48,8 +43,6 @@
     description: 'live host shell',
     surface: 'terminal',
     native: true,
-    superKeys: ['t', '⏎'],
-    superLabel: 'term',
     deskKeys: [{ keys: '↩', code: /^(Enter|NumpadEnter)$/, label: 'Terminal' }],
   });
   define('codexbar', {
@@ -64,7 +57,6 @@
     glyph: 'fm',
     icon: '\uf07b',
     description: 'files on the host',
-    superKeys: ['e'],
     deskKeys: [{ keys: '⇧ F', shift: true, code: /^KeyF$/, label: 'Files' }],
   });
   define('browser', {
@@ -91,8 +83,6 @@
     icon: '\u{f06a9}',
     description: 'agents · herdr',
     native: true,
-    typing: 'selected Herdr pane',
-    superKeys: ['a'],
     deskKeys: [{ keys: '⇧ A', shift: true, code: /^KeyA$/, label: 'Herd agents' }],
   });
   define('btop', {
@@ -157,7 +147,6 @@
     mount: 'theme-settings',
     mountClass: 'theme-settings',
     offline: true,
-    superKeys: ['s'],
     deskKeys: [{ keys: ',', code: /^Comma$/, label: 'Settings' }],
   });
   // A provider is {create(root, bridge) → instance, close?(instance|null, bridge)}. Instances may
@@ -195,8 +184,6 @@
       name: base.name + ' ' + number,
       mount: 'remote-' + id + '-app',
       deskKeys: [],
-      superKeys: [],
-      superLabel: null,
     });
   };
   const DEFAULT_PINS = [

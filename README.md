@@ -1,6 +1,6 @@
 # Omarchy Remote
 
-A touch shell for an [Omarchy](https://omarchy.org) desktop, used from an iPhone, an iPad, or any browser window. It opens a real shell on the host, browses the home directory, mirrors desktop browser tabs, follows Herdr agent panes, and runs host TUIs (btop, systemctl-tui, lazydocker, dua, lnav) inside phone-sized windows with Hyprland-style workspaces, Expo, SUPER bindings, and the Omarchy theme catalog. On larger screens the same shell tiles windows like Hyprland's dwindle layout and takes ⌘ shortcuts.
+A touch shell for an [Omarchy](https://omarchy.org) desktop, used from an iPhone, an iPad, or any browser window. It opens a real shell on the host, browses the home directory, mirrors desktop browser tabs, follows Herdr agent panes, and runs host TUIs (btop, systemctl-tui, lazydocker, dua, lnav) inside phone-sized windows with Hyprland-style workspaces, Expo, keyboard shortcuts, and the Omarchy theme catalog. On larger screens the same shell tiles windows like Hyprland's dwindle layout and takes ⌘ shortcuts.
 
 Everything runs on the host you already own. There is no cloud relay: a Rust backend on loopback serves the apps, a small Node server serves the web shell, and a private HTTPS address (Tailscale Serve works well) puts it on your phone.
 
@@ -96,7 +96,7 @@ install or configure a remote server.
 
 ## Using it
 
-**Phone.** Start edge gestures inside the app's content, above the home indicator and below the status area. Left and right edges switch workspaces. Swipe down from the middle of the in-app top bar for the launcher. The top corners have no app pull-down panes; the native app leaves the system top-edge gestures to iOS. Open Settings from Home or the launcher. Swipe up from the bottom corners for the keyboard or the SUPER keyboard; the middle of the bottom edge opens Expo, as does tapping the active workspace pill. Open workspaces are restored on reload and host sessions reconnect; when a shell's process exits its tab closes, and the terminal window closes with its last tab.
+**Phone.** Start edge gestures inside the app's content, above the home indicator and below the status area. Left and right edges switch workspaces. Swipe down from the middle of the in-app top bar for the launcher. The top corners have no app pull-down panes; the native app leaves the system top-edge gestures to iOS. Open Settings from Home or the launcher. Swipe up from either bottom corner to open native input in Terminal or herdr; the middle of the bottom edge opens Expo, as does tapping the active workspace pill. Open workspaces are restored on reload and host sessions reconnect; when a shell's process exits its tab closes, and the terminal window closes with its last tab.
 
 **iPad, Mac, and desktop windows.** When both edges of the viewport are at least 600 px, the shell switches to desk mode: a 1:1 layout that fills the window, Home with the clock, app grid, and all widgets at once, and workspaces that tile windows with Hyprland's dwindle split (up to four per workspace). Hardware keyboards use ⌘ on Apple devices (Omarchy's SUPER) and Ctrl+Alt elsewhere. Press ⌘/ or tap the shortcut button in the top bar for the same table.
 

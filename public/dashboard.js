@@ -79,8 +79,6 @@
           row.append(handle);
         }
         row.append(glyphOf(app), el('span', 'home-sheet-name', app.name));
-        const letter = app.superKeys?.find(x => /^[a-z]$/.test(x));
-        if (pinned && letter) row.append(el('span', 'kbd super', letter));
         if (!pinned)
           row.append(
             k.startsWith('webapp-')
@@ -309,7 +307,7 @@
       field.append(el('span', 'prompt-prefix', '❯'), this.field);
       line.append(
         field,
-        this.button('esc', () => this.logic.set({ launch: false, kb: false, query: '' }), 'keycap')
+        this.button('esc', () => this.logic.set({ launch: false, kb: false }), 'keycap')
       );
       this.results = el('div', 'dashboard-results');
       this.hint = el('div', 'launcher-hint');
@@ -356,7 +354,7 @@
         q = raw.replace(/^[@/>]\s*/, '').toLowerCase();
       this.results.replaceChildren();
       // Rows: a cursor bar marks the selection, a glyph carries the app's tile color,
-      // and a kbd chip shows the SUPER binding (⏎ on the selected row).
+      // and a kbd chip marks the selected row (⏎).
       const add = (heading, items, limit = 6) => {
         if (!items.length) return;
         this.results.append(el('div', 'launcher-group', heading));
@@ -392,7 +390,6 @@
               detail: k === 'herdr' ? this.herdrDetail(a.description) : a.description,
               glyph: a.icon || a.glyph,
               color: a.color,
-              key: (k => (k ? 'super ' + k : ''))(a.superKeys.find(x => /^[a-z]$/.test(x))),
               run: () => this.logic.openApp(k),
             }))
         );

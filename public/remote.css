@@ -135,10 +135,6 @@
   height: 100%;
   vertical-align: top;
 }
-
-.use-native-input .custom-keyboard {
-  display: none;
-}
 .remote-app.native-typing.with-keyboard {
   bottom: max(40px, calc(var(--keyboard-inset, 0px) + 8px));
 }
