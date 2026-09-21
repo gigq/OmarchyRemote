@@ -16,3 +16,7 @@ __pycache__/
 /android/local.properties
 /android/**/build/
 /android/app/src/main/assets/Web/
+
+# Android private signing keys
+*.jks
+*.keystore

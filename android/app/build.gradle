@@ -1,6 +1,15 @@
 plugins {
     id 'com.android.application'
 }
+def releaseSigning = [
+    storeFile: providers.environmentVariable('OMARCHY_ANDROID_KEYSTORE').orNull,
+    storePassword: providers.environmentVariable('OMARCHY_ANDROID_STORE_PASSWORD').orNull,
+    keyAlias: providers.environmentVariable('OMARCHY_ANDROID_KEY_ALIAS').orNull,
+    keyPassword: providers.environmentVariable('OMARCHY_ANDROID_KEY_PASSWORD').orNull,
+]
+if (releaseSigning.values().any { it } && !releaseSigning.values().every { it }) {
+    throw new GradleException('Set all four OMARCHY_ANDROID signing environment variables; see docs/android-signing.md')
+}
 android {
     namespace 'dev.omarchy.remote'
     compileSdk 36
@@ -12,6 +21,21 @@ android {
         versionCode providers.gradleProperty('versionCode').getOrElse('2').toInteger()
         versionName providers.gradleProperty('versionName').getOrElse('0.3.0')
         buildConfigField 'String', 'REMOTE_URL', groovy.json.JsonOutput.toJson(providers.gradleProperty('remoteUrl').getOrElse(''))
+    }
+    signingConfigs {
+        release {
+            if (releaseSigning.storeFile) {
+                storeFile file(releaseSigning.storeFile)
+                storePassword releaseSigning.storePassword
+                keyAlias releaseSigning.keyAlias
+                keyPassword releaseSigning.keyPassword
+            }
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+        }
     }
     buildFeatures {
         buildConfig true
