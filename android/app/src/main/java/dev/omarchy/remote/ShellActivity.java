@@ -196,6 +196,7 @@ public final class ShellActivity extends Activity {
     deviceLocation.cancel();
     deviceFiles.cancel();
     for (Page page : pages.values()) {
+      page.closeFind();
       root.removeView(page.web);
       page.web.destroy();
     }
@@ -454,7 +455,7 @@ public final class ShellActivity extends Activity {
           "darkMode",
           true,
           "nativeFind",
-          false,
+          true,
           "shortcuts",
           false);
     String id = body.optString("appID", "browser");
@@ -486,9 +487,11 @@ public final class ShellActivity extends Activity {
           page.web.stopLoading();
           break;
         case "focus":
-          page.web.requestFocus();
+          if (body.optBoolean("active", true)) page.web.requestFocus();
+          else shell.requestFocus();
           break;
         case "close":
+          page.closeFind();
           root.removeView(page.web);
           page.web.destroy();
           pages.remove(id);
@@ -499,17 +502,25 @@ public final class ShellActivity extends Activity {
         case "dark":
           page.dark = body.optBoolean("enabled");
           page.web.evaluateJavascript(
-              assetText("Web/vendor/darkreader/darkreader.js"), ignored -> pageDark(id));
+              "typeof window.DarkReader !== 'undefined'",
+              available -> {
+                Page current = pages.get(id);
+                if (current == null) return;
+                if ("true".equals(available)) pageDark(id);
+                else
+                  current.web.evaluateJavascript(
+                      assetText("Web/vendor/darkreader/darkreader.js"), ignored -> pageDark(id));
+              });
           return object("dark", page.dark);
         case "findOpen":
-          page.web.findAllAsync(body.optString("query"));
+          page.openFind();
           break;
         case "findNext":
-          page.web.findNext(!body.optBoolean("backwards"));
+          if (page.findDialog == null) page.openFind();
+          else page.web.findNext(!body.optBoolean("backwards"));
           break;
         case "findClose":
-          page.web.clearMatches();
-          break;
+          return object("closed", page.closeFind());
         case "snapshot":
           page.snapshot();
           break;
@@ -535,6 +546,8 @@ public final class ShellActivity extends Activity {
     boolean dark;
     boolean loading;
     boolean hiddenControls;
+    AlertDialog findDialog;
+    String findQuery = "";
     float radius;
 
     Page(String id) {
@@ -557,7 +570,7 @@ public final class ShellActivity extends Activity {
           });
       web.setOnScrollChangeListener(
           (view, x, y, oldX, oldY) -> {
-            boolean next = y > 12;
+            boolean next = hiddenControls ? y > 0 : y > 12;
             if (!id.startsWith("webapp-") && next != hiddenControls) {
               hiddenControls = next;
               emit(object("controlsHidden", next));
@@ -568,6 +581,11 @@ public final class ShellActivity extends Activity {
             @Override
             public void onPageStarted(WebView view, String url, Bitmap icon) {
               loading = true;
+              publish();
+            }
+
+            @Override
+            public void doUpdateVisitedHistory(WebView view, String url, boolean reload) {
               publish();
             }
 
@@ -593,7 +611,10 @@ public final class ShellActivity extends Activity {
     void layout(JSONObject body) {
       boolean visible = body.optBoolean("visible");
       web.setVisibility(visible ? View.VISIBLE : View.GONE);
-      if (!visible) return;
+      if (!visible) {
+        closeFind();
+        return;
+      }
       JSONArray rect = body.optJSONArray("rect");
       double viewport = body.optDouble("viewport");
       if (rect == null || rect.length() != 4 || viewport <= 0) return;
@@ -612,6 +633,72 @@ public final class ShellActivity extends Activity {
       web.setAlpha((float) body.optDouble("opacity", 1));
       radius = (float) body.optDouble("radius") * scale;
       web.invalidateOutline();
+    }
+
+    void openFind() {
+      if (web.getVisibility() != View.VISIBLE) return;
+      if (findDialog != null) return;
+      LinearLayout content = new LinearLayout(ShellActivity.this);
+      content.setOrientation(LinearLayout.VERTICAL);
+      int padding = (int) (20 * getResources().getDisplayMetrics().density);
+      content.setPadding(padding, padding / 2, padding, 0);
+      EditText query = new EditText(ShellActivity.this);
+      query.setSingleLine(true);
+      query.setHint("Find in page");
+      query.setContentDescription("Find in page");
+      query.setText(findQuery);
+      TextView count = new TextView(ShellActivity.this);
+      count.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+      content.addView(query);
+      content.addView(count);
+      web.setFindListener(
+          (index, total, done) -> {
+            if (done) count.setText(total == 0 ? "No matches" : (index + 1) + " of " + total);
+          });
+      query.addTextChangedListener(
+          new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence text, int start, int length, int after) {}
+
+            public void onTextChanged(CharSequence text, int start, int before, int length) {
+              findQuery = text.toString();
+              web.findAllAsync(findQuery);
+            }
+
+            public void afterTextChanged(android.text.Editable text) {}
+          });
+      findDialog =
+          new AlertDialog.Builder(ShellActivity.this)
+              .setTitle("Find in page")
+              .setView(content)
+              .setNegativeButton("Previous", null)
+              .setNeutralButton("Next", null)
+              .setPositiveButton("Done", (dialog, which) -> {})
+              .create();
+      findDialog.setOnDismissListener(
+          dialog -> {
+            web.clearMatches();
+            web.setFindListener(null);
+            findDialog = null;
+          });
+      findDialog.setOnShowListener(
+          dialog -> {
+            findDialog
+                .getButton(AlertDialog.BUTTON_NEGATIVE)
+                .setOnClickListener(view -> web.findNext(false));
+            findDialog
+                .getButton(AlertDialog.BUTTON_NEUTRAL)
+                .setOnClickListener(view -> web.findNext(true));
+            query.requestFocus();
+            query.selectAll();
+            web.findAllAsync(findQuery);
+          });
+      findDialog.show();
+    }
+
+    boolean closeFind() {
+      if (findDialog == null) return false;
+      findDialog.dismiss();
+      return true;
     }
 
     void emit(JSONObject data) {
@@ -723,7 +810,10 @@ public final class ShellActivity extends Activity {
     deviceFiles.cancel();
     unregisterReceiver(battery);
     if (fileCallback != null) fileCallback.onReceiveValue(null);
-    for (Page page : pages.values()) page.web.destroy();
+    for (Page page : pages.values()) {
+      page.closeFind();
+      page.web.destroy();
+    }
     if (shell != null) shell.destroy();
     super.onDestroy();
   }
