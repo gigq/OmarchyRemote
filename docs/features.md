@@ -6,7 +6,7 @@ What each app in Omarchy Remote does and the limits it enforces. "The host" is t
 
 Terminal opens a real interactive login shell on the host through the Rust backend. Tap its output to open the system keyboard. **Keys** mode sends input immediately, with autocorrect disabled for commands and paths. The shortcut row appears only in Keys mode and provides Esc, Tab, arrows and Ctrl; Ctrl applies to the next letter. The shell survives live reload and reconnection; `exit` closes that shell tab; closing the last tab closes the Terminal window. Closing Terminal from Expo terminates its app-owned shell; reopening starts a new one. Files can open a shell in the current folder after confirming replacement of the app-owned Terminal.
 
-⌘Return opens or focuses Terminal; ⌘T adds a tab in the active app (Terminal or Browser), rather than launching Terminal. Terminal input receives focus immediately, and keystrokes typed during its initial connection are held until the shell is ready.
+⌘Return opens or focuses Terminal; ⌘T adds a tab in the active app (Terminal or Browser), rather than launching Terminal. Terminal input receives focus immediately, and keystrokes typed during its initial connection are held until the shell is ready. With a hardware keyboard, the active window’s input stays enabled across window/workspace changes and closing another window. Native build 36 restores the WebKit text-input session through a native-initiated focus call; callbacks for a window that is no longer active, a dismissed input, or an open overlay are rejected. This applies to Terminal and herdr’s selected pane through the shared input bridge.
 
 ## Herdr
 

@@ -157,6 +157,8 @@ private final class ShellKeyboardStateBridge: NSObject, WKScriptMessageHandler {
             owner?.updateKeyboardEditing(editing)
         } else if let body = message.body as? [String: Any], let commands = body["commands"] as? [[String: Any]] {
             owner?.updateCommands(commands)
+        } else if let body = message.body as? [String: Any], let token = body["focusRequest"] as? Int {
+            owner?.requestShellInputFocus(token)
         }
     }
 }
@@ -794,6 +796,22 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
         UIMenuSystem.main.setNeedsRebuild()
     }
 
+    fileprivate func requestShellInputFocus(_ token: Int) {
+        guard !showingHosts else { return }
+        webView.callAsyncJavaScript(
+            "return window.HyprlandRemote?.focusFromNative(token, false);",
+            arguments: ["token": token], in: nil, in: .page
+        ) { [weak self] result in
+            guard let self, !self.showingHosts,
+                case .success(let value) = result, value as? Bool == true
+            else { return }
+            self.webView.becomeFirstResponder()
+            self.webView.callAsyncJavaScript(
+                "return window.HyprlandRemote?.focusFromNative(token, true);",
+                arguments: ["token": token], in: nil, in: .page, completionHandler: nil)
+        }
+    }
+
     fileprivate func updateKeyboardEditing(_ editing: Bool) {
         guard editing != shellEditing else { return }
         shellEditing = editing
@@ -885,6 +903,7 @@ final class ShellViewController: UIViewController, WKNavigationDelegate {
             WKUserScript(
                 source: """
                     (() => {
+                        window.__HYPRLAND_NATIVE_FOCUS__ = true;
                         const report = () => {
                             const el = document.activeElement;
                             const editing = !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));

@@ -24,7 +24,8 @@ test('Herd selection survives output refresh and does not trigger tap-to-type', 
     });
   });
   await p.goto('/native/');
-  await p.keyboard.press('Meta+Shift+A');
+  // This verifies touch-only selection; a hardware launch intentionally enables input.
+  await p.getByText('herdr', { exact: true }).first().click();
   await p.locator('.herdr-pane').click();
   const output = p.locator('.herdr-output .native-terminal-content');
   await expect(output).toContainText('Copy this sample text');

@@ -1315,8 +1315,12 @@
   }
   // The shell talks to every app through this bridge; apps come from the HyprlandApps catalog
   // and their providers (below and in files.js, browser.js, themes.js). Nothing here knows app names.
+  let activeBridge;
   class HostBridge {
     constructor(logic) {
+      activeBridge = this;
+      this.focusSerial = 0;
+      this.nativeActivationNeeded = true;
       this.logic = logic;
       this.apps = {};
       this.focusRetries = 0;
@@ -1396,6 +1400,10 @@
         current = this.logic.cur(),
         kb = s.kb,
         ov = s.ov;
+      if (this.focusCurrent !== current) {
+        this.focusCurrent = current;
+        this.cancelNativeFocus();
+      }
       const native = !!HyprlandApps.get(current)?.native && !s.launch && !s.sup;
       mount('touch-shell')?.classList.toggle('use-native-input', native);
       for (const spec of Object.values(HyprlandApps.catalog)) {
@@ -1440,7 +1448,9 @@
           app.stopTouchScroll?.cancel();
           app.blur?.();
         }
-        app.nativeInput?.show(native && focused && kb);
+        app.nativeInput?.show(
+          native && focused && (kb || window.__HYPRLAND_HARDWARE_KEYBOARD__ === true)
+        );
         app.placeLatest?.();
       }
       this.reconcileFocus();
@@ -1456,20 +1466,34 @@
         s.map ||
         s.sup ||
         document.querySelector('.desk-sheet,[role="dialog"]')
-      )
+      ) {
+        this.cancelNativeFocus();
         return;
+      }
       const hardware = window.__HYPRLAND_HARDWARE_KEYBOARD__ === true;
-      if (!hardware && !s.kb) return;
+      if (!hardware && !s.kb) {
+        this.cancelNativeFocus();
+        return;
+      }
       const root = mount(HyprlandApps.get(current)?.mount);
       if (!root) return;
       const selection = window.getSelection();
-      if (selection && !selection.isCollapsed) return;
+      if (
+        selection &&
+        !selection.isCollapsed &&
+        root.contains(selection.anchorNode) &&
+        !this.nativeActivationNeeded
+      )
+        return;
       const active = document.activeElement;
       if (
         root.contains(active) &&
+        active.checkVisibility() &&
         (active.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName))
-      )
+      ) {
+        if (this.nativeActivationNeeded) this.focusElement(active);
         return;
+      }
       const input = this.currentInput();
       // Herd's list has no input destination until a pane is selected.
       if (input && this.apps[current]?.detail?.hidden) return;
@@ -1486,8 +1510,8 @@
         return;
       }
       if (input) {
-        input.focus();
-        if (document.activeElement !== input.field) {
+        this.focusElement(input.field, input);
+        if (document.activeElement !== input.field && !this.pendingNativeFocus) {
           if (this.focusRetries++ < 60) this.reconcileFocus();
         } else this.focusRetries = 0;
         return;
@@ -1499,7 +1523,68 @@
         remembered = this.rememberedFocus.get(card);
       const target = remembered?.isConnected && remembered.checkVisibility() ? remembered : root;
       if (target === root) target.tabIndex = -1;
-      target.focus({ preventScroll: true });
+      this.focusElement(target);
+    }
+    cancelNativeFocus() {
+      this.pendingNativeFocus = null;
+      this.focusRetries = 0;
+      this.nativeActivationNeeded = true;
+      this.focusSerial++;
+    }
+    focusElement(target, input = null) {
+      const bridge = window.webkit?.messageHandlers?.shellKeyboard;
+      if (window.__HYPRLAND_NATIVE_FOCUS__ && bridge) {
+        if (this.pendingNativeFocus?.target === target) return;
+        const token = ++this.focusSerial;
+        this.pendingNativeFocus = { token, target, input, current: this.logic.cur() };
+        bridge.postMessage({ focusRequest: token });
+      } else {
+        if (input) input.focus();
+        else target.focus({ preventScroll: true });
+        this.nativeActivationNeeded = false;
+      }
+    }
+    focusFromNative(token, perform = true) {
+      const request = this.pendingNativeFocus;
+      const s = this.logic.state;
+      if (!request || token !== request.token) return false;
+      if (perform) this.pendingNativeFocus = null;
+      const reject = () => {
+        this.pendingNativeFocus = null;
+        return false;
+      };
+      const root = mount(HyprlandApps.get(request.current)?.mount);
+      if (
+        request.current !== this.logic.cur() ||
+        document.hidden ||
+        s.ov ||
+        s.launch ||
+        s.map ||
+        s.sup ||
+        document.querySelector('.desk-sheet,[role="dialog"]') ||
+        (!s.kb && window.__HYPRLAND_HARDWARE_KEYBOARD__ !== true) ||
+        !request.target.isConnected ||
+        !root?.contains(request.target) ||
+        root.closest('.native-surface-visible') ||
+        (request.input && request.input !== this.currentInput())
+      )
+        return reject();
+      if (perform && request.input) request.input.element.hidden = false;
+      if (!request.target.checkVisibility()) return reject();
+      const rect = request.target.getBoundingClientRect();
+      if (rect.right <= 0 || rect.left >= innerWidth || rect.bottom <= 0 || rect.top >= innerHeight)
+        return reject();
+      if (!perform) return true;
+      // Re-enter focus inside the native-initiated script, even if DOM focus survived
+      // while UIKit's text-input session did not. Preserve the composer's selection.
+      const start = request.target.selectionStart,
+        end = request.target.selectionEnd;
+      if (document.activeElement === request.target) request.target.blur();
+      if (request.input) request.input.focus();
+      else request.target.focus({ preventScroll: true });
+      if (typeof start === 'number') request.target.setSelectionRange(start, end);
+      this.nativeActivationNeeded = false;
+      return document.activeElement === request.target;
     }
     async openTerminalAt(path) {
       await this.closeApp('terminal');
@@ -1512,6 +1597,8 @@
       this.apps[this.logic.cur()]?.key?.(input);
     }
     dispose() {
+      this.cancelNativeFocus();
+      if (activeBridge === this) activeBridge = null;
       cancelAnimationFrame(this.focusFrame);
       for (const event of ['focusout', 'pointerup', 'transitionend'])
         document.removeEventListener(event, this.reconcileFocus);
@@ -1564,6 +1651,8 @@
   }
   window.HyprlandRemote = {
     attach: logic => new HostBridge(logic),
+    focusFromNative: (token, perform = true) =>
+      activeBridge?.focusFromNative(token, perform) || false,
     HerdrApp,
     keyInput,
     orderHerdr,
