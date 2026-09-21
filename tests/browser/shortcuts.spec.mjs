@@ -451,3 +451,23 @@ test('pointer focus is opt-in, desk-only and ignores dragging, touch and overlay
   });
   expect((await state(p)).focus).toBe('files');
 });
+
+test('Android browser Command aliases share collision detection with Ctrl+Alt bindings', async ({
+  page,
+}) => {
+  const result = await page.evaluate(() => {
+    window.__OMARCHY_PLATFORM__ = 'android';
+    const browser = { id: 'browser-address', owner: 'browser', code: 'KeyL', meta: true };
+    const duplicate = { id: 'custom', owner: 'shell', code: 'KeyL', ctrl: true, alt: true };
+    const event = { code: 'KeyL', metaKey: false, ctrlKey: true, altKey: true, shiftKey: false };
+    const matches = HyprlandKeymap.matches(browser, event);
+    const resolved = HyprlandKeymap.resolve([browser, duplicate], {});
+    delete window.__OMARCHY_PLATFORM__;
+    return {
+      matches,
+      second: resolved[1].code,
+      desktopMatch: HyprlandKeymap.matches(browser, event),
+    };
+  });
+  expect(result).toEqual({ matches: true, second: null, desktopMatch: false });
+});

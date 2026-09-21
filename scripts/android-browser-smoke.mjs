@@ -113,7 +113,16 @@ try {
   await until(() => page('!!document.querySelector("style.darkreader")'));
   await command('dark', { enabled: false });
   await until(() => page('!document.querySelector("style.darkreader")'));
-  await command('findOpen');
+  await shell(`window.androidQAOriginalKey=HyprlandDesk.nativeKey;window.androidQAKeys=[];
+    HyprlandDesk.nativeKey=key=>{androidQAKeys.push(key);if(key.code==='KeyF')window.webkit.messageHandlers.browserDevice.postMessage({action:'findOpen',appID:'android-browser-qa'});return true};
+    window.webkit.messageHandlers.shellKeyboard.postMessage({commands:[
+      {code:'KeyF',label:'QA Find',owner:'browser',ctrl:true,meta:false},
+      {code:'KeyL',label:'QA Address',owner:'browser',meta:true}
+    ]})`);
+  await command('focus');
+  adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_ALT_LEFT', 'KEYCODE_L');
+  await until(() => shell('androidQAKeys.some(key=>key.code==="KeyL" && key.meta)'));
+  adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_F');
   await until(
     () =>
       adb('shell', 'uiautomator', 'dump', '/sdcard/browser-qa.xml') &&
@@ -143,10 +152,28 @@ try {
   await page('document.querySelector("input").focus()');
   adb('shell', 'input', 'text', 'pagefocus');
   assert.equal(await page('document.querySelector("input").value'), 'pagefocus');
+  await page(
+    'window.qaCopied=false;document.addEventListener("copy",()=>window.qaCopied=true,{once:true})'
+  );
+  adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_A');
+  await until(() =>
+    page(
+      'document.querySelector("input").selectionStart===0 && document.querySelector("input").selectionEnd===9'
+    )
+  );
+  adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_C');
+  await until(() => page('window.qaCopied'));
+  await page('document.querySelector("input").setSelectionRange(9,9)');
+  adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_V');
+  await until(() => page('document.querySelector("input").value==="pagefocuspagefocus"'));
+  assert.equal(await shell('androidQAKeys.length'), 2);
   console.log(
-    'PASS: isolated website, SPA history, back/forward, top-only toolbar reveal, dark mode, find matches, shell/page keyboard focus'
+    'PASS: isolated website, SPA history, back/forward, top-only toolbar reveal, dark mode, find matches, shell/page keyboard focus, native shortcuts and clipboard'
   );
 } finally {
+  await shell(
+    `if(window.androidQAOriginalKey){HyprlandDesk.nativeKey=androidQAOriginalKey;delete window.androidQAOriginalKey;delete window.androidQAKeys};window.webkit.messageHandlers.shellKeyboard.postMessage({commands:HyprlandDesk.actions().filter(a=>a.code)})`
+  ).catch(() => {});
   await command('close').catch(() => {});
   await shell(
     'window.androidQAInput?.remove();window.removeEventListener("host-browser-state",window.androidQAListener);delete window.androidQAEvents;delete window.androidQAListener'

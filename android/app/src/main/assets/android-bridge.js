@@ -59,6 +59,16 @@
       }
     },
   });
+  const reportEditing = () => {
+    const el = document.activeElement;
+    send(
+      'shellKeyboard',
+      !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))
+    );
+  };
+  document.addEventListener('focusin', reportEditing, true);
+  document.addEventListener('focusout', () => queueMicrotask(reportEditing), true);
+  document.addEventListener('DOMContentLoaded', reportEditing);
   window.__OMARCHY_PLATFORM__ = 'android';
   window.__HYPRLAND_NATIVE__ = true;
   window.__HYPRLAND_NATIVE_FOCUS__ = true;

@@ -23,6 +23,9 @@ public final class ShellActivity extends Activity {
   private FrameLayout root;
   private DeviceLocation deviceLocation;
   private DeviceFiles deviceFiles;
+  private final DeviceKeys deviceKeys = new DeviceKeys();
+  private final Set<Integer> consumedKeys = new HashSet<>();
+  private boolean shellEditing;
   private WebView shell;
   private android.content.SharedPreferences prefs;
   private JSONObject directory;
@@ -193,6 +196,9 @@ public final class ShellActivity extends Activity {
   }
 
   private void loadShell(boolean picker) {
+    deviceKeys.register(new JSONArray());
+    consumedKeys.clear();
+    shellEditing = false;
     deviceLocation.cancel();
     deviceFiles.cancel();
     for (Page page : pages.values()) {
@@ -324,6 +330,8 @@ public final class ShellActivity extends Activity {
         hosts(body, reply);
         break;
       case "shellKeyboard":
+        if (raw instanceof Boolean) shellEditing = (Boolean) raw;
+        if (body.has("commands")) deviceKeys.register(body.optJSONArray("commands"));
         if (body.has("focusRequest")) {
           int token = body.optInt("focusRequest");
           evaluate(
@@ -457,7 +465,7 @@ public final class ShellActivity extends Activity {
           "nativeFind",
           true,
           "shortcuts",
-          false);
+          true);
     String id = body.optString("appID", "browser");
     Page page = pages.get(id);
     if (action.equals("open")) {
@@ -786,6 +794,25 @@ public final class ShellActivity extends Activity {
       }
     evaluate(
         "document.activeElement?.blur();window.HyprlandDesk?.nativeKey({code:'Escape'});", null);
+  }
+
+  @Override
+  public boolean dispatchKeyEvent(KeyEvent event) {
+    int key = event.getKeyCode();
+    if (event.getAction() == KeyEvent.ACTION_UP && consumedKeys.remove(key)) return true;
+    if (event.getAction() != KeyEvent.ACTION_DOWN || shell == null)
+      return super.dispatchKeyEvent(event);
+    if (event.getRepeatCount() > 0 && consumedKeys.contains(key)) return true;
+    boolean pageFocused =
+        pages.values().stream()
+            .anyMatch(page -> page.web.hasFocus() && page.web.getVisibility() == View.VISIBLE);
+    JSONObject action = deviceKeys.match(event, shellEditing || pageFocused);
+    if (action == null) return super.dispatchKeyEvent(event);
+    consumedKeys.add(key);
+    if (action.optBoolean("focusShell")) shell.requestFocus();
+    // Send the registry chord, including the canonical form of Ctrl+Alt shell aliases.
+    evaluate("window.HyprlandDesk?.nativeKey(" + action + ")", null);
+    return true;
   }
 
   @Override

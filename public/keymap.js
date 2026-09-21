@@ -25,7 +25,10 @@
       ['KeyA', 'KeyC', 'KeyV', 'KeyX', 'KeyZ', 'KeyY'].includes(a.code));
   const signatures = a => [
     signature(a),
-    ...(a.owner === 'shell' && a.meta && !a.ctrl && !a.alt
+    ...((a.owner === 'shell' || window.__OMARCHY_PLATFORM__ === 'android') &&
+    a.meta &&
+    !a.ctrl &&
+    !a.alt
       ? [signature({ ...a, meta: false, ctrl: true, alt: true })]
       : []),
   ];
@@ -59,7 +62,7 @@
     if (signature(a) === signature(chord(e))) return true;
     // Keep the existing Ctrl+Alt spelling of plain Command shell bindings on the web.
     return (
-      a.owner === 'shell' &&
+      (a.owner === 'shell' || window.__OMARCHY_PLATFORM__ === 'android') &&
       a.meta &&
       !a.ctrl &&
       !a.alt &&
