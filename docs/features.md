@@ -287,3 +287,5 @@ Android rejects invalid host certificates for both WebView requests and automati
 Android Herdr input has an emulator check for real Gboard taps and keyboard Send, including the resulting host output, cleared draft and dismissed keyboard. Predictive correction and composing-script behavior remain separate Android verification work.
 
 Android saved web apps retain their session cookies and device catalog/pins after process death, including when the catalog cannot be fetched. Their native lifecycle check uses an isolated catalog, follows new-window links inline, returns through Android Back and uninstalls the fixture. Websites without an authored background use the browser's white canvas so default black text remains legible; the surrounding shell stays themed.
+
+Android tablet verification includes two independent embedded web apps: native page dimensions follow their tiles after divider dragging, Expo hides the full-size native surfaces and shows page previews, and leaving Expo restores the page dimensions. The same test checks app/session persistence after process death on the tablet viewport.

@@ -113,11 +113,11 @@ adb('reverse', `tcp:${port}`, `tcp:${port}`);
 const host = `http://127.0.0.1:${port}/native/`;
 const site = `http://127.0.0.1:${port}/qa/one`;
 const sockets = [];
-async function page() {
+async function page(suffix = '') {
   let target;
   await until(async () => {
-    target = (await (await fetch('http://127.0.0.1:9225/json/list')).json()).find(t =>
-      t.url.startsWith(`http://127.0.0.1:${port}/qa/`)
+    target = (await (await fetch('http://127.0.0.1:9225/json/list')).json()).find(
+      t => t.url.startsWith(`http://127.0.0.1:${port}/qa/`) && t.url.endsWith(suffix)
     );
     return target;
   });
@@ -187,6 +187,94 @@ try {
   );
   adb('shell', 'input', 'keyevent', 'KEYCODE_BACK');
   await until(() => web('location.pathname==="/qa/one"'));
+  if (process.env.ANDROID_TABLET_WEBAPPS_QA) {
+    assert.match(adb('shell', 'wm', 'size'), /size: 1280x800\s*$/);
+    assert.match(adb('shell', 'wm', 'density'), /density: 160\s*$/);
+    const chord = (...keys) =>
+      adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_ALT_LEFT', ...keys);
+    await shell('HyprlandWebApps.manage();true');
+    await shell(
+      `document.querySelector('[aria-label="Web app name"]').value='Second app QA';document.querySelector('[aria-label="Web app URL"]').value=${JSON.stringify(site.replace('/one', '/other'))};document.querySelector('.webapps-install').requestSubmit();true`
+    );
+    await until(() => catalog.length === 2);
+    const second = catalog.find(app => app.id !== id).id;
+    await click('Open Second app QA');
+    const other = await page('/other');
+    await until(() => other('document.readyState === "complete"'));
+    chord('KEYCODE_SHIFT_LEFT', 'KEYCODE_2');
+    await until(() =>
+      shell(
+        `(()=>{const l=JSON.parse(localStorage.getItem('omarchy-layout-desk'));return l.tiles[${JSON.stringify(id)}]===l.tiles[${JSON.stringify(second)}]})()`
+      )
+    );
+    const bounds = key =>
+      shell(
+        `document.querySelector('[data-workspace="${key}"] .webapp-app').getBoundingClientRect().toJSON()`
+      );
+    async function fits(key, evaluate) {
+      const rect = await bounds(key);
+      const size = await evaluate('({width:innerWidth,height:innerHeight})');
+      return Math.abs(rect.width - size.width) <= 2 && Math.abs(rect.height - size.height) <= 2;
+    }
+    await until(async () => (await fits(id, web)) && (await fits(second, other)));
+    const initialWidth = await web('innerWidth');
+    const divider = await shell(
+      'document.querySelector(".desk-divider").getBoundingClientRect().toJSON()'
+    );
+    const x = Math.round(divider.x + divider.width / 2),
+      y = Math.round(divider.y + divider.height / 2);
+    adb('shell', 'input', 'swipe', String(x), String(y), String(x + 110), String(y), '400');
+    await until(
+      async () =>
+        Math.abs((await web('innerWidth')) - initialWidth) > 50 &&
+        (await fits(id, web)) &&
+        (await fits(second, other))
+    );
+    writeFileSync(
+      'artifacts/android/tablet-webapps.png',
+      execFileSync(adbPath, ['-s', serial, 'exec-out', 'screencap', '-p'], {
+        maxBuffer: 16 * 1024 * 1024,
+      })
+    );
+    await until(() =>
+      shell(
+        '[...document.querySelectorAll(".webapp-preview")].length === 2 && [...document.querySelectorAll(".webapp-preview")].every(image => image.complete && image.naturalWidth > 0 && !image.hidden)'
+      )
+    );
+    chord('KEYCODE_E');
+    await until(() => shell('document.querySelectorAll(".native-surface-visible").length === 0'));
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const expo = execFileSync(adbPath, ['-s', serial, 'exec-out', 'screencap', '-p'], {
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    writeFileSync('artifacts/android/tablet-webapps-expo.png', expo);
+    const sample = execFileSync(
+      'python',
+      [
+        '-c',
+        'from PIL import Image; import sys,io; im=Image.open(io.BytesIO(sys.stdin.buffer.read())).convert("RGB"); print(*im.getpixel((100,100)))',
+      ],
+      { input: expo, encoding: 'utf8' }
+    )
+      .trim()
+      .split(' ')
+      .map(Number);
+    assert.ok(
+      sample.every(channel => channel < 100),
+      'Expo hides the full-size native page above its preview cards'
+    );
+    adb('shell', 'input', 'keyevent', 'KEYCODE_ESCAPE');
+    await until(() => shell('document.querySelectorAll(".native-surface-visible").length === 2'));
+    await until(async () => (await fits(id, web)) && (await fits(second, other)));
+    await shell('HyprlandWebApps.manage();true');
+    await click('Uninstall Second app QA from host');
+    await click('Uninstall');
+    await until(() => catalog.length === 1);
+    await until(() => fits(id, web));
+    console.log(
+      'PASS: two independent Android tablet web apps match their tiles, resize with divider drag, hide in Expo and restore their geometry'
+    );
+  }
   // Wait for the device's asynchronous preference mirror before testing ordinary process death.
   await new Promise(resolve => setTimeout(resolve, 1000));
   catalogOnline = false;
