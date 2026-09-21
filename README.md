@@ -268,3 +268,24 @@ Set `OMARCHY_DOWNLOAD_BASE_URL` to your private app HTTPS URL plus `/builds` (no
 The portable publishing skill is included at [`skills/omarchy-builds/SKILL.md`](skills/omarchy-builds/SKILL.md) and downloadable from the dashboard. Copy that folder into your agent's skills directory, such as `~/.codex/skills/` or `~/.claude/skills/`. It uses this checkout's publisher and your host configuration; it contains no fixed host or signing identity. The server is read-only: agents publish locally on the host or over the user's existing SSH connection, rather than exposing an upload API.
 
 Open **Builds** from the app launcher, or pin it through Home’s app picker. A new host starts with a welcome screen and a **Get the agent skill** link; once an agent publishes a build, the app displays the host’s build history. Native build 37 and later provides **Install** on each build, handing the request to iOS for confirmation. Older native versions retain **Copy dashboard link** for installation in Safari. An accepted handoff is not proof of completed installation. No native binary update is needed for the Builds app itself when using the live host.
+
+### Android development (parity work in progress)
+
+`android/` builds an Android 11+ native host for the same shell and backend. The initial implementation includes trusted shell messaging, saved hosts and preferences, native keyboard/battery integration, and independent browser WebViews. Full iPhone feature parity is **not yet verified**; [the Android parity checklist](docs/android-parity.md) tracks the remaining work.
+
+With JDK 17+ and Android SDK platform/build-tools 36 installed, create an ignored `android/local.properties` containing your `sdk.dir`, then run:
+
+```sh
+cd android
+./gradlew :app:assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+The app starts with its saved-host picker. For emulator development against this checkout’s running host server, forward its port and provide the development URL at build time:
+
+```sh
+adb reverse tcp:4187 tcp:4187
+./gradlew :app:assembleDebug -PremoteUrl=http://127.0.0.1:4187
+```
+
+Debug builds permit loopback HTTP; release builds require HTTPS. Never disable certificate verification for a private host. `-PapplicationId=…` selects an installation identity when needed. Debug WebViews expose Chrome DevTools through ADB; `scripts/android-cdp.mjs` can inspect a forwarded shell target. External websites do not receive the privileged shell message bridge.

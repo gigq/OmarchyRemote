@@ -1,0 +1,37 @@
+plugins {
+    id 'com.android.application'
+}
+android {
+    namespace 'dev.omarchy.remote'
+    compileSdk 36
+    buildToolsVersion "36.0.0"
+    defaultConfig {
+        applicationId providers.gradleProperty('applicationId').getOrElse('dev.omarchy.remote')
+        minSdk 30
+        targetSdk 35
+        versionCode 1
+        versionName '0.3.0'
+        buildConfigField 'String', 'REMOTE_URL', groovy.json.JsonOutput.toJson(providers.gradleProperty('remoteUrl').getOrElse(''))
+    }
+    buildFeatures {
+        buildConfig true
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+tasks.register('prepareShell', Exec) {
+    workingDir rootProject.projectDir.parentFile
+    commandLine 'python3', 'scripts/prepare-native.py', '--output', 'android/app/src/main/assets/Web'
+    inputs.dir file('../../public')
+    inputs.file file('../../ios/WebOverrides/native.css')
+    outputs.dir file('src/main/assets/Web')
+}
+tasks.named('preBuild').configure {
+    dependsOn 'prepareShell'
+}
+dependencies {
+    implementation 'androidx.webkit:webkit:1.14.0'
+    testImplementation 'junit:junit:4.13.2'
+}

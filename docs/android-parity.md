@@ -1,0 +1,30 @@
+# Android parity work
+
+Goal: run the same Omarchy Remote experience on Android phones and larger screens,
+verified end to end on the available Android emulator before physical OnePlus 9 testing.
+The shared Rust backend and JavaScript providers remain authoritative; Android hosts
+the shell and implements native device services and independent browser surfaces.
+
+Completion requires evidence for all of these areas, not just an APK that launches:
+
+| Area               | Required verification                                                              | Status                                                                                  |
+| ------------------ | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Build and delivery | Reproducible Gradle build, install, launch, retained APK                           | Debug APK built and installed; emulator launch verified. Release delivery pending.      |
+| Hosts              | Add, switch, disconnect, reconnect, TLS validation                                 | In progress                                                                             |
+| Persistence        | Settings, drafts, installed web apps survive process death                         | In progress                                                                             |
+| Terminal and Herdr | Real PTY, safe isolated Herdr fixture, input/focus, copy/paste, IME and scroll     | Android hardware input reached a new host PTY without tapping; remaining flows pending. |
+| Browser            | Desktop tabs, native page view, navigation sync, controls, find, zoom, dark mode   | In progress                                                                             |
+| Saved web apps     | Independent WebViews, cookies, links/new windows inline, history                   | In progress                                                                             |
+| Files and uploads  | Android picker, image upload, folder upload, downloaded files/save/share           | Pending                                                                                 |
+| Device services    | Battery, locale, location permissions, hardware keyboard, back gesture             | In progress                                                                             |
+| Shell              | Phone/tablet tiling, gestures, Expo, keyboard shortcuts, themes/wallpapers/widgets | Pending                                                                                 |
+| Offline/lifecycle  | Bundled fallback, foreground reconnect, restored app state                         | Pending                                                                                 |
+| Updates            | APK publication, platform-aware Builds, Android installer handoff                  | Pending                                                                                 |
+| Platform safety    | Trusted main-frame bridge, external pages isolated, HTTPS and URI handling         | In progress                                                                             |
+
+No physical-device parity claim is made by emulator validation. Keep remaining gaps
+visible here until they are actually implemented and tested.
+
+Initial emulator evidence: `artifacts/android/initial.png`, `terminal.png`, and CDP inspection confirmed platform `android`, live host content, battery state, and typed terminal echo. The initial full-screen OS education dialog was dismissed. The QA-created terminal was closed without sending any input to existing Herdr threads.
+
+Android Gradle `assembleDebug` and `lintDebug` pass. The minimum supported Android version is 11 (API 30); the runtime read of bundled assets avoids newer Java APIs unavailable there.

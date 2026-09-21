@@ -12,3 +12,7 @@ __pycache__/
 .openai/
 /public/backgrounds/
 /ios/Local.xcconfig
+/android/.gradle/
+/android/local.properties
+/android/**/build/
+/android/app/src/main/assets/Web/
