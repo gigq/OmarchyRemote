@@ -122,7 +122,8 @@ try {
     HyprlandDesk.nativeKey=key=>{androidQAKeys.push(key);if(key.code==='KeyF')window.webkit.messageHandlers.browserDevice.postMessage({action:'findOpen',appID:'android-browser-qa'});return true};
     window.webkit.messageHandlers.shellKeyboard.postMessage({commands:[
       {code:'KeyF',label:'QA Find',owner:'browser',ctrl:true,meta:false},
-      {code:'KeyL',label:'QA Address',owner:'browser',meta:true}
+      {code:'KeyL',label:'QA Address',owner:'browser',meta:true},
+      {code:'KeyY',label:'QA window action',owner:'shell',group:'Windows',meta:true}
     ]})`);
   await command('focus');
   adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_ALT_LEFT', 'KEYCODE_L');
@@ -155,6 +156,7 @@ try {
   assert.equal(await shell('androidQAInput.value'), 'shellfocus');
   await command('focus');
   await page('document.querySelector("input").focus()');
+  adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_ALT_LEFT', 'KEYCODE_Y');
   adb('shell', 'input', 'text', 'pagefocus');
   assert.equal(await page('document.querySelector("input").value'), 'pagefocus');
   await page(
@@ -171,7 +173,7 @@ try {
   await page('document.querySelector("input").setSelectionRange(9,9)');
   adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_V');
   await until(() => page('document.querySelector("input").value==="pagefocuspagefocus"'));
-  assert.equal(await shell('androidQAKeys.length'), 2);
+  assert.equal(await shell('androidQAKeys.length'), 3);
   console.log(
     'PASS: isolated website, SPA history, back/forward, top-only toolbar reveal, dark mode, find matches, shell/page keyboard focus, native shortcuts and clipboard'
   );

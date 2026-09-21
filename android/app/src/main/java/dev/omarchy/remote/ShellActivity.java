@@ -27,6 +27,9 @@ public final class ShellActivity extends Activity {
   private final Set<Integer> consumedKeys = new HashSet<>();
   private boolean shellEditing;
   private boolean awaitingLaunchFocus;
+  private boolean replayingLaunchKeys;
+  private int launchRequestedToken;
+  private int launchReadyToken;
   private int launchGeneration;
   private final ArrayList<KeyEvent> launchKeys = new ArrayList<>();
   private final Runnable abandonLaunchKeys = () -> cancelLaunchFocus();
@@ -143,6 +146,14 @@ public final class ShellActivity extends Activity {
         new WebView(this) {
           @Override
           public boolean onKeyPreIme(int key, KeyEvent event) {
+            boolean editing =
+                shellEditing || pages.values().stream().anyMatch(page -> page.web.hasFocus());
+            if (consumedKeys.contains(key)
+                || (event.getAction() == KeyEvent.ACTION_DOWN
+                    && deviceKeys.match(event, editing) != null)) {
+              return ShellActivity.this.dispatchKeyEvent(event);
+            }
+            if (event.getUnicodeChar() >= 32 && bufferTransitionKey(event)) return true;
             WindowInsets insets = root.getRootWindowInsets();
             if (key == KeyEvent.KEYCODE_BACK
                 && insets != null
@@ -463,6 +474,7 @@ public final class ShellActivity extends Activity {
         if (body.has("focusRequest")) {
           int token = body.optInt("focusRequest");
           int generation = launchGeneration;
+          if (awaitingLaunchFocus) launchRequestedToken = token;
           evaluate(
               "window.HyprlandRemote?.focusFromNative(" + token + ",false)",
               result -> {
@@ -472,8 +484,10 @@ public final class ShellActivity extends Activity {
                       "window.HyprlandRemote?.focusFromNative(" + token + ",true)",
                       focused -> {
                         if (generation == launchGeneration) {
-                          if ("true".equals(focused)) drainLaunchKeys(token, generation);
-                          else cancelLaunchFocus();
+                          if ("true".equals(focused)) {
+                            launchReadyToken = token;
+                            drainLaunchKeys(token, generation);
+                          }
                         }
                         if (getResources().getConfiguration().keyboard
                             != Configuration.KEYBOARD_QWERTY)
@@ -946,18 +960,27 @@ public final class ShellActivity extends Activity {
   private void cancelLaunchFocus() {
     handler.removeCallbacks(abandonLaunchKeys);
     awaitingLaunchFocus = false;
+    replayingLaunchKeys = false;
+    launchRequestedToken = 0;
+    launchReadyToken = 0;
     launchGeneration++;
     launchKeys.clear();
   }
 
   private void drainLaunchKeys(int token, int generation) {
-    if (!awaitingLaunchFocus || generation != launchGeneration) return;
+    if (!awaitingLaunchFocus
+        || replayingLaunchKeys
+        || generation != launchGeneration
+        || token == 0
+        || token != launchRequestedToken
+        || token != launchReadyToken) return;
     if (launchKeys.isEmpty()) {
       cancelLaunchFocus();
       return;
     }
+    ArrayList<KeyEvent> batch = new ArrayList<>(launchKeys);
     JSONArray keys = new JSONArray();
-    for (KeyEvent event : launchKeys) {
+    for (KeyEvent event : batch) {
       if (event.getAction() != KeyEvent.ACTION_DOWN) continue;
       String special =
           switch (event.getKeyCode()) {
@@ -974,13 +997,36 @@ public final class ShellActivity extends Activity {
       }
     }
     launchKeys.clear();
+    replayingLaunchKeys = true;
     evaluate(
         "window.HyprlandRemote?.replayInput(" + token + "," + keys + ")",
         result -> {
           if (generation != launchGeneration) return;
-          if ("true".equals(result)) drainLaunchKeys(token, generation);
-          else cancelLaunchFocus();
+          replayingLaunchKeys = false;
+          if (!"true".equals(result)) {
+            if (token == launchRequestedToken) {
+              cancelLaunchFocus();
+              return;
+            }
+            launchKeys.addAll(0, batch);
+          }
+          drainLaunchKeys(launchReadyToken, generation);
         });
+  }
+
+  private boolean bufferTransitionKey(KeyEvent event) {
+    int key = event.getKeyCode();
+    if (!awaitingLaunchFocus
+        || consumedKeys.contains(key)
+        || event.isCtrlPressed()
+        || event.isAltPressed()
+        || event.isMetaPressed()) return false;
+    if (event.getUnicodeChar() < 32
+        && key != KeyEvent.KEYCODE_ENTER
+        && key != KeyEvent.KEYCODE_DEL
+        && key != KeyEvent.KEYCODE_TAB) return false;
+    if (launchKeys.size() < 256) launchKeys.add(new KeyEvent(event));
+    return true;
   }
 
   @Override
@@ -992,18 +1038,7 @@ public final class ShellActivity extends Activity {
     }
     if (event.getAction() == KeyEvent.ACTION_UP && consumedKeys.remove(key)) return true;
     if (shell == null) return super.dispatchKeyEvent(event);
-    boolean textKey =
-        !event.isCtrlPressed()
-            && !event.isAltPressed()
-            && !event.isMetaPressed()
-            && (event.getUnicodeChar() >= 32
-                || key == KeyEvent.KEYCODE_ENTER
-                || key == KeyEvent.KEYCODE_DEL
-                || key == KeyEvent.KEYCODE_TAB);
-    if (awaitingLaunchFocus && textKey) {
-      if (launchKeys.size() < 256) launchKeys.add(new KeyEvent(event));
-      return true;
-    }
+    if (bufferTransitionKey(event)) return true;
     if (event.getAction() != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event);
     if (event.getRepeatCount() > 0 && consumedKeys.contains(key)) return true;
     boolean pageFocused =
@@ -1013,12 +1048,16 @@ public final class ShellActivity extends Activity {
     if (action == null) return super.dispatchKeyEvent(event);
     consumedKeys.add(key);
     cancelLaunchFocus();
-    if (action.optBoolean("focusShell")) {
-      shell.requestFocus();
-      if (action.optString("group").equals("Apps")) {
-        awaitingLaunchFocus = true;
-        handler.postDelayed(abandonLaunchKeys, 2000);
-      }
+    if (action.optBoolean("focusShell")) shell.requestFocus();
+    boolean windowTransition =
+        !pageFocused
+            && action.optString("owner").equals("shell")
+            && (action.optString("group").equals("Windows")
+                || action.optString("group").equals("Workspaces"));
+    if ((action.optBoolean("focusShell") && action.optString("group").equals("Apps"))
+        || windowTransition) {
+      awaitingLaunchFocus = true;
+      handler.postDelayed(abandonLaunchKeys, 2000);
     }
     // Send the registry chord, including the canonical form of Ctrl+Alt shell aliases.
     evaluate(
