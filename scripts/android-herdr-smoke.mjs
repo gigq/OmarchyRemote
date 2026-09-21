@@ -235,105 +235,161 @@ try {
     )
   );
   await select(owned[0].pane_id);
-  adb('shell', 'input', 'text', 'draftone');
-  await until(() => value() === 'draftone');
-  await select(owned[1].pane_id);
-  assert.equal(value(), '');
-  adb('shell', 'input', 'text', 'drafttwo');
-  await until(() => value() === 'drafttwo');
-  await select(owned[0].pane_id);
-  assert.equal(value(), 'draftone');
-  writeFileSync(
-    'artifacts/android/herdr-input.png',
-    execFileSync(adbPath, ['-s', serial, 'exec-out', 'screencap', '-p'], {
-      maxBuffer: 16 * 1024 * 1024,
-    })
-  );
-  await until(() =>
+  if (process.env.ANDROID_TOUCH_IME_QA) {
+    await until(() => evaluate('keyboardInset()>80'));
+    assert.match(adb('shell', 'wm', 'size'), /size: 1080x2400\s*$/);
+    assert.match(
+      adb('shell', 'settings', 'get', 'secure', 'default_input_method'),
+      /com.google.android.inputmethod.latin/
+    );
+    assert.match(adb('shell', 'wm', 'density'), /density: 420\s*$/);
+    await tap(field);
+    await new Promise(resolve => setTimeout(resolve, 1000));
     evaluate(
-      `keyboardInset()>80 && document.querySelector(${JSON.stringify(field)}).getBoundingClientRect().bottom <= innerHeight-keyboardInset()+2`
-    )
-  );
-  selected(owned[0].pane_id);
-  adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_A');
-  await until(() =>
-    evaluate(
-      `document.querySelector(${JSON.stringify(field)}).selectionEnd-document.querySelector(${JSON.stringify(field)}).selectionStart===8`
-    )
-  );
-  evaluate(
-    `window.androidHerdrCopied=false;document.querySelector(${JSON.stringify(field)}).addEventListener('copy',()=>window.androidHerdrCopied=true,{once:true})`
-  );
-  adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_C');
-  await until(() => evaluate('window.androidHerdrCopied'));
-  adb('shell', 'input', 'keyevent', 'KEYCODE_DPAD_RIGHT');
-  await until(() =>
-    evaluate(
-      `document.querySelector(${JSON.stringify(field)}).selectionStart===8 && document.querySelector(${JSON.stringify(field)}).selectionEnd===8`
-    )
-  );
-  adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_V');
-  await until(() => value() === 'draftonedraftone');
-  adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_Z');
-  await until(() => value() === 'draftone');
-  // Android's temporary clipboard preview can cover the lower-left attachment control.
-  await new Promise(resolve => setTimeout(resolve, 20000));
-  await tap(root + ' .herdr-attach');
-  await until(() => ui().includes('com.google.android.documentsui'));
-  tapNative(node => node.includes('content-desc="Show roots"'));
-  tapNative(node => node.includes('text="Downloads"'));
-  await until(() => ui().includes(filename));
-  tapNative(node => node.includes('text="' + filename + '"'));
-  await until(() => value()?.includes('Image: '));
-  attached = value().match(/Image: (.+)\n/)[1];
-  assert.ok(attached.startsWith(path.join(homedir(), '.local/share/omarchy-remote/uploads') + '/'));
-  assert.deepEqual(readFileSync(attached), image);
-  expectedOne = 'draftone\nImage: ' + attached + '\n';
-  assert.equal(value(), expectedOne);
-  // Ordinary backgrounding and process death must retain each pane's local draft.
-  adb('shell', 'input', 'keyevent', 'KEYCODE_HOME');
-  await new Promise(resolve => setTimeout(resolve, 300));
-  adb('shell', 'am', 'force-stop', 'dev.omarchy.remote');
-  adb(
-    'shell',
-    'am',
-    'start',
-    '-a',
-    'android.intent.action.MAIN',
-    '-c',
-    'android.intent.category.LAUNCHER',
-    '-f',
-    '0x10200000',
-    '-n',
-    'dev.omarchy.remote/.ShellActivity'
-  );
-  await until(() => {
-    try {
-      forward();
-      return !!evaluate(`document.querySelector(${JSON.stringify(root + ' .herdr-list')})`);
-    } catch {
-      return false;
+      `window.androidImeEvents=[];for(const type of ['compositionstart','compositionend','input','keydown'])document.querySelector(${JSON.stringify(field)}).addEventListener(type,event=>window.androidImeEvents.push({type,trusted:event.isTrusted,key:event.key,inputType:event.inputType}))`
+    );
+    writeFileSync(
+      'artifacts/android/ime-keyboard.png',
+      execFileSync(adbPath, ['-s', serial, 'exec-out', 'screencap', '-p'], {
+        maxBuffer: 16 * 1024 * 1024,
+      })
+    );
+    // Portrait English Gboard coordinates for the asserted 1080x2400 emulator.
+    const keys = {
+      e: [270, 1715],
+      c: [432, 2020],
+      h: [648, 1870],
+      o: [918, 1715],
+      space: [540, 2180],
+      w: [162, 1715],
+      r: [378, 1715],
+      k: [864, 1870],
+      s: [216, 1870],
+    };
+    for (const key of ['e', 'c', 'h', 'o', 'space', 'w', 'o', 'r', 'k', 's']) {
+      selected(owned[0].pane_id);
+      adb('shell', 'input', 'tap', ...keys[key].map(String));
     }
-  });
-  await select(owned[0].pane_id);
-  assert.equal(value(), expectedOne);
-  await select(owned[1].pane_id);
-  assert.equal(value(), 'drafttwo');
-  selected(owned[1].pane_id);
-  adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_A');
-  adb('shell', 'input', 'text', 'echo%sANDROID_HERDR_OK');
-  await until(() => value() === 'echo ANDROID_HERDR_OK');
-  await tap(root + ' .native-send');
-  await until(async () =>
-    (await api('herdr/panes/' + encodeURIComponent(owned[1].pane_id))).text
-      .split('\n')
-      .some(line => line.trim() === 'ANDROID_HERDR_OK')
-  );
-  await until(() => value() === '');
-  await until(() => evaluate('keyboardInset()<80'));
-  console.log(
-    'PASS: separate native Herdr drafts, clipboard copy/paste/undo, composer above IME, process-death recovery, image upload with byte verification, and real send/dismiss to the owned pane'
-  );
+    assert.equal(value(), 'echo works');
+    adb('shell', 'input', 'tap', '1000', '2180');
+    await until(async () =>
+      (await api('herdr/panes/' + encodeURIComponent(owned[0].pane_id))).text
+        .split('\n')
+        .some(line => line.trim() === 'works')
+    );
+    await until(() => value() === '');
+    await until(() => evaluate('keyboardInset()<80'));
+    assert.ok(
+      evaluate(
+        "window.androidImeEvents.filter(event=>event.type==='input'&&event.trusted).length===10"
+      )
+    );
+    console.log(
+      'PASS: real Gboard touch input and keyboard Send execute only in the owned pane and dismiss the IME'
+    );
+  } else {
+    adb('shell', 'input', 'text', 'draftone');
+    await until(() => value() === 'draftone');
+    await select(owned[1].pane_id);
+    assert.equal(value(), '');
+    adb('shell', 'input', 'text', 'drafttwo');
+    await until(() => value() === 'drafttwo');
+    await select(owned[0].pane_id);
+    assert.equal(value(), 'draftone');
+    writeFileSync(
+      'artifacts/android/herdr-input.png',
+      execFileSync(adbPath, ['-s', serial, 'exec-out', 'screencap', '-p'], {
+        maxBuffer: 16 * 1024 * 1024,
+      })
+    );
+    await until(() =>
+      evaluate(
+        `keyboardInset()>80 && document.querySelector(${JSON.stringify(field)}).getBoundingClientRect().bottom <= innerHeight-keyboardInset()+2`
+      )
+    );
+    selected(owned[0].pane_id);
+    adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_A');
+    await until(() =>
+      evaluate(
+        `document.querySelector(${JSON.stringify(field)}).selectionEnd-document.querySelector(${JSON.stringify(field)}).selectionStart===8`
+      )
+    );
+    evaluate(
+      `window.androidHerdrCopied=false;document.querySelector(${JSON.stringify(field)}).addEventListener('copy',()=>window.androidHerdrCopied=true,{once:true})`
+    );
+    adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_C');
+    await until(() => evaluate('window.androidHerdrCopied'));
+    adb('shell', 'input', 'keyevent', 'KEYCODE_DPAD_RIGHT');
+    await until(() =>
+      evaluate(
+        `document.querySelector(${JSON.stringify(field)}).selectionStart===8 && document.querySelector(${JSON.stringify(field)}).selectionEnd===8`
+      )
+    );
+    adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_V');
+    await until(() => value() === 'draftonedraftone');
+    adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_Z');
+    await until(() => value() === 'draftone');
+    // Android's temporary clipboard preview can cover the lower-left attachment control.
+    await new Promise(resolve => setTimeout(resolve, 20000));
+    await tap(root + ' .herdr-attach');
+    await until(() => ui().includes('com.google.android.documentsui'));
+    tapNative(node => node.includes('content-desc="Show roots"'));
+    tapNative(node => node.includes('text="Downloads"'));
+    await until(() => ui().includes(filename));
+    tapNative(node => node.includes('text="' + filename + '"'));
+    await until(() => value()?.includes('Image: '));
+    attached = value().match(/Image: (.+)\n/)[1];
+    assert.ok(
+      attached.startsWith(path.join(homedir(), '.local/share/omarchy-remote/uploads') + '/')
+    );
+    assert.deepEqual(readFileSync(attached), image);
+    expectedOne = 'draftone\nImage: ' + attached + '\n';
+    assert.equal(value(), expectedOne);
+    // Ordinary backgrounding and process death must retain each pane's local draft.
+    adb('shell', 'input', 'keyevent', 'KEYCODE_HOME');
+    await new Promise(resolve => setTimeout(resolve, 300));
+    adb('shell', 'am', 'force-stop', 'dev.omarchy.remote');
+    adb(
+      'shell',
+      'am',
+      'start',
+      '-a',
+      'android.intent.action.MAIN',
+      '-c',
+      'android.intent.category.LAUNCHER',
+      '-f',
+      '0x10200000',
+      '-n',
+      'dev.omarchy.remote/.ShellActivity'
+    );
+    await until(() => {
+      try {
+        forward();
+        return !!evaluate(`document.querySelector(${JSON.stringify(root + ' .herdr-list')})`);
+      } catch {
+        return false;
+      }
+    });
+    await select(owned[0].pane_id);
+    assert.equal(value(), expectedOne);
+    await select(owned[1].pane_id);
+    assert.equal(value(), 'drafttwo');
+    selected(owned[1].pane_id);
+    adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_A');
+    adb('shell', 'input', 'text', 'echo%sANDROID_HERDR_OK');
+    await until(() => value() === 'echo ANDROID_HERDR_OK');
+    await tap(root + ' .native-send');
+    await until(async () =>
+      (await api('herdr/panes/' + encodeURIComponent(owned[1].pane_id))).text
+        .split('\n')
+        .some(line => line.trim() === 'ANDROID_HERDR_OK')
+    );
+    await until(() => value() === '');
+    await until(() => evaluate('keyboardInset()<80'));
+    console.log(
+      'PASS: separate native Herdr drafts, clipboard copy/paste/undo, composer above IME, process-death recovery, image upload with byte verification, and real send/dismiss to the owned pane'
+    );
+  }
 } catch (error) {
   writeFileSync(
     'artifacts/android/herdr-input-failure.png',
