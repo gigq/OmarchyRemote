@@ -156,6 +156,15 @@ public final class ShellActivity extends Activity {
               return ShellActivity.this.dispatchKeyEvent(event);
             }
             if (event.getUnicodeChar() >= 32 && bufferTransitionKey(event)) return true;
+            if (key == KeyEvent.KEYCODE_ESCAPE
+                && !event.isCtrlPressed()
+                && !event.isAltPressed()
+                && !event.isMetaPressed()) {
+              // Escape belongs to the active app (including terminal programs).
+              // Android Back remains the system keyboard-dismiss action.
+              super.dispatchKeyEvent(event);
+              return true;
+            }
             WindowInsets insets = root.getRootWindowInsets();
             if (key == KeyEvent.KEYCODE_BACK
                 && insets != null
@@ -251,6 +260,14 @@ public final class ShellActivity extends Activity {
       shell.destroy();
     }
     shell = makeWebView();
+    shell.getSettings().setNeedInitialFocus(false);
+    shell.setOnTouchListener(
+        (view, event) -> {
+          // Swipes can focus a DOM editor without giving its WebView native focus.
+          // Acquire it before the gesture, preserving the editor chosen by the shell.
+          if (event.getActionMasked() == MotionEvent.ACTION_DOWN) view.requestFocus();
+          return false;
+        });
     root.addView(shell, 0, new FrameLayout.LayoutParams(-1, -1));
     WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
     Set<String> allowed = new HashSet<>(Set.of(ASSET));
