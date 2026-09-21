@@ -319,3 +319,5 @@ The Herdr emulator check also runs at 1280×800/density 160. It waits for settle
 Signed Android release builds are configured through private environment variables; see [Android release signing](docs/android-signing.md). `python scripts/android-release-smoke.py` verifies two signed versions, native release launch and an in-place update under a separate emulator identity without changing the regular app's data.
 
 Android shortcut hints use `Ctrl+Alt` for supported plain Meta/Command aliases. Combinations that also require Ctrl or Alt show the physical `Meta` key explicitly—for example, `Meta+Ctrl+1–0` switches saved hosts. The host picker, launcher and shortcut help use platform-appropriate labels.
+
+Host navigation also saves the departing host’s final device-settings snapshot before replacing the shell, without waiting for the periodic preference mirror.

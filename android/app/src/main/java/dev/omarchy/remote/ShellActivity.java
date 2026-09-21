@@ -460,11 +460,7 @@ public final class ShellActivity extends Activity {
     JSONObject body = raw instanceof JSONObject ? (JSONObject) raw : new JSONObject();
     switch (channel) {
       case "shellStorage":
-        JSONObject values = body.optJSONObject("values");
-        if (body.optString("scope").equals(selected)
-            && values != null
-            && values.toString().length() <= 1048576)
-          prefs.edit().putString("state:" + selected, values.toString()).apply();
+        saveState(body);
         reply.send(true);
         break;
       case "shellHosts":
@@ -556,7 +552,19 @@ public final class ShellActivity extends Activity {
     }
   }
 
+  private void saveState(JSONObject body) {
+    JSONObject values = body.optJSONObject("values");
+    if (!selected.isEmpty()
+        && body.optString("scope").equals(selected)
+        && values != null
+        && values.toString().length() <= 1048576)
+      prefs.edit().putString("state:" + selected, values.toString()).apply();
+  }
+
   private void hosts(JSONObject body, Reply reply) {
+    // Host navigation can replace the shell before its debounced mirror is sent.
+    // Capture the departing host's snapshot before changing selected.
+    saveState(body);
     String action = body.optString("action");
     if (action.equals("prompt")) {
       LinearLayout form = new LinearLayout(this);

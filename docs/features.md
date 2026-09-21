@@ -295,3 +295,5 @@ Android tablet Herdr keeps the composer above the software keyboard while retain
 Android release APKs use an explicitly configured private signing key. Release builds disable debugging, require HTTPS, and open the saved-host picker. The release emulator fixture verifies signature continuity and saved-host retention across an in-place version update under a separate test identity.
 
 Android shortcut labels distinguish `Ctrl+Alt` aliases from combinations requiring a physical Meta key. Host switching is displayed as `Meta+Ctrl+number`, and resize combinations as `Meta+Alt+Shift+arrow`; the help sheet does not repeat Ctrl or show Apple-only system-key notes on Android. The actual bindings are unchanged.
+
+Host navigation also saves the departing host’s final device-settings snapshot before replacing the shell, without waiting for the periodic preference mirror.
