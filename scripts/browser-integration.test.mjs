@@ -23,7 +23,7 @@ const wait = async fn => {
 
 test(
   'real isolated Vivaldi mirrors windows/workspaces and acknowledges tab changes',
-  { timeout: 60000 },
+  { timeout: process.env.ANDROID_BROWSER_QA ? 180000 : 60000 },
   async () => {
     const temp = await mkdtemp(path.join(tmpdir(), 'omarchy-browser-'));
     let backend, context, vivaldi;
@@ -268,6 +268,10 @@ test(
         (await api('action', { instance_id: first.id, action: 'close', tab_id: tab.id })).status,
         400
       );
+      if (process.env.ANDROID_BROWSER_QA) {
+        const { verifyAndroidBrowser } = await import('./android-browser-host.mjs');
+        await verifyAndroidBrowser({ backendPort: port, token, api, instance: first.id });
+      }
       await context.close();
       context = null;
       await wait(async () => (await api('snapshot')).body.instances.length === 0);
