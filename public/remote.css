@@ -5,6 +5,10 @@
   flex-direction: column;
   min-height: 0;
 }
+/* The shell's themed pane border already marks the active window. */
+.remote-app[tabindex='-1']:focus {
+  outline: none;
+}
 .remote-app.with-keyboard {
   bottom: 281px;
 }

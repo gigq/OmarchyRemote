@@ -279,3 +279,5 @@ Android file selection supports multiple files in Files and Herdr. The native wr
 Android’s file action offers **Save to device** and **Share…**. Save uses the document picker; Share opens Android’s share sheet with the original filename and MIME type and a temporary read-only content URI. Cancelling the initial choice aborts cleanly. The app reports handing the file to the share sheet, not delivery by the recipient app. Shared copies remain in private cache for asynchronous readers; later startups remove copies older than one day.
 
 Android’s end-to-end Browser check uses a separate Vivaldi profile and native messaging bridge. Navigation in the embedded page updates the exact desktop tab, while the close-tab shortcut closes that tab and leaves the Browser app window open. Native saved-host checks cover unsafe address rejection, returning to the picker after a disconnected restart, and preserving preferences within their host scope.
+
+Programmatically focused app containers use the existing themed active-window border, avoiding a second square focus outline inside rounded windows on Android. Focus styling on buttons and text fields is unchanged.
