@@ -652,7 +652,10 @@ public final class ShellActivity extends Activity {
           pages.remove(id);
           break;
         case "zoom":
-          page.web.getSettings().setTextZoom((int) (body.optDouble("value", 1) * 100));
+          double requestedZoom = body.optDouble("value", 1);
+          if (!Double.isFinite(requestedZoom)) break;
+          page.zoom = Math.max(0.25, Math.min(5, requestedZoom));
+          page.applyZoom();
           break;
         case "dark":
           page.dark = body.optBoolean("enabled");
@@ -704,6 +707,7 @@ public final class ShellActivity extends Activity {
     AlertDialog findDialog;
     String findQuery = "";
     float radius;
+    double zoom = 1;
 
     Page(String id) {
       this.id = id;
@@ -747,6 +751,7 @@ public final class ShellActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
               loading = false;
+              applyZoom();
               publish();
               if (dark)
                 view.evaluateJavascript(
@@ -761,6 +766,30 @@ public final class ShellActivity extends Activity {
             }
           });
       root.addView(web, new FrameLayout.LayoutParams(1, 1));
+    }
+
+    // CSS zoom scales layout and images as well as text, including below the page's
+    // pinch-zoom minimum. Keep authored root zoom intact when returning to 100%.
+    void applyZoom() {
+      web.evaluateJavascript(
+          "(() => {"
+              + "const root=document.documentElement;if(!root)return;"
+              + "let saved=window.__omarchyPageZoom;"
+              + "if(!saved || saved.root!==root){"
+              + "saved={root,value:root.style.getPropertyValue('zoom'),"
+              + "priority:root.style.getPropertyPriority('zoom'),"
+              + "base:parseFloat(getComputedStyle(root).zoom)||1};"
+              + "window.__omarchyPageZoom=saved;}"
+              + "const factor="
+              + zoom
+              + ";"
+              + "if(factor===1){"
+              + "if(saved.value)root.style.setProperty('zoom',saved.value,saved.priority);"
+              + "else root.style.removeProperty('zoom');"
+              + "delete window.__omarchyPageZoom;"
+              + "}else root.style.setProperty('zoom',String(saved.base*factor),'important');"
+              + "})()",
+          null);
     }
 
     void layout(JSONObject body) {

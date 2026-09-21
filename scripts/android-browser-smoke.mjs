@@ -18,7 +18,7 @@ adb('forward', 'tcp:9225', `localabstract:webview_devtools_remote_${pid}`);
 const server = createServer((req, res) => {
   res.setHeader('Content-Type', 'text/html');
   res.end(
-    '<!doctype html><meta name="viewport" content="width=device-width"><title>Android browser QA</title><style>body{height:4000px;background:white;color:black}</style><h1>Needle one</h1><p>Needle two</p><input aria-label="QA page input"><a href="/next" target="_blank">New window link</a>'
+    '<!doctype html><meta name="viewport" content="width=device-width"><title>Android browser QA</title><style>body{height:4000px;background:white;color:black}</style><div id="zoom-box" style="width:40px;height:20px;background:blue"></div><img id="zoom-image" width="20" height="10" alt="QA" src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2220%22 height=%2210%22%3E%3Crect width=%2220%22 height=%2210%22 fill=%22red%22/%3E%3C/svg%3E"><h1>Needle one</h1><p>Needle two</p><input aria-label="QA page input"><a href="/next" target="_blank">New window link</a>'
   );
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -114,6 +114,74 @@ try {
   await until(() =>
     shell('androidQAEvents.filter(e=>"controlsHidden" in e).at(-1)?.controlsHidden===false')
   );
+  // Older WebViews report pre-zoom DOM bounds for root zoom. Check rendered pixels
+  // instead: both a blue layout box and a red image must scale together.
+  const pixels = () => {
+    const png = execFileSync(adbPath, ['-s', serial, 'exec-out', 'screencap', '-p']);
+    return JSON.parse(
+      execFileSync(
+        'python',
+        [
+          '-c',
+          `
+import io,json,sys
+from PIL import Image
+im=Image.open(io.BytesIO(sys.stdin.buffer.read())).convert('RGB')
+result=[]
+for color in [(0,0,255),(255,0,0)]:
+    best=0
+    for y in range(im.height):
+        run=0
+        for x in range(im.width):
+            run=run+1 if im.getpixel((x,y))==color else 0
+            best=max(best,run)
+    result.append(best)
+print(json.dumps(result))
+`,
+        ],
+        { input: png, encoding: 'utf8' }
+      )
+    );
+  };
+  // Remove the rounded viewport clip while measuring very small boxes at 25%.
+  await command('layout', { visible: true, rect: [12, 70, 388, 750], viewport: 412, radius: 0 });
+  const baseline = pixels();
+  assert.ok(baseline.every(width => width > 10));
+  const verifyScale = factor =>
+    until(async () =>
+      pixels().every((width, i) => Math.abs(width - baseline[i] * factor) <= factor + 1)
+    ).catch(error => {
+      console.error({ factor, baseline, pixels: pixels() });
+      throw error;
+    });
+  for (const factor of [0.25, 0.5, 1.5, 5, 1]) {
+    await command('zoom', { value: factor });
+    await verifyScale(factor);
+  }
+  // Preserve authored root zoom, including its priority, after repeated changes/reset.
+  await page("document.documentElement.style.setProperty('zoom','1.2','important')");
+  await command('zoom', { value: 1.5 });
+  await verifyScale(1.8);
+  await command('zoom', { value: 1 });
+  await until(() =>
+    page(
+      "document.documentElement.style.zoom==='1.2' && document.documentElement.style.getPropertyPriority('zoom')==='important'"
+    )
+  );
+  await verifyScale(1.2);
+  await page("document.documentElement.style.removeProperty('zoom')");
+  await command('zoom', { value: 1.5 });
+  await verifyScale(1.5);
+  await page('window.zoomQABeforeReload=true');
+  await command('reload');
+  await until(() =>
+    page(
+      "!window.zoomQABeforeReload && document.readyState==='complete' && !!document.querySelector('#zoom-box')"
+    )
+  );
+  await verifyScale(1.5);
+  await command('zoom', { value: 1 });
+  await verifyScale(1);
   await command('dark', { enabled: true });
   await until(() => page('!!document.querySelector("style.darkreader")'));
   await command('dark', { enabled: false });
@@ -175,7 +243,7 @@ try {
   await until(() => page('document.querySelector("input").value==="pagefocuspagefocus"'));
   assert.equal(await shell('androidQAKeys.length'), 3);
   console.log(
-    'PASS: isolated website, SPA history, back/forward, top-only toolbar reveal, dark mode, find matches, shell/page keyboard focus, native shortcuts and clipboard'
+    'PASS: isolated website, SPA history, back/forward, top-only toolbar reveal, full-page zoom and reload/reset, dark mode, find matches, shell/page keyboard focus, native shortcuts and clipboard'
   );
 } finally {
   await shell(

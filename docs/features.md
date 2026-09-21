@@ -263,3 +263,5 @@ Device backups include the widget catalog history as well as the visible widget 
 On Android, hardware typing immediately after an app-launch, window-focus, or workspace shortcut waits briefly for the validated native input focus transfer. A superseding shortcut, backgrounding, or a two-second timeout discards pending input rather than delivering it to a different window. Terminal then uses its existing connection-startup input buffer.
 
 Android Back dismisses visible keyboard input first, then launcher/Expo/shortcut overlays, then navigates the focused website’s history. At the root it backgrounds the task, preserving workspaces for resume. WebViews route Back before the input method only when the keyboard is not visible, so keyboard dismissal remains native.
+
+Android Browser supports whole-document zoom from 25% to 500%, including images and layout, with reset and reload persistence. The Android host uses CSS root zoom rather than text-only scaling; viewport media-query breakpoints remain unchanged.
