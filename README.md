@@ -317,3 +317,5 @@ For tablet browser geometry, configure the emulator to 1280×800 at density 160 
 The Herdr emulator check also runs at 1280×800/density 160. It waits for settled keyboard geometry and records `artifacts/android/tablet-herdr-input.png` plus measured bounds, verifying the composer stays above the IME and leaves at least 100 CSS pixels of terminal output. Its normal draft, clipboard, attachment, restart and Send checks then run unchanged. Restore the emulator's original size/density after tablet testing.
 
 Signed Android release builds are configured through private environment variables; see [Android release signing](docs/android-signing.md). `python scripts/android-release-smoke.py` verifies two signed versions, native release launch and an in-place update under a separate emulator identity without changing the regular app's data.
+
+Android shortcut hints use `Ctrl+Alt` for supported plain Meta/Command aliases. Combinations that also require Ctrl or Alt show the physical `Meta` key explicitly—for example, `Meta+Ctrl+1–0` switches saved hosts. The host picker, launcher and shortcut help use platform-appropriate labels.

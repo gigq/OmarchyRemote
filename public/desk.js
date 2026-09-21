@@ -587,7 +587,7 @@
       browserOnly: true,
       keys: '⌫',
       code: /^Backspace$/,
-      label: 'Close window (when the browser owns ⌘W)',
+      label: `Close window (when the browser owns ${APPLE ? '⌘W' : 'Ctrl+W'})`,
       run: d => d.logic.closeWs(),
     },
     {
@@ -668,8 +668,16 @@
       Tab: 'Tab',
       Escape: 'Esc',
     })[code] || code.replace(/^(Key|Digit)/, '');
-  const actionKeys = a =>
-    `${a.meta ? MOD + ' ' : ''}${a.ctrl ? 'Ctrl+' : ''}${a.alt ? '⌥ ' : ''}${a.shift ? '⇧ ' : ''}${keyName(a.code)}`;
+  const actionKeys = a => {
+    if (APPLE)
+      return `${a.meta ? '⌘ ' : ''}${a.ctrl ? 'Ctrl+' : ''}${a.alt ? '⌥ ' : ''}${a.shift ? '⇧ ' : ''}${keyName(a.code)}`;
+    const alias =
+      a.meta &&
+      !a.ctrl &&
+      !a.alt &&
+      (a.owner === 'shell' || window.__OMARCHY_PLATFORM__ === 'android');
+    return `${alias ? 'Ctrl+Alt+' : `${a.meta ? 'Meta+' : ''}${a.ctrl ? 'Ctrl+' : ''}${a.alt ? 'Alt+' : ''}`}${a.shift ? 'Shift+' : ''}${keyName(a.code)}`;
+  };
   const signature = a => [a.code, !!a.meta, !!a.ctrl, !!a.alt, !!a.shift].join(':');
   const superPressed = e => e.metaKey || (e.ctrlKey && e.altKey);
 
@@ -1494,7 +1502,13 @@
       const head = node('div', 'desk-sheet-head');
       head.append(
         node('h2', '', 'Keyboard shortcuts'),
-        node('span', 'widget-muted', `${MOD} is SUPER · ⇧ Shift · ⌥ Option`),
+        node(
+          'span',
+          'widget-muted',
+          APPLE
+            ? `${MOD} is SUPER · ⇧ Shift · ⌥ Option`
+            : 'Ctrl+Alt substitutes for plain Meta shortcuts. Meta combinations with Ctrl or Alt use the physical Meta key.'
+        ),
         close
       );
       sheet.append(head);
@@ -1515,7 +1529,7 @@
         node(
           'p',
           'widget-muted desk-sheet-foot',
-          'Drag a divider to resize. Hold Command (Ctrl+Alt on Linux) and left-drag to swap tiled windows, or right-drag to resize. 0 selects workspace 10. J needs two or more tiled windows in the same workspace. Use [ / ] to switch workspaces. Text editing keys stay with the focused field. ⌘Space and ⌘` are left to iPadOS. Esc or Done closes this list.'
+          `Drag a divider to resize. Hold ${APPLE ? 'Command' : 'Meta or Ctrl+Alt'} and left-drag to swap tiled windows, or right-drag to resize. 0 selects workspace 10. J needs two or more tiled windows in the same workspace. Use [ / ] to switch workspaces. Text editing keys stay with the focused field. ${APPLE ? '⌘Space and ⌘` are left to iPadOS. ' : ''}Esc or Done closes this list.`
         )
       );
       sheet.addEventListener('pointerdown', e => {

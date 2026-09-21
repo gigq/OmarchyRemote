@@ -3,6 +3,10 @@
   const bridge = window.webkit?.messageHandlers?.shellHosts;
   const key = 'hyper-host-directory';
   const picker = location.pathname.endsWith('/hosts.html');
+  const apple =
+    /Mac|iPhone|iPad|iPod/i.test(navigator.platform || '') ||
+    /Macintosh|iPad|iPhone/.test(navigator.userAgent);
+  const hostKeys = apple ? '⌘⌃' : 'Meta+Ctrl+';
   const normalize = raw => {
     const url = new URL(raw.includes('://') ? raw : 'https://' + raw);
     if (
@@ -192,7 +196,7 @@
           detail:
             (host.id === directory.selected ? 'Current host · ' : 'Connect · ') +
             new URL(host.url).host,
-          key: '⌘⌃' + ((index + 1) % 10),
+          key: hostKeys + ((index + 1) % 10),
           run: () => connect(host.id),
         })),
         { name: 'Manage hosts', detail: 'Add or connect to a host', run: manage },
@@ -202,6 +206,8 @@
   if (picker)
     document.addEventListener('DOMContentLoaded', () => {
       render();
+      document.querySelector('#host-key-hint').textContent =
+        'Saved on this device. ' + (apple ? '⌘ Control ' : 'Meta+Ctrl+') + '1–0 switches hosts.';
       if (bridge) {
         const form = document.querySelector('#host-form');
         form.before(button('Add a host', () => request('prompt')));

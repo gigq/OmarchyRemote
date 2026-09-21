@@ -293,3 +293,5 @@ Android tablet verification includes two independent embedded web apps: native p
 Android tablet Herdr keeps the composer above the software keyboard while retaining visible terminal output. Native verification waits for the keyboard animation to settle before checking the bounds and capturing the screen, then exercises draft switching, clipboard editing, image attachment, process-death recovery and sending to isolated test shells.
 
 Android release APKs use an explicitly configured private signing key. Release builds disable debugging, require HTTPS, and open the saved-host picker. The release emulator fixture verifies signature continuity and saved-host retention across an in-place version update under a separate test identity.
+
+Android shortcut labels distinguish `Ctrl+Alt` aliases from combinations requiring a physical Meta key. Host switching is displayed as `Meta+Ctrl+number`, and resize combinations as `Meta+Alt+Shift+arrow`; the help sheet does not repeat Ctrl or show Apple-only system-key notes on Android. The actual bindings are unchanged.
