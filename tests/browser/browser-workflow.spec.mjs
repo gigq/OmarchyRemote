@@ -187,7 +187,7 @@ test('browser page shortcuts preserve shell window closing, including focus and 
   await expect.poll(() => opened(p)).toEqual(['https://example.com/', 'https://example.org/']);
   await key(p, 'Digit1', { ctrl: true });
   await expect.poll(() => opened(p)).toHaveLength(3);
-  await key(p, 'KeyT', { ctrl: true });
+  await key(p, 'KeyT');
   await expect(p.getByRole('dialog', { name: 'New desktop tab' })).toBeVisible();
   await expect
     .poll(() =>
@@ -216,7 +216,7 @@ test('close, reopen and new tab shortcuts update the exact desktop tab and open 
     .poll(() => state.actions.filter(q => q.action === 'close'))
     .toEqual([{ instance_id: 'connection-new', action: 'close', tab_id: 10 }]);
   await expect.poll(() => opened(p)).toEqual(['https://example.com/', 'https://example.org/']);
-  await key(p, 'KeyT', { ctrl: true, shift: true });
+  await key(p, 'KeyT', { shift: true });
   await expect
     .poll(() => opened(p))
     .toEqual(['https://example.com/', 'https://example.org/', 'https://example.com/']);
@@ -226,7 +226,7 @@ test('close, reopen and new tab shortcuts update the exact desktop tab and open 
     url: 'https://example.com/',
     window_id: 1,
   });
-  await key(p, 'KeyT', { ctrl: true });
+  await key(p, 'KeyT');
   await p.getByRole('textbox', { name: 'URL', exact: true }).fill('https://example.edu/');
   await p.getByRole('button', { name: 'Create', exact: true }).click();
   await expect.poll(() => opened(p)).toHaveLength(4);
@@ -274,7 +274,7 @@ test('closing the last openable tab returns to the manager and keeps new-tab sho
       p.evaluate(() => window.browserCommands.filter(q => q.action === 'context').at(-1)?.active)
     )
     .toBe(true);
-  await key(p, 'KeyT', { ctrl: true });
+  await key(p, 'KeyT');
   await expect(p.getByRole('dialog', { name: 'New desktop tab' })).toBeVisible();
 });
 

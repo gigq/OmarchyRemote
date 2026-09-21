@@ -244,7 +244,7 @@ final class HardwareShortcutTests: XCTestCase {
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
         app.typeKey("l", modifierFlags: [.command, .shift])
         XCTAssertTrue(app.searchFields["Find a tab"].waitForExistence(timeout: 5))
-        app.typeKey("t", modifierFlags: .control)
+        app.typeKey("t", modifierFlags: .command)
         XCTAssertTrue(app.staticTexts["New desktop tab"].waitForExistence(timeout: 5))
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
         app.typeKey("w", modifierFlags: .command)
@@ -323,8 +323,6 @@ final class HardwareShortcutTests: XCTestCase {
         expectWorkspace("herdr")
         app.typeKey("d", modifierFlags: [.command, .shift])
         expectWorkspace("lazydocker")
-        app.typeKey("t", modifierFlags: .command)
-        expectWorkspace("terminal")
     }
 
     func testPhysicalDirectionalKeysAndClose() {
@@ -384,15 +382,6 @@ final class HardwareShortcutTests: XCTestCase {
         expectWorkspace("settings")
         app.typeKey("2", modifierFlags: [.command, .option])
         expectWorkspace("settings")
-    }
-
-    func testPhysicalTerminalAndBrowserFromHome() {
-        app.typeKey("t", modifierFlags: .command)
-        expectWorkspace("terminal")
-        app.typeKey("1", modifierFlags: .command)
-        expectWorkspace("home")
-        app.typeKey("b", modifierFlags: [.command, .shift])
-        expectWorkspace("browser")
     }
 
 }

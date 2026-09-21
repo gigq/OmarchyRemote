@@ -100,20 +100,20 @@ install or configure a remote server.
 
 **iPad, Mac, and desktop windows.** When both edges of the viewport are at least 600 px, the shell switches to desk mode: a 1:1 layout that fills the window, Home with the clock, app grid, and all widgets at once, and workspaces that tile windows with Hyprland's dwindle split (up to four per workspace). Hardware keyboards use ⌘ on Apple devices (Omarchy's SUPER) and Ctrl+Alt elsewhere. Press ⌘/ or tap the shortcut button in the top bar for the same table.
 
-| Keys                               | Action                                                |
-| ---------------------------------- | ----------------------------------------------------- |
-| ⌘1…9 / ⌘0, ⌘[ / ⌘]                 | Switch workspace, previous / next workspace           |
-| ⌘E                                 | Expo overview                                         |
-| ⌘⌥1…9 / ⌘⌥0, ⌘⇧[ / ⌘⇧]             | Move the focused window to a workspace                |
-| ⌘← ↑ ↓ →, ⌘⇧arrows                 | Focus / swap window in a direction                    |
-| ⌘J / ⌘⇧J                           | Next / previous window in the workspace               |
-| ⌘F                                 | Toggle fullscreen for the focused window              |
-| ⌘W                                 | Close the focused window                              |
-| ⌘⏎ (or ⌘T), ⌘⇧B, ⌘⇧F, ⌘⇧A, ⌘⇧D, ⌘, | Terminal, browser, files, Herdr, lazydocker, settings |
-| ⌘K                                 | Launcher                                              |
-| ⌘/                                 | Shortcut sheet; Esc closes sheets and Expo            |
+| Keys                       | Action                                                |
+| -------------------------- | ----------------------------------------------------- |
+| ⌘1…9 / ⌘0, ⌘[ / ⌘]         | Switch workspace, previous / next workspace           |
+| ⌘E                         | Expo overview                                         |
+| ⌘⌥1…9 / ⌘⌥0, ⌘⇧[ / ⌘⇧]     | Move the focused window to a workspace                |
+| ⌘← ↑ ↓ →, ⌘⇧arrows         | Focus / swap window in a direction                    |
+| ⌘J / ⌘⇧J                   | Next / previous window in the workspace               |
+| ⌘F                         | Toggle fullscreen for the focused window              |
+| ⌘W                         | Close the focused window                              |
+| ⌘⏎, ⌘⇧B, ⌘⇧F, ⌘⇧A, ⌘⇧D, ⌘, | Terminal, browser, files, Herdr, lazydocker, settings |
+| ⌘K                         | Launcher                                              |
+| ⌘/                         | Shortcut sheet; Esc closes sheets and Expo            |
 
-0 selects workspace 10. Window cycling requires multiple windows in the current workspace and follows the focused window in fullscreen. Text fields keep the standard editing shortcuts, including ⌘arrows and ⌘⌫; use ⌘J to cycle while editing. ⌘Space and ⌘backtick are left to the operating system. The native app registers shell commands with UIKit; web browsers can intercept shortcuts before the shell receives them. Numbered moves use Option on iPad because Shift-Command-3/4 are screenshot shortcuts; the browser version retains Shift. ⌘Enter opens Terminal (⌘T remains an alternate). Shift-Return for Browser and Delete for closing windows remain browser-only aliases.
+0 selects workspace 10. Window cycling requires multiple windows in the current workspace and follows the focused window in fullscreen. Text fields keep the standard editing shortcuts, including ⌘arrows and ⌘⌫; use ⌘J to cycle while editing. ⌘Space and ⌘backtick are left to the operating system. The native app registers shell commands with UIKit; web browsers can intercept shortcuts before the shell receives them. Numbered moves use Option on iPad because Shift-Command-3/4 are screenshot shortcuts; the browser version retains Shift. ⌘Enter opens Terminal and immediately focuses its input. Shift-Return for Browser and Delete for closing windows remain browser-only aliases.
 
 `tests/browser/shortcuts.spec.mjs` exercises every binding in an isolated browser fixture, including both modifier forms, move/swap, fullscreen cycling, and editing conflicts. This verifies shell behavior, not physical iPad keyboard delivery. The native `HardwareShortcuts` Xcode scheme runs XCTest UI tests with `typeKey(_:modifierFlags:)` on an iPad simulator to verify actual modifier-key routing and that closing internal windows keeps the app running. It launches the bundled shell so tests cannot affect host sessions.
 
@@ -125,7 +125,7 @@ install or configure a remote server.
 
 **Web apps.** In Settings, enter a name and an http/https URL under Web apps, then choose Install web app. Saved apps appear on Home and in the launcher. Each opens an independent native website view without browser controls and supports workspaces, iPad tiling, and Expo. Tapped web links, including external links requesting a new tab or window, open in that same view; native back/forward gestures return through its browsing history. Remove an installation from Settings; closing its Expo card only closes the running view. Installations are shared by all devices connected to the host. Installing pins the app on the current device; other devices can find it in the launcher and choose their own pins. Uninstalling removes it from the host catalog for every device. Website login sessions stay on each device, and web apps do not sync navigation to desktop tabs.
 
-⌘Return opens or focuses Terminal without creating another tab. ⌘T adds a tab when Terminal is already active.
+⌘Return opens or focuses Terminal without creating another tab. ⌘T adds a tab in the active app, including Terminal and Browser; it no longer launches Terminal from other apps.
 
 ## Saved settings and device backups
 
@@ -147,9 +147,9 @@ When Browser is active, its keyboard commands handle tab and page actions. ⌘W 
 | --------------------------------------------- | --------------------------------------------------------------- |
 | ⌘ L                                           | Select address; in the manager, search tabs                     |
 | ⌘ ⇧ L or F2                                   | Open and search the tab manager                                 |
-| Ctrl T / ⌘ N                                  | Create a desktop tab / window (enter its URL)                   |
+| ⌘ T / ⌘ N                                     | Create a desktop tab / window (enter its URL)                   |
 | ⌘ ⇧ W                                         | Close the current desktop tab and select the next available tab |
-| Ctrl ⇧ T                                      | Reopen a tab closed here, restoring its URL                     |
+| ⌘ ⇧ T                                         | Reopen a tab closed here, restoring its URL                     |
 | Ctrl Tab / Ctrl ⇧ Tab, Ctrl PageDown / PageUp | Next / previous openable tab across profiles and windows        |
 | ⌘ ⌥ → / ←                                     | Next / previous openable tab                                    |
 | Ctrl 1–8 / Ctrl 9                             | Numbered tab / last openable tab in the current desktop window  |
@@ -160,7 +160,7 @@ When Browser is active, its keyboard commands handle tab and page actions. ⌘W 
 | Escape                                        | Dismiss dialog/find/options, otherwise stop loading             |
 | ⌘ W / ⌘ F                                     | Close Browser's shell window / toggle its fullscreen layout     |
 
-Shell shortcuts keep the same meaning inside Browser: ⌘numbers switch workspaces, ⌘brackets switch adjacent workspaces, ⌘T/Return opens Terminal, ⌘F toggles fullscreen, and ⌘⇧F opens Files. Browser actions use separate Control chords where Command would conflict. These non-conflicting native shortcut registrations require build 28 or later. These commands operate the embedded WebKit page or the desktop tab adapter; they do not reproduce Vivaldi-only features such as panels, bookmarks, command chains, or DevTools. Reopening a tab restores its URL, not its old page history or form state. The last tab and the last 20 tabs closed here are stored locally and included in the native local preferences mirror, not the shared installed-app catalog.
+Shell shortcuts keep the same meaning inside Browser: ⌘numbers switch workspaces, ⌘brackets switch adjacent workspaces, ⌘Return opens Terminal, ⌘F toggles fullscreen, and ⌘⇧F opens Files. Browser actions use separate Control chords where Command would conflict. These non-conflicting native shortcut registrations require build 28 or later. These commands operate the embedded WebKit page or the desktop tab adapter; they do not reproduce Vivaldi-only features such as panels, bookmarks, command chains, or DevTools. Reopening a tab restores its URL, not its old page history or form state. The last tab and the last 20 tabs closed here are stored locally and included in the native local preferences mirror, not the shared installed-app catalog.
 
 ## Native iPhone, iPad, and Vision Pro app
 

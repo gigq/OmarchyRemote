@@ -50,10 +50,7 @@
     native: true,
     superKeys: ['t', '⏎'],
     superLabel: 'term',
-    deskKeys: [
-      { keys: 'T', code: /^KeyT$/, label: 'Terminal / new terminal tab', reopen: true },
-      { keys: '↩', code: /^(Enter|NumpadEnter)$/, label: 'Terminal' },
-    ],
+    deskKeys: [{ keys: '↩', code: /^(Enter|NumpadEnter)$/, label: 'Terminal' }],
   });
   define('codexbar', {
     name: 'CodexBar',

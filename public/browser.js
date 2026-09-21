@@ -29,17 +29,12 @@
       });
     add('KeyL', 'Focus browser address', () => app.focusAddress());
     add('KeyL', 'Open browser tab manager', () => app.showManager(true), { shift: true });
-    add(
-      'KeyT',
-      'New browser tab',
-      () => {
-        const t = app.current();
-        if (app.pageOpen) app.showManager();
-        app.newTab(t?.instance, t?.window);
-      },
-      { ctrl: true }
-    );
-    add('KeyT', 'Reopen browser tab', () => app.reopenTab(), { ctrl: true, shift: true });
+    add('KeyT', 'New browser tab', () => {
+      const t = app.current();
+      if (app.pageOpen) app.showManager();
+      app.newTab(t?.instance, t?.window);
+    });
+    add('KeyT', 'Reopen browser tab', () => app.reopenTab(), { shift: true });
     add('KeyN', 'New desktop browser window', () => {
       const t = app.current();
       app.showManager();

@@ -91,9 +91,8 @@ for (const mod of ['Meta', 'Control+Alt']) {
     expect((await state(p)).ov).toBe(false);
   });
   test(`${mod}: every app binding, launcher and help`, async ({ page: p }) => {
-    await p.evaluate(() => logic.go(0)); // T launches Terminal from Home; in Terminal it adds a tab.
+    await p.evaluate(() => logic.go(0));
     for (const [key, app] of [
-      ['KeyT', 'terminal'],
       ['Enter', 'terminal'],
       ['NumpadEnter', 'terminal'],
       ['Shift+Enter', 'browser'],
@@ -297,8 +296,12 @@ test('native list restores Return and omits the browser-only Delete alias', asyn
     expect(await p.evaluate(code => HyprlandDesk.nativeKey({ code }), code)).toBe(false);
   await p.keyboard.press('Meta+Enter');
   expect(await p.evaluate(() => logic.calls.at(-1))).toEqual(['open', 'terminal']);
-  await p.keyboard.press('Meta+KeyT');
-  expect(await p.evaluate(() => logic.calls.at(-1))).toEqual(['open', 'terminal']);
+  expect(await p.evaluate(() => HyprlandDesk.nativeKey({ code: 'KeyT' }))).toBe(false);
+  expect(
+    await p.evaluate(
+      () => desk.actions().find(a => a.code === 'Enter' && a.owner === 'shell').focusShell
+    )
+  ).toBe(true);
   await p.keyboard.press('Meta+Slash');
   await expect(p.locator('.desk-sheet')).toContainText('↩');
   await expect(p.locator('.desk-sheet')).not.toContainText('⌫');
@@ -306,7 +309,21 @@ test('native list restores Return and omits the browser-only Delete alias', asyn
 
 test('Return focuses Terminal while T explicitly adds a terminal tab', async ({ page: p }) => {
   await p.evaluate(() => {
-    logic.remote = { app: () => ({ reopen: () => logic.calls.push(['new-tab']) }) };
+    logic.remote = {
+      app: () => ({
+        actions: [
+          {
+            code: 'KeyT',
+            meta: true,
+            ctrl: false,
+            alt: false,
+            shift: false,
+            label: 'New terminal tab',
+            run: () => logic.calls.push(['new-tab']),
+          },
+        ],
+      }),
+    };
   });
   await p.keyboard.press('Meta+Enter');
   await p.keyboard.press('Meta+NumpadEnter');
@@ -323,7 +340,6 @@ test('Return focuses Terminal while T explicitly adds a terminal tab', async ({ 
 test('app handlers cannot consume reserved shell shortcuts', async ({ page: p }) => {
   const results = await p.evaluate(() => {
     const codes = [
-      'KeyT',
       'KeyF',
       'KeyW',
       'KeyJ',

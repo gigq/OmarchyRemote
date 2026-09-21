@@ -395,6 +395,7 @@
     Object.values(window.HyprlandApps?.catalog || {}).flatMap(app =>
       (app.deskKeys || []).map(b => ({
         group: 'Apps',
+        focusShell: !!app.native,
         ...b,
         run: d => {
           const current = d.logic.cur();
@@ -403,6 +404,7 @@
             d.logic.remote?.app(current);
           if (b.reopen && front?.reopen) front.reopen();
           else d.logic.openApp(app.key);
+          if (app.native) d.logic.set({ kb: true, sup: false });
         },
       }))
     );

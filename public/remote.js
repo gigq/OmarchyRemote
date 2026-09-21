@@ -403,9 +403,15 @@
                   JSON.stringify({ type: 'resize', cols: this.term.cols, rows: this.term.rows })
                 );
                 ws.send(JSON.stringify({ type: 'ready' }));
+                this.ready = true;
+                this.hasConnected = true;
+                if (this.startupInput) {
+                  ws.send(JSON.stringify({ type: 'input', data: this.startupInput }));
+                  this.startupInput = '';
+                }
+                this.bridge.reconcileFocus();
               }
             });
-            this.ready = true;
             this.setStatus('connected');
             this.restart.hidden = true;
             if (m.exited) this.exit();
@@ -462,6 +468,16 @@
     }
     input(data) {
       this.stopTouchScroll.cancel();
+      if (
+        !this.hasConnected &&
+        !this.exited &&
+        !this.disposed &&
+        (this.connecting || this.ws?.readyState === 0 || this.ws?.readyState === 1) &&
+        (this.startupInput || '').length + data.length <= 16384
+      ) {
+        this.startupInput = (this.startupInput || '') + data;
+        return true;
+      }
       if (this.ready && this.ws?.readyState === 1) {
         this.ws.send(JSON.stringify({ type: 'input', data }));
         this.term.scrollToBottom();
@@ -482,6 +498,19 @@
       this.term.dispose();
     }
   }
+  const terminalTabActions = app => [
+    {
+      code: 'KeyT',
+      label: 'New terminal tab',
+      group: 'Terminal',
+      meta: true,
+      ctrl: false,
+      alt: false,
+      shift: false,
+      focusShell: true,
+      run: () => app.add(),
+    },
+  ];
   class TerminalTabs {
     constructor(root, bridge, windowKey = 'terminal') {
       root.classList.add('terminal-window');
@@ -541,9 +570,8 @@
       if (activate) this.activate(this.tabs.length - 1);
       this.save();
     }
-    // The terminal's own desk binding adds a tab when the terminal is already in front.
-    reopen() {
-      this.add();
+    get actions() {
+      return terminalTabActions(this);
     }
     shellExited(tab) {
       if (this.disposed || this.closingTab === tab || !this.tabs.includes(tab)) return;
@@ -1506,6 +1534,7 @@
   if (window.HyprlandApps) {
     HyprlandApps.provide('terminal', {
       multiple: true,
+      shortcutDefinitions: terminalTabActions(null).map(({ run, ...action }) => action),
       create: (root, bridge, spec) => new TerminalTabs(root, bridge, spec?.key),
       close: async (app, bridge, spec) => {
         if (app) return app.closeSessions();
