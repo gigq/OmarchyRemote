@@ -629,6 +629,8 @@ public final class ShellActivity extends Activity {
 
   private Object browser(JSONObject body) {
     String action = body.optString("action");
+    String id = body.optString("appID", "browser");
+    Page page = pages.get(id);
     if (action.equals("capabilities"))
       return object(
           "embedded",
@@ -637,12 +639,12 @@ public final class ShellActivity extends Activity {
           true,
           "darkMode",
           true,
+          "dark",
+          page == null ? prefs.getBoolean("browser-force-dark", false) : page.dark,
           "nativeFind",
           true,
           "shortcuts",
           true);
-    String id = body.optString("appID", "browser");
-    Page page = pages.get(id);
     if (action.equals("open")) {
       Uri url = Uri.parse(body.optString("url"));
       if (!http(url) || url.getHost() == null || url.getUserInfo() != null)
@@ -687,6 +689,7 @@ public final class ShellActivity extends Activity {
           break;
         case "dark":
           page.dark = body.optBoolean("enabled");
+          prefs.edit().putBoolean("browser-force-dark", page.dark).apply();
           page.web.evaluateJavascript(
               "typeof window.DarkReader !== 'undefined'",
               available -> {
@@ -740,6 +743,7 @@ public final class ShellActivity extends Activity {
 
     Page(String id) {
       this.id = id;
+      dark = prefs.getBoolean("browser-force-dark", false);
       web = makeWebView();
       // Unstyled websites use a white canvas behind their default black text.
       web.setBackgroundColor(Color.WHITE);

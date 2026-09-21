@@ -297,3 +297,5 @@ Android release APKs use an explicitly configured private signing key. Release b
 Android shortcut labels distinguish `Ctrl+Alt` aliases from combinations requiring a physical Meta key. Host switching is displayed as `Meta+Ctrl+number`, and resize combinations as `Meta+Alt+Shift+arrow`; the help sheet does not repeat Ctrl or show Apple-only system-key notes on Android. The actual bindings are unchanged.
 
 Host navigation also saves the departing host’s final device-settings snapshot before replacing the shell, without waiting for the periodic preference mirror.
+
+Android remembers the browser’s forced Dark preference on the device. Newly opened browser and saved-app views inherit it after relaunch, and the browser menu reflects the restored setting.

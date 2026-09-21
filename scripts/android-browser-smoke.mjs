@@ -12,9 +12,28 @@ const serial = process.env.ANDROID_SERIAL || (emulators.length === 1 ? emulators
 assert.ok(serial, 'Set ANDROID_SERIAL when there is not exactly one running emulator');
 const adb = (...args) =>
   execFileSync(adbPath, ['-s', serial, ...args], { encoding: 'utf8' }).trim();
-const pid = adb('shell', 'pidof', 'dev.omarchy.remote');
-assert.match(pid, /^\d+$/);
-adb('forward', 'tcp:9225', `localabstract:webview_devtools_remote_${pid}`);
+
+function launch() {
+  adb(
+    'shell',
+    'am',
+    'start',
+    '-W',
+    '-a',
+    'android.intent.action.MAIN',
+    '-c',
+    'android.intent.category.LAUNCHER',
+    '-f',
+    '0x10200000',
+    '-n',
+    'dev.omarchy.remote/.ShellActivity'
+  );
+  const pid = adb('shell', 'pidof', 'dev.omarchy.remote').split(/\s+/)[0];
+  assert.match(pid, /^\d+$/);
+  adb('forward', 'tcp:9225', `localabstract:webview_devtools_remote_${pid}`);
+}
+
+launch();
 const server = createServer((req, res) => {
   res.setHeader('Content-Type', 'text/html');
   res.end(
@@ -62,19 +81,45 @@ async function connect(match) {
     });
 }
 async function until(check) {
-  const deadline = Date.now() + 10000;
+  const deadline = Date.now() + 20000;
   while (Date.now() < deadline) {
-    if (await check()) return;
+    try {
+      if (await check()) return;
+    } catch {}
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   throw Error('Condition did not become true');
 }
-const shell = await connect(t => t.url.includes('/native/') || t.url.includes('/assets/Web/'));
+const settleNative = () => new Promise(resolve => setTimeout(resolve, 1000));
+let shell = await connect(t => t.url.includes('/native/') || t.url.includes('/assets/Web/'));
 const id = 'android-browser-qa';
 const command = (action, body = {}) =>
   shell(
     `window.webkit.messageHandlers.browserDevice.postMessage(${JSON.stringify({ action, appID: id, ...body })})`
   );
+async function attachPage() {
+  await until(async () =>
+    (await (await fetch('http://127.0.0.1:9225/json/list')).json()).some(t =>
+      t.url.includes(`:${port}/`)
+    )
+  );
+  const page = await connect(t => t.url.includes(`:${port}/`));
+  await until(() =>
+    page('document.readyState === "complete" && !!document.querySelector("#zoom-box")')
+  );
+  return page;
+}
+async function relaunch() {
+  adb('shell', 'am', 'force-stop', 'dev.omarchy.remote');
+  launch();
+  await until(async () =>
+    (await (await fetch('http://127.0.0.1:9225/json/list')).json()).some(
+      t => t.url.includes('/native/') || t.url.includes('/assets/Web/')
+    )
+  );
+  shell = await connect(t => t.url.includes('/native/') || t.url.includes('/assets/Web/'));
+  await until(() => shell('!!window.HyprlandDesk'));
+}
 try {
   await shell(
     `window.androidQAEvents=[];window.androidQAListener=e=>{if(e.detail.appID===${JSON.stringify(id)})androidQAEvents.push(e.detail)};window.addEventListener('host-browser-state',androidQAListener)`
@@ -82,7 +127,7 @@ try {
   await command('open', { url: `http://127.0.0.1:${port}/one` });
   await command('layout', { visible: true, rect: [12, 70, 388, 750], viewport: 412, radius: 16 });
   await until(() => shell('androidQAEvents.some(e=>e.title==="Android browser QA" && !e.loading)'));
-  const page = await connect(t => t.url.includes(`:${port}/`));
+  let page = await connect(t => t.url.includes(`:${port}/`));
   assert.equal(await page('typeof AndroidShell'), 'undefined');
   await page('history.pushState({}, "", "/two")');
   await until(() => shell('androidQAEvents.some(e=>e.url?.endsWith("/two") && e.back)')).catch(
@@ -182,10 +227,84 @@ print(json.dumps(result))
   await verifyScale(1.5);
   await command('zoom', { value: 1 });
   await verifyScale(1);
-  await command('dark', { enabled: true });
-  await until(() => page('!!document.querySelector("style.darkreader")'));
-  await command('dark', { enabled: false });
-  await until(() => page('!document.querySelector("style.darkreader")'));
+  const originalDark = !!(await command('capabilities')).dark;
+  const fixtureUrl = `http://127.0.0.1:${port}/two`;
+  const pageColors = () =>
+    page(
+      `(()=>{const body=getComputedStyle(document.body);const root=getComputedStyle(document.documentElement);const heading=getComputedStyle(document.querySelector('h1'));const styles=[...document.querySelectorAll('style.darkreader')];const cssStyle=styles.find(style=>(style.sheet?.cssRules?.length||0)>0||style.textContent.length>0);return {style:styles.length>0,css:!!cssStyle,background:body.backgroundColor,rootBackground:root.backgroundColor,color:heading.color}})()`
+    );
+  const assertDarkPage = async label => {
+    await until(async () => {
+      const colors = await pageColors();
+      return (
+        colors.style &&
+        colors.css &&
+        (colors.background !== 'rgb(255, 255, 255)' ||
+          colors.rootBackground !== 'rgb(255, 255, 255)') &&
+        colors.color !== 'rgb(0, 0, 0)'
+      );
+    }).catch(async error => {
+      console.error(`${label}:`, await pageColors());
+      throw error;
+    });
+    assert.equal((await command('capabilities')).dark, true, `${label}: dark capability`);
+    const colors = await pageColors();
+    assert.equal(colors.style, true, `${label}: DarkReader style`);
+    assert.equal(colors.css, true, `${label}: DarkReader CSS`);
+    assert.notEqual(colors.color, 'rgb(0, 0, 0)', `${label}: page text color`);
+    assert.ok(
+      colors.background !== 'rgb(255, 255, 255)' || colors.rootBackground !== 'rgb(255, 255, 255)',
+      `${label}: page background color`
+    );
+  };
+  const assertLightPage = async label => {
+    await until(async () => {
+      const colors = await pageColors();
+      return (
+        !colors.style &&
+        colors.background === 'rgb(255, 255, 255)' &&
+        colors.color === 'rgb(0, 0, 0)'
+      );
+    });
+    assert.equal((await command('capabilities')).dark, false, `${label}: dark capability`);
+    const colors = await pageColors();
+    assert.equal(colors.style, false, `${label}: DarkReader style removed`);
+    assert.equal(colors.background, 'rgb(255, 255, 255)', `${label}: page background color`);
+    assert.equal(colors.color, 'rgb(0, 0, 0)', `${label}: page text color`);
+  };
+  const openFixturePage = async () => {
+    await command('open', { url: fixtureUrl });
+    await command('layout', { visible: true, rect: [12, 70, 388, 750], viewport: 412, radius: 16 });
+    page = await attachPage();
+  };
+  try {
+    await command('dark', { enabled: true });
+    await settleNative();
+    await assertDarkPage('initial enable');
+    await command('close');
+    await until(
+      async () =>
+        !(await (await fetch('http://127.0.0.1:9225/json/list')).json()).some(t =>
+          t.url.includes(`:${port}/`)
+        )
+    );
+    await openFixturePage();
+    await assertDarkPage('close and reopen');
+    await relaunch();
+    await openFixturePage();
+    await assertDarkPage('process restart');
+    await command('dark', { enabled: false });
+    await settleNative();
+    await assertLightPage('disable');
+    await relaunch();
+    await openFixturePage();
+    await assertLightPage('disabled process restart');
+  } finally {
+    await openFixturePage().catch(() => {});
+    await command('dark', { enabled: originalDark }).catch(() => {});
+    if (originalDark) await assertDarkPage('restore original preference').catch(() => {});
+    else await assertLightPage('restore original preference').catch(() => {});
+  }
   await shell(`window.androidQAOriginalKey=HyprlandDesk.nativeKey;window.androidQAKeys=[];
     HyprlandDesk.nativeKey=key=>{androidQAKeys.push(key);if(key.code==='KeyF')window.webkit.messageHandlers.browserDevice.postMessage({action:'findOpen',appID:'android-browser-qa'});return true};
     window.webkit.messageHandlers.shellKeyboard.postMessage({commands:[

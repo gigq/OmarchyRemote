@@ -321,3 +321,5 @@ Signed Android release builds are configured through private environment variabl
 Android shortcut hints use `Ctrl+Alt` for supported plain Meta/Command aliases. Combinations that also require Ctrl or Alt show the physical `Meta` key explicitly—for example, `Meta+Ctrl+1–0` switches saved hosts. The host picker, launcher and shortcut help use platform-appropriate labels.
 
 Host navigation also saves the departing host’s final device-settings snapshot before replacing the shell, without waiting for the periodic preference mirror.
+
+Android remembers the browser’s forced Dark preference on the device. Newly opened browser and saved-app views inherit it after relaunch, and the browser menu reflects the restored setting.
