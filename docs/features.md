@@ -303,3 +303,5 @@ Android remembers the browser’s forced Dark preference on the device. Newly op
 Android takes native shell focus at the start of a touch gesture, preserving the launcher search field for immediate typing after a swipe. Unmodified Escape is delivered to the active app before the input method can consume it; Android Back remains available to dismiss the software keyboard.
 
 Android weather units follow the device’s regional temperature preference, including explicit Celsius/Fahrenheit overrides, with locale defaults when no override is set.
+
+Android message input retains native Gboard autocorrection and clipboard Undo. Emulator checks cover real touch typing and finger scrolling in Herdr and Terminal using isolated sessions.

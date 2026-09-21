@@ -327,3 +327,5 @@ Android remembers the browser’s forced Dark preference on the device. Newly op
 Android takes native shell focus at the start of a touch gesture, preserving the launcher search field for immediate typing after a swipe. Unmodified Escape is delivered to the active app before the input method can consume it; Android Back remains available to dismiss the software keyboard.
 
 Android weather units follow the device’s regional temperature preference, including explicit Celsius/Fahrenheit overrides, with locale defaults when no override is set.
+
+`node scripts/android-ime-scroll-smoke.mjs` checks real English Gboard autocorrection, repeated clipboard/Undo and finger scrolling in fresh Herdr and Terminal sessions on the phone emulator. It requires Home-only state at 1080×2400/density 420 and removes its owned sessions afterward.
