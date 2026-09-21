@@ -121,7 +121,9 @@ const previous = evaluate(
   '({pane:localStorage.getItem("omarchy-herdr-pane"),recent:localStorage.getItem("omarchy-herdr-recent-panes")})'
 );
 assert.deepEqual(
-  evaluate('JSON.parse(localStorage.getItem("omarchy-layout-phone"))?.open || ["home"]'),
+  evaluate(
+    'JSON.parse(localStorage.getItem(Math.min(innerWidth,innerHeight)>=600 ? "omarchy-layout-desk" : "omarchy-layout-phone"))?.open || ["home"]'
+  ),
   ['home'],
   'Start with only Home open'
 );
@@ -296,16 +298,32 @@ try {
     await until(() => value() === 'drafttwo');
     await select(owned[0].pane_id);
     assert.equal(value(), 'draftone');
+    let previousGeometry;
+    let stableGeometry = 0;
+    let geometry;
+    await until(() => {
+      geometry = evaluate(
+        `(()=>{const field=document.querySelector(${JSON.stringify(field)}).getBoundingClientRect();const output=document.querySelector(${JSON.stringify(root + ' .native-terminal-scroll')}).getBoundingClientRect();return {width:innerWidth,height:innerHeight,inset:keyboardInset(),field:field.toJSON(),output:output.toJSON()}})()`
+      );
+      const serialized = JSON.stringify(geometry);
+      stableGeometry = serialized === previousGeometry ? stableGeometry + 1 : 0;
+      previousGeometry = serialized;
+      return (
+        stableGeometry >= 5 &&
+        geometry.inset > 80 &&
+        geometry.field.top >= 0 &&
+        geometry.field.bottom <= geometry.height - geometry.inset + 2 &&
+        geometry.output.height >= 100 &&
+        geometry.output.bottom <= geometry.field.top
+      );
+    });
+    const evidence = geometry.width >= 600 ? 'tablet-herdr-input' : 'herdr-input';
+    writeFileSync('artifacts/android/' + evidence + '.json', JSON.stringify(geometry, null, 2));
     writeFileSync(
-      'artifacts/android/herdr-input.png',
+      'artifacts/android/' + evidence + '.png',
       execFileSync(adbPath, ['-s', serial, 'exec-out', 'screencap', '-p'], {
         maxBuffer: 16 * 1024 * 1024,
       })
-    );
-    await until(() =>
-      evaluate(
-        `keyboardInset()>80 && document.querySelector(${JSON.stringify(field)}).getBoundingClientRect().bottom <= innerHeight-keyboardInset()+2`
-      )
     );
     selected(owned[0].pane_id);
     adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_A');
@@ -331,11 +349,17 @@ try {
     await until(() => value() === 'draftone');
     // Android's temporary clipboard preview can cover the lower-left attachment control.
     await new Promise(resolve => setTimeout(resolve, 20000));
+    evaluate(
+      `window.androidPickedFiles=null;document.querySelector(${JSON.stringify(root + ' input[type=file]')}).addEventListener('change',event=>window.androidPickedFiles=[...event.target.files].map(file=>({name:file.name,size:file.size})),{capture:true})`
+    );
     await tap(root + ' .herdr-attach');
     await until(() => ui().includes('com.google.android.documentsui'));
     tapNative(node => node.includes('content-desc="Show roots"'));
-    tapNative(node => node.includes('text="Downloads"'));
+    tapNative(
+      node => node.includes('text="Downloads"') && node.includes('resource-id="android:id/title"')
+    );
     await until(() => ui().includes(filename));
+    writeFileSync('artifacts/android/herdr-picker.xml', ui());
     tapNative(node => node.includes('text="' + filename + '"'));
     await until(() => value()?.includes('Image: '));
     attached = value().match(/Image: (.+)\n/)[1];
@@ -397,6 +421,11 @@ try {
       maxBuffer: 16 * 1024 * 1024,
     })
   );
+  console.error({
+    draft: value(),
+    picked: evaluate('window.androidPickedFiles'),
+    status: evaluate('document.querySelector("#remote-herdr-app")?.innerText.slice(-400)'),
+  });
   console.error(
     evaluate(
       '({h:innerHeight,v:visualViewport.height,inset:window.__HYPRLAND_KEYBOARD__,css:getComputedStyle(document.documentElement).getPropertyValue("--keyboard-inset"),calc:keyboardInset(),classes:document.querySelector("#remote-herdr-app")?.className,field:document.querySelector("#remote-herdr-app .native-input")?.getBoundingClientRect().toJSON()})'
