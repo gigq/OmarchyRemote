@@ -275,3 +275,5 @@ Android’s full-screen phone layout uses native IME insets instead of relying o
 Android native browser verification covers immediate keyboard-driven Terminal launch from a website, keeping subsequent input in the new terminal. Website links requesting a new window open inline in the embedded view, retain their same-site session cookies, and support Back without leaving the app.
 
 Android file selection supports multiple files in Files and Herdr. The native wrapper reads all selected document URIs instead of relying on older WebView parsers that only read a single URI; cancelling still returns no files. Files selections can be saved as ZIP archives through Android’s document picker.
+
+Android’s file action offers **Save to device** and **Share…**. Save uses the document picker; Share opens Android’s share sheet with the original filename and MIME type and a temporary read-only content URI. Cancelling the initial choice aborts cleanly. The app reports handing the file to the share sheet, not delivery by the recipient app. Shared copies remain in private cache for asynchronous readers; later startups remove copies older than one day.

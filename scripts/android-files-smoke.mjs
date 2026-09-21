@@ -167,6 +167,8 @@ try {
   for (const f of files) await tap(f.name);
   await tap('Get selected');
   await tap('Save…');
+  await until(() => ui().includes('Save to device'));
+  native(n => n.includes('text="Save to device"'));
   await until(() => ui().includes('com.google.android.documentsui'));
   native(n => n.includes('class="android.widget.EditText"'));
   adb('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_A');

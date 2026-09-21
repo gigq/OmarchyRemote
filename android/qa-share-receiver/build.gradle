@@ -1,0 +1,18 @@
+// Opt-in emulator fixture; never packaged with the app.
+plugins {
+    id 'com.android.application'
+}
+android {
+    namespace 'dev.omarchy.qa.share'
+    compileSdk 36
+    buildToolsVersion "36.0.0"
+    defaultConfig {
+        applicationId 'dev.omarchy.qa.share'
+        minSdk 30
+        targetSdk 35
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

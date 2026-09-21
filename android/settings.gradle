@@ -14,3 +14,6 @@ dependencyResolutionManagement {
 }
 rootProject.name = 'OmarchyRemote'
 include ':app'
+if (providers.gradleProperty('withQaReceiver').isPresent()) {
+    include ':qa-share-receiver'
+}

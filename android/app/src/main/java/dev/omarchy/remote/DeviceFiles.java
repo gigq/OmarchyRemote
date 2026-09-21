@@ -1,9 +1,12 @@
 package dev.omarchy.remote;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.ClipData;
 import android.content.Intent;
 import android.net.Uri;
 import android.util.Base64;
+import androidx.core.content.FileProvider;
 import java.io.*;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -20,12 +23,21 @@ final class DeviceFiles {
   private long expected;
   private Consumer<JSONObject> completion;
   private boolean copying;
+  private AlertDialog choices;
 
   DeviceFiles(Activity activity) {
     this.activity = activity;
     File[] abandoned =
         activity.getCacheDir().listFiles((dir, filename) -> filename.startsWith("shell-save-"));
     if (abandoned != null) for (File file : abandoned) file.delete();
+    File[] shares = new File(activity.getCacheDir(), "shares").listFiles();
+    if (shares != null)
+      for (File directory : shares) {
+        if (directory.lastModified() > System.currentTimeMillis() - 86400000L) continue;
+        File[] files = directory.listFiles();
+        if (files != null) for (File file : files) file.delete();
+        directory.delete();
+      }
   }
 
   void dispatch(JSONObject body, Consumer<JSONObject> reply) throws Exception {
@@ -36,7 +48,7 @@ final class DeviceFiles {
       if (size < 0 || size > activity.getCacheDir().getUsableSpace())
         throw new IllegalArgumentException("Not enough device space to save this file.");
       name = body.optString("name", "download").replaceAll("[\\\\/\\p{Cntrl}]", "_");
-      if (name.isBlank()) name = "download";
+      if (name.isBlank() || name.equals(".") || name.equals("..")) name = "download";
       mime = body.optString("type", "application/octet-stream");
       if (!mime.matches("[a-zA-Z0-9.+-]+/[a-zA-Z0-9.+-]+")) mime = "application/octet-stream";
       staged = File.createTempFile("shell-save-", ".tmp", activity.getCacheDir());
@@ -68,16 +80,19 @@ final class DeviceFiles {
         if (staged.length() != expected)
           throw new IllegalArgumentException("File transfer is incomplete.");
         completion = reply;
-        try {
-          activity.startActivityForResult(
-              new Intent(Intent.ACTION_CREATE_DOCUMENT)
-                  .addCategory(Intent.CATEGORY_OPENABLE)
-                  .setType(mime)
-                  .putExtra(Intent.EXTRA_TITLE, name),
-              SAVE_REQUEST);
-        } catch (Exception error) {
-          finish(ShellActivity.object("error", "No Android file picker is available."));
-        }
+        choices =
+            new AlertDialog.Builder(activity)
+                .setTitle(name)
+                .setItems(
+                    new String[] {"Save to device", "Share…"},
+                    (dialog, which) -> {
+                      choices = null;
+                      if (which == 0) save();
+                      else share();
+                    })
+                .setNegativeButton("Cancel", (dialog, which) -> cancel())
+                .setOnCancelListener(dialog -> cancel())
+                .show();
         break;
       case "cancel":
         cancel();
@@ -85,6 +100,44 @@ final class DeviceFiles {
         break;
       default:
         throw new IllegalArgumentException("Unknown file action.");
+    }
+  }
+
+  private void save() {
+    try {
+      activity.startActivityForResult(
+          new Intent(Intent.ACTION_CREATE_DOCUMENT)
+              .addCategory(Intent.CATEGORY_OPENABLE)
+              .setType(mime)
+              .putExtra(Intent.EXTRA_TITLE, name),
+          SAVE_REQUEST);
+    } catch (Exception error) {
+      finish(ShellActivity.object("error", "No Android file picker is available."));
+    }
+  }
+
+  private void share() {
+    File directory = new File(activity.getCacheDir(), "shares/" + UUID.randomUUID());
+    File shared = new File(directory, name);
+    try {
+      if (!directory.mkdirs() || !staged.renameTo(shared))
+        throw new IOException("Could not prepare the shared file.");
+      Uri uri =
+          FileProvider.getUriForFile(activity, activity.getPackageName() + ".updates", shared);
+      Intent send =
+          new Intent(Intent.ACTION_SEND)
+              .setType(mime)
+              .putExtra(Intent.EXTRA_STREAM, uri)
+              .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+      send.setClipData(ClipData.newUri(activity.getContentResolver(), name, uri));
+      activity.startActivity(Intent.createChooser(send, "Share " + name));
+      // The recipient may read asynchronously. Keep the granted copy after handoff;
+      // a later startup prunes old shares. This reports handoff, not delivery.
+      finish(ShellActivity.object("shared", true));
+    } catch (Exception error) {
+      shared.delete();
+      directory.delete();
+      finish(ShellActivity.object("error", "Could not share the file: " + error.getMessage()));
     }
   }
 
@@ -126,6 +179,10 @@ final class DeviceFiles {
   }
 
   private void finish(JSONObject response) {
+    if (choices != null) {
+      choices.dismiss();
+      choices = null;
+    }
     Consumer<JSONObject> callback = completion;
     completion = null;
     if (staged != null) staged.delete();
