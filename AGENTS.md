@@ -12,6 +12,12 @@
 - The markup in `public/index.html` is a design-tool export; leave it as exported. Its component script is formatted by `scripts/format-template.mjs`, which `npm run format` runs.
 - New apps follow CONTRIBUTING.md: a `define` in `public/apps.js`, a `public/<key>.js` module that calls `provide`, and host support in `backend/src/apps.rs` or a route module. Do not add app-specific branches to `remote.js`, `desk.js`, `dashboard.js`, or the shell component; add a provider hook instead.
 
+# Validation workers
+
+- The primary agent delegates validation work to a `gpt-5.6-luna` worker with `max` reasoning. Keep implementation decisions and review of findings in the primary thread.
+- Give the worker a bounded scope, required checks, and relevant device/test safety constraints. Reuse completed check results instead of duplicating runs in the primary thread.
+- Validation workers report evidence, failures, and limitations; they do not spawn additional workers unless explicitly requested.
+
 # Checks before reporting done
 
 - `npm test` and `npm run lint` always. Run the Playwright specs that cover the changed surface (`npm run test:ui -- tests/browser/<spec>.mjs`); `npm run test:backend` for Rust changes; `python -m unittest discover -s scripts -p 'test_native_bundle.py'` for packaging changes; an Xcode build for Swift changes.
