@@ -20,6 +20,7 @@
   window.webkit = { messageHandlers: {} };
   for (const channel of [
     'shellHosts',
+    'shellInstallBuild',
     'shellStorage',
     'shellKeyboard',
     'weatherDevice',

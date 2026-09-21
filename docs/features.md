@@ -248,7 +248,7 @@ without the app’s previous extra swipe requirement.
 
 The host's `/builds/` page lists published iPhone/iPad builds with release notes, source revision, profile expiry, SHA-256 checksum, a direct IPA download, and an iOS manifest install link. Open it in Safari with Tailscale connected when away from the local network. Installation still requires a device covered by the signing profile and Developer Mode; hosting does not register new devices or renew signing. An available download is not proof that iOS accepted installation.
 
-Already validated IPAs are published with `scripts/publish-native-build.py`; the catalog lives outside Git in `~/.local/share/omarchy-remote/builds` (override with `OMARCHY_BUILDS_DIR` for both publisher and server). Builds are retained by SHA-256, and re-publishing identical bytes updates notes without duplicating the entry. The server exposes only the page, catalog, IPA and manifest files. No signing credentials or validation logs are published.
+Already validated IPAs are published with `scripts/publish-native-build.py`; the catalog lives outside Git in `~/.local/share/omarchy-remote/builds` (override with `OMARCHY_BUILDS_DIR` for both publisher and server). Builds are retained by SHA-256, and re-publishing identical bytes updates notes without duplicating the entry. The server exposes only the page, catalog, publishing skill, IPA/APK packages and manifest files. No signing credentials or validation logs are published.
 
 The dashboard includes a downloadable `omarchy-builds` agent skill. It ships with the repository so other hosts can use the same publishing workflow with their own addresses and signing identities.
 
@@ -267,3 +267,5 @@ Android Back dismisses visible keyboard input first, then launcher/Expo/shortcut
 Android Browser supports whole-document zoom from 25% to 500%, including images and layout, with reset and reload persistence. The Android host uses CSS root zoom rather than text-only scaling; viewport media-query breakpoints remain unchanged.
 
 On Android with a hardware keyboard, selecting a Browser or saved web-app window transfers native keyboard focus to its page. Hiding or deselecting it releases focus; repeated layout animation updates do not steal focus from page controls.
+
+The Builds catalog also accepts signed Android APKs. Native devices see builds for their own platform; the web dashboard offers both APK downloads and iOS manifests. Android Install verifies a content-addressed download, package identity, minimum API, signing identity, and version before opening the system confirmation. Installation-source permission is requested only after choosing Install; return and retry after granting it. The server serves APKs with their Android package MIME type. Publishing uses the existing script and agent skill, preserving older iOS catalog entries.

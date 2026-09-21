@@ -4,6 +4,7 @@
   class BuildsApp {
     constructor(root) {
       this.root = root;
+      this.android = window.__OMARCHY_PLATFORM__ === 'android';
       this.events = new AbortController();
       for (const type of ['pointerdown', 'pointerup', 'touchstart', 'touchmove', 'touchend'])
         root.addEventListener(type, event => event.stopPropagation(), {
@@ -106,11 +107,23 @@
     }
     showBuilds(builds) {
       this.content.replaceChildren();
+      const nativePlatform = this.android ? 'android' : 'ios';
+      if (window.__HYPRLAND_NATIVE__ || window.webkit?.messageHandlers?.shellInstallBuild)
+        builds = builds.filter(build => (build.platform || 'ios') === nativePlatform);
+      if (!builds.length) {
+        this.content.append(
+          node('p', 'builds-status', 'No builds for this device have been published yet.')
+        );
+      }
       for (const [index, build] of builds.entries()) {
         if (!/^[a-f0-9]{64}$/.test(build.id)) continue;
         const card = node('section', 'builds-card');
         card.append(
-          node('p', 'builds-eyebrow', index ? 'Previous build' : 'Latest build'),
+          node(
+            'p',
+            'builds-eyebrow',
+            `${index ? 'Previous build' : 'Latest build'} · ${build.platform === 'android' ? 'Android' : 'iOS'}`
+          ),
           node('h2', '', 'Build ' + build.build),
           node('p', 'builds-notes', build.notes || 'No release notes.'),
           node(
@@ -123,7 +136,13 @@
         details.append(
           node('summary', '', 'Build details'),
           node('p', '', 'Source: ' + build.commit),
-          node('p', '', 'Profile expires: ' + build.expires),
+          node(
+            'p',
+            '',
+            build.platform === 'android'
+              ? 'Minimum Android API: ' + build.min_sdk
+              : 'Profile expires: ' + build.expires
+          ),
           node('code', '', build.sha256)
         );
         card.append(details);
@@ -148,8 +167,10 @@
           'p',
           '',
           window.webkit?.messageHandlers?.shellInstallBuild
-            ? 'Tap Install on a build and confirm the iOS prompt. Keep Tailscale connected. Updating this app may close it while iOS replaces it.'
-            : 'This app version needs Safari to install a build. Copy the dashboard link below. Keep Tailscale connected.'
+            ? this.android
+              ? 'Tap Install, allow updates from this app if Android asks, then confirm the system installer. Keep Tailscale connected. Installing an update may close this app.'
+              : 'Tap Install on a build and confirm the iOS prompt. Keep Tailscale connected. Updating this app may close it while iOS replaces it.'
+            : 'Open the dashboard in your browser to download an APK, or in Safari to install an iOS build. Keep Tailscale connected.'
         )
       );
       if (url) {
@@ -158,7 +179,8 @@
           async () => {
             try {
               await navigator.clipboard.writeText(url);
-              this.status.textContent = 'Dashboard link copied. Open it in Safari to install.';
+              this.status.textContent =
+                'Dashboard link copied. Open it in your browser to install.';
             } catch {
               this.status.textContent = url;
             }
@@ -184,13 +206,21 @@
         const result = await window.webkit.messageHandlers.shellInstallBuild.postMessage({
           build: id,
         });
+        if (this.android && result?.permissionRequired) {
+          this.status.textContent =
+            'Allow updates from this app in Android settings, return here, then tap Install again.';
+          return;
+        }
         if (result?.opened !== true)
-          throw Error('iOS could not open the installer. Use the dashboard link in Safari.');
-        this.status.textContent =
-          'Install request sent to iOS. Confirm the system prompt, then check the Home Screen for progress.';
+          throw Error(
+            `${this.android ? 'Android' : 'iOS'} could not open the installer. Use the dashboard link in your browser.`
+          );
+        this.status.textContent = this.android
+          ? 'Install request sent to Android. Confirm the system prompt; the app may close while updating.'
+          : 'Install request sent to iOS. Confirm the system prompt, then check the Home Screen for progress.';
       } catch (error) {
         this.status.textContent =
-          error.message || 'Could not start installation. Try the dashboard link in Safari.';
+          error.message || 'Could not start installation. Try the dashboard link in your browser.';
       } finally {
         control.disabled = false;
       }

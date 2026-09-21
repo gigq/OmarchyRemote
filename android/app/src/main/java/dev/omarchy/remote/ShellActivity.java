@@ -43,6 +43,7 @@ public final class ShellActivity extends Activity {
   private JSONObject directory;
   private String selected = "";
   private ValueCallback<Uri[]> fileCallback;
+  private DeviceBuilds deviceBuilds;
   private WebViewAssetLoader assets;
   private final Handler handler = new Handler(Looper.getMainLooper());
   private final BroadcastReceiver battery =
@@ -61,6 +62,7 @@ public final class ShellActivity extends Activity {
     super.onCreate(savedInstanceState);
     deviceLocation = new DeviceLocation(this);
     deviceFiles = new DeviceFiles(this);
+    deviceBuilds = new DeviceBuilds(this);
     prefs = getSharedPreferences("shell", MODE_PRIVATE);
     directory = json(prefs.getString("hosts", "{\"hosts\":[]}"));
     selected = directory.optString("selected", "");
@@ -498,6 +500,19 @@ public final class ShellActivity extends Activity {
               });
         }
         reply.send(true);
+        break;
+      case "shellInstallBuild":
+        if (selected.isEmpty() || directory.optBoolean("disconnected"))
+          throw new IllegalStateException("Connect to a host before installing a build");
+        String buildHost = selected;
+        WebView buildShell = shell;
+        deviceBuilds.install(
+            origin(selected),
+            body.optString("build"),
+            () -> foreground && shell == buildShell && selected.equals(buildHost),
+            result -> {
+              if (shell == buildShell && !isDestroyed()) reply.send(result);
+            });
         break;
       case "shellFiles":
         deviceFiles.dispatch(body, reply::send);

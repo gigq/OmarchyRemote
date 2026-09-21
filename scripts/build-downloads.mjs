@@ -14,7 +14,7 @@ export async function serveBuildDownload(req, res, pathname) {
   const relative = pathname.slice('/builds/'.length) || 'index.html';
   // Expose only generated download assets, never the publisher lock or arbitrary files.
   if (
-    !/^(index\.html|catalog\.json|SKILL\.md|[a-f0-9]{64}\/(app\.ipa|manifest\.plist))$/.test(
+    !/^(index\.html|catalog\.json|SKILL\.md|[a-f0-9]{64}\/(app\.ipa|app\.apk|manifest\.plist))$/.test(
       relative
     )
   ) {
@@ -65,13 +65,14 @@ export async function serveBuildDownload(req, res, pathname) {
     '.md': 'text/plain; charset=utf-8',
     '.plist': 'application/xml',
     '.ipa': 'application/octet-stream',
+    '.apk': 'application/vnd.android.package-archive',
   };
   res.writeHead(200, {
     ...headers,
     'Content-Type': types[extension],
     'Content-Length': size,
-    ...(extension === '.ipa'
-      ? { 'Content-Disposition': 'attachment; filename="OmarchyRemote.ipa"' }
+    ...(['.ipa', '.apk'].includes(extension)
+      ? { 'Content-Disposition': `attachment; filename="OmarchyRemote${extension}"` }
       : {}),
     ...(extension === '.html'
       ? {

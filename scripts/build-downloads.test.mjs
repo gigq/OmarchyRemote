@@ -38,3 +38,35 @@ test('fresh hosts show setup and private files cannot escape the download direct
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('APK downloads use Android MIME type, exact bytes and HEAD metadata', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'omarchy-apk-'));
+  const previous = process.env.OMARCHY_BUILDS_DIR;
+  process.env.OMARCHY_BUILDS_DIR = root;
+  const hash = 'b'.repeat(64);
+  const payload = Buffer.from('APK fixture bytes');
+  await mkdir(path.join(root, hash));
+  await writeFile(path.join(root, hash, 'app.apk'), payload);
+  const server = http.createServer((req, res) => {
+    serveBuildDownload(req, res, new URL(req.url, 'http://localhost').pathname).catch(() =>
+      res.destroy()
+    );
+  });
+  try {
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const url = `http://127.0.0.1:${server.address().port}/builds/${hash}/app.apk`;
+    const response = await fetch(url);
+    assert.equal(response.headers.get('content-type'), 'application/vnd.android.package-archive');
+    assert.match(response.headers.get('content-disposition'), /OmarchyRemote.apk/);
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), payload);
+    const head = await fetch(url, { method: 'HEAD' });
+    assert.equal(Number(head.headers.get('content-length')), payload.length);
+    assert.equal(await head.text(), '');
+  } finally {
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+    if (previous === undefined) delete process.env.OMARCHY_BUILDS_DIR;
+    else process.env.OMARCHY_BUILDS_DIR = previous;
+    await rm(root, { recursive: true, force: true });
+  }
+});

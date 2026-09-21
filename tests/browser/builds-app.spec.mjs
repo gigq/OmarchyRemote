@@ -88,3 +88,52 @@ test('native Install sends only the build identity and reports handoff or failur
   await expect(app.getByRole('status')).toContainText('could not open the installer');
   await expect(install).toBeEnabled();
 });
+
+test('Android shows only APK builds and explains installation permission', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__OMARCHY_PLATFORM__ = 'android';
+    window.installRequests = [];
+    window.installReply = { permissionRequired: true };
+    window.webkit = {
+      messageHandlers: {
+        shellInstallBuild: {
+          postMessage: async message => {
+            window.installRequests.push(message);
+            return window.installReply;
+          },
+        },
+      },
+    };
+  });
+  await page.route('**/builds/catalog.json', route =>
+    route.fulfill({
+      json: [
+        { id: 'a'.repeat(64), build: '99', version: '1', notes: 'iOS only' },
+        {
+          id: 'b'.repeat(64),
+          build: '2',
+          version: '1',
+          platform: 'android',
+          min_sdk: 30,
+          notes: 'Android update',
+        },
+      ],
+    })
+  );
+  await page.goto('/');
+  await page.keyboard.press('Meta+k');
+  await page.getByRole('searchbox', { name: 'Search apps, panes and files' }).fill('Builds');
+  await page.getByRole('button', { name: /Builds.*build dashboard/ }).click();
+  const app = page.locator('#remote-builds-app');
+  await expect(app.getByText('iOS only')).toHaveCount(0);
+  await expect(app.getByText('Android update')).toBeVisible();
+  await app.getByRole('button', { name: 'Install build 2' }).click();
+  await expect(app.getByRole('status')).toContainText('Allow updates from this app');
+  await page.evaluate(() => (window.installReply = { opened: true }));
+  await app.getByRole('button', { name: 'Install build 2' }).click();
+  await expect(app.getByRole('status')).toContainText('Install request sent to Android');
+  expect(await page.evaluate(() => window.installRequests)).toEqual([
+    { build: 'b'.repeat(64) },
+    { build: 'b'.repeat(64) },
+  ]);
+});
