@@ -333,3 +333,5 @@ Android weather units follow the device’s regional temperature preference, inc
 `node scripts/android-update-smoke.mjs` builds disposable wrong-package and wrong-signing-key APKs to verify rejection with valid checksums, then checks cancellation and a valid update. It restores the original host and cleans its temporary artifacts.
 
 Set `ANDROID_RELEASE_HOST_URL` to a reachable private HTTPS host when running `python scripts/android-release-smoke.py` to verify live Home before and after the signed update. Userdebug Android images force WebView debugging independently of the release APK; the fixture records that platform limitation.
+
+Android embedded pages keep square top corners beneath visible browser controls and round all corners when the controls are hidden or the page is a saved web app. Native scroll handling follows the toolbar visibility supplied by the shell.

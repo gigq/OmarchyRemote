@@ -755,6 +755,7 @@ public final class ShellActivity extends Activity {
     boolean dark;
     boolean loading;
     boolean hiddenControls;
+    boolean roundedTop;
     boolean requestedFocus;
     long lastHoverAt;
     AlertDialog findDialog;
@@ -776,7 +777,13 @@ public final class ShellActivity extends Activity {
           new ViewOutlineProvider() {
             @Override
             public void getOutline(View view, android.graphics.Outline outline) {
-              outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
+              // Extend the top arc above the viewport while browser chrome is visible.
+              outline.setRoundRect(
+                  0,
+                  roundedTop ? 0 : -(int) Math.ceil(radius),
+                  view.getWidth(),
+                  view.getHeight(),
+                  radius);
             }
           });
       web.setOnTouchListener(
@@ -895,6 +902,8 @@ public final class ShellActivity extends Activity {
       web.setTranslationY((float) rect.optDouble(1) * scale);
       web.setAlpha((float) body.optDouble("opacity", 1));
       radius = (float) body.optDouble("radius") * scale;
+      roundedTop = body.optBoolean("roundedTop");
+      if (body.has("controlsHidden")) hiddenControls = body.optBoolean("controlsHidden");
       web.invalidateOutline();
       updateFocus(body.optBoolean("focused"));
     }

@@ -37,7 +37,7 @@ launch();
 const server = createServer((req, res) => {
   res.setHeader('Content-Type', 'text/html');
   res.end(
-    '<!doctype html><meta name="viewport" content="width=device-width"><title>Android browser QA</title><style>body{height:4000px;background:white;color:black}</style><div id="zoom-box" style="width:40px;height:20px;background:blue"></div><img id="zoom-image" width="20" height="10" alt="QA" src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2220%22 height=%2210%22%3E%3Crect width=%2220%22 height=%2210%22 fill=%22red%22/%3E%3C/svg%3E"><h1>Needle one</h1><p>Needle two</p><input aria-label="QA page input"><a href="/next" target="_blank">New window link</a>'
+    '<!doctype html><meta name="viewport" content="width=device-width"><title>Android browser QA</title><style>body{height:4000px;background:white;color:black}#corner-marker{position:fixed;z-index:10;top:0;left:0;width:32px;height:32px;background:rgb(17,231,113)}</style><div id="corner-marker"></div><div id="zoom-box" style="width:40px;height:20px;background:blue"></div><img id="zoom-image" width="20" height="10" alt="QA" src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2220%22 height=%2210%22%3E%3Crect width=%2220%22 height=%2210%22 fill=%22red%22/%3E%3C/svg%3E"><h1>Needle one</h1><p>Needle two</p><input aria-label="QA page input"><a href="/next" target="_blank">New window link</a>'
   );
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -93,6 +93,12 @@ async function until(check) {
 const settleNative = () => new Promise(resolve => setTimeout(resolve, 1000));
 let shell = await connect(t => t.url.includes('/native/') || t.url.includes('/assets/Web/'));
 const id = 'android-browser-qa';
+const browserLayout = {
+  visible: true,
+  rect: [12, 70, 388, 750],
+  viewport: 412,
+  radius: 16,
+};
 const command = (action, body = {}) =>
   shell(
     `window.webkit.messageHandlers.browserDevice.postMessage(${JSON.stringify({ action, appID: id, ...body })})`
@@ -120,15 +126,59 @@ async function relaunch() {
   shell = await connect(t => t.url.includes('/native/') || t.url.includes('/assets/Web/'));
   await until(() => shell('!!window.HyprlandDesk'));
 }
+function screenSamples(points) {
+  const png = execFileSync(adbPath, ['-s', serial, 'exec-out', 'screencap', '-p']);
+  return JSON.parse(
+    execFileSync(
+      'python',
+      [
+        '-c',
+        `
+import io,json,sys
+from PIL import Image
+im=Image.open(io.BytesIO(sys.stdin.buffer.read())).convert('RGB')
+points=json.loads(sys.argv[1])
+print(json.dumps([im.getpixel((x,y)) for x,y in points]))
+`,
+        JSON.stringify(points),
+      ],
+      { input: png, encoding: 'utf8' }
+    )
+  );
+}
+function cornerSamples() {
+  const scale = 1080 / browserLayout.viewport;
+  const left = Math.round(browserLayout.rect[0] * scale);
+  const top = Math.round(browserLayout.rect[1] * scale);
+  const radius = Math.round(browserLayout.radius * scale);
+  const points = [
+    [left + 6, top + 6],
+    [left + radius + 10, top + 6],
+  ];
+  const [corner, marker] = screenSamples(points);
+  return { corner, marker };
+}
 try {
   await shell(
     `window.androidQAEvents=[];window.androidQAListener=e=>{if(e.detail.appID===${JSON.stringify(id)})androidQAEvents.push(e.detail)};window.addEventListener('host-browser-state',androidQAListener)`
   );
   await command('open', { url: `http://127.0.0.1:${port}/one` });
-  await command('layout', { visible: true, rect: [12, 70, 388, 750], viewport: 412, radius: 16 });
+  await command('layout', { ...browserLayout, roundedTop: false, controlsHidden: false });
   await until(() => shell('androidQAEvents.some(e=>e.title==="Android browser QA" && !e.loading)'));
   let page = await connect(t => t.url.includes(`:${port}/`));
   assert.equal(await page('typeof AndroidShell'), 'undefined');
+  await settleNative();
+  const square = cornerSamples();
+  assert.deepEqual(
+    square.marker,
+    [17, 231, 113],
+    `Corner marker color changed: ${JSON.stringify(square)}`
+  );
+  assert.deepEqual(
+    square.corner,
+    square.marker,
+    `Chrome-visible page corner should be square: ${JSON.stringify(square)}`
+  );
   await page('history.pushState({}, "", "/two")');
   await until(() => shell('androidQAEvents.some(e=>e.url?.endsWith("/two") && e.back)')).catch(
     async error => {
@@ -149,6 +199,14 @@ try {
   await until(() =>
     shell('androidQAEvents.filter(e=>"controlsHidden" in e).at(-1)?.controlsHidden===true')
   );
+  await command('layout', { ...browserLayout, roundedTop: true, controlsHidden: true });
+  await settleNative();
+  const rounded = cornerSamples();
+  assert.notDeepEqual(
+    rounded.corner,
+    rounded.marker,
+    `Chrome-hidden page corner should be rounded: ${JSON.stringify(rounded)}`
+  );
   await page('scrollTo(0,5)');
   await new Promise(resolve => setTimeout(resolve, 300));
   assert.equal(
@@ -158,6 +216,29 @@ try {
   await page('scrollTo(0,0)');
   await until(() =>
     shell('androidQAEvents.filter(e=>"controlsHidden" in e).at(-1)?.controlsHidden===false')
+  );
+  await command('layout', { ...browserLayout, roundedTop: true, controlsHidden: true });
+  const beforeResync = await shell('androidQAEvents.filter(e=>"controlsHidden" in e).length');
+  await page('scrollTo(0,5)');
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.equal(
+    await shell('androidQAEvents.filter(e=>"controlsHidden" in e).length'),
+    beforeResync,
+    'Native controlsHidden layout state should keep the toolbar hidden below the top threshold'
+  );
+  await page('scrollTo(0,0)');
+  await until(() =>
+    shell(
+      `androidQAEvents.filter(e=>"controlsHidden" in e).length>${beforeResync} && androidQAEvents.filter(e=>"controlsHidden" in e).at(-1)?.controlsHidden===false`
+    )
+  );
+  await command('layout', { ...browserLayout, roundedTop: false, controlsHidden: false });
+  await settleNative();
+  const squareAgain = cornerSamples();
+  assert.deepEqual(
+    squareAgain.corner,
+    squareAgain.marker,
+    `Toolbar-visible page corner should become square again: ${JSON.stringify(squareAgain)}`
   );
   // Older WebViews report pre-zoom DOM bounds for root zoom. Check rendered pixels
   // instead: both a blue layout box and a red image must scale together.
@@ -321,6 +402,17 @@ print(json.dumps(result))
       adb('shell', 'uiautomator', 'dump', '/sdcard/browser-qa.xml') &&
       adb('shell', 'cat', '/sdcard/browser-qa.xml').includes('Find in page')
   );
+  await until(() => {
+    adb('shell', 'uiautomator', 'dump', '/sdcard/browser-qa.xml');
+    return adb('shell', 'cat', '/sdcard/browser-qa.xml')
+      .split('<node ')
+      .some(
+        node =>
+          node.includes('class="android.widget.EditText"') &&
+          node.includes('content-desc="Find in page"') &&
+          node.includes('focused="true"')
+      );
+  });
   adb('shell', 'input', 'text', 'needle');
   await until(
     () =>

@@ -309,3 +309,5 @@ Android message input retains native Gboard autocorrection and clipboard Undo. E
 Android update validation covers wrong package and signing-key rejection even when the download checksum is valid, plus cancellation and successful installation.
 
 Signed release validation also connects to a real private HTTPS host and verifies live Home survives an in-place update. The userdebug emulator’s forced WebView debugging is recorded separately from the release APK’s nondebuggable configuration.
+
+Android embedded pages keep square top corners beneath visible browser controls and round all corners when the controls are hidden or the page is a saved web app. Native scroll handling follows the toolbar visibility supplied by the shell.
