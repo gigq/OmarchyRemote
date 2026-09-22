@@ -176,24 +176,3 @@ body {
 .device-battery[data-charging='true'] .battery-bolt {
   display: block;
 }
-
-/* A held bottom-edge gesture owns the transition clock, including the inset pane frame. */
-#touch-shell.expo-tracking [data-workspace],
-#touch-shell.expo-tracking .workspace-label {
-  transition: none !important;
-}
-#touch-shell.expo-tracking [data-expo-frame] {
-  border-radius: var(--expo-card-radius) !important;
-}
-#touch-shell.expo-tracking [data-expo-frame] > .workspace-label {
-  top: calc(var(--expo-frame-top) + 8px) !important;
-  left: calc(var(--expo-frame-left) + 8px) !important;
-  right: calc(var(--expo-frame-right) + 8px) !important;
-}
-#touch-shell.expo-tracking [data-expo-frame]::after {
-  inset: var(--expo-frame-top) var(--expo-frame-right) var(--expo-frame-bottom)
-    var(--expo-frame-left) !important;
-  border-width: var(--expo-frame-width) !important;
-  border-radius: var(--expo-frame-radius) !important;
-  transition: none !important;
-}
