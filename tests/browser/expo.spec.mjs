@@ -26,6 +26,40 @@ const bottomCenter = async p => {
   const r = await p.locator('#touch-shell').boundingBox();
   return { x: r.x + r.width / 2, y: r.y + r.height - 4 };
 };
+const touchDriver = async p => {
+  const cdp = await p.context().newCDPSession(p);
+  const id = 1;
+  const send = (type, point) =>
+    cdp.send('Input.dispatchTouchEvent', {
+      type,
+      touchPoints:
+        type === 'touchEnd' || type === 'touchCancel' ? [] : [{ x: point.x, y: point.y, id }],
+    });
+  return {
+    start: point => send('touchStart', point),
+    move: point => send('touchMove', point),
+    end: () => send('touchEnd'),
+    cancel: () => send('touchCancel'),
+  };
+};
+const traceTouchCapture = async p => {
+  await p.evaluate(() => {
+    window.__expoTouchTrace = [];
+    document.addEventListener(
+      'lostpointercapture',
+      event => {
+        window.__expoTouchTrace.push({
+          type: event.type,
+          pointerId: event.pointerId,
+          pointerType: event.pointerType,
+          target: event.target?.dataset?.workspace || event.target?.id,
+          tracking: document.querySelector('#touch-shell')?.classList.contains('expo-tracking'),
+        });
+      },
+      true
+    );
+  });
+};
 
 test('bottom-center Expo entry follows a held finger and settles at the overview endpoint', async ({
   page: p,
@@ -97,6 +131,57 @@ test('bottom-center Expo entry follows a held finger and settles at the overview
   await p.screenshot({ path: 'artifacts/browser/expo-finger-phone-endpoint.png' });
 });
 
+test('trusted touch Expo entry survives the child capture handoff while scrubbing', async ({
+  page: p,
+}) => {
+  await p.route('**/api/**', r => r.abort());
+  await p.goto('/native/');
+  await p.getByText('settings', { exact: true }).first().click();
+  await p.waitForTimeout(600);
+  const shell = p.locator('#touch-shell');
+  const settings = card(p, 'settings');
+  const start = await frame(settings);
+  const point = await bottomCenter(p);
+  await traceTouchCapture(p);
+  const touch = await touchDriver(p);
+  await touch.start(point);
+  await p.waitForTimeout(180);
+  const held = await frame(settings);
+  expect(held.width).toBeCloseTo(start.width, 0);
+  expect(held.height).toBeCloseTo(start.height, 0);
+
+  await touch.move({ x: point.x, y: point.y - 70 });
+  await expect(shell).toHaveClass(/expo-tracking/);
+  await expect(shell).toHaveClass(/expo-mode/);
+  await p.waitForTimeout(70);
+  const middle = await frame(settings);
+  expect(area(middle)).toBeLessThan(area(start) * 0.95);
+  await p.screenshot({ path: 'artifacts/browser/expo-finger-cdp-phone-intermediate.png' });
+  await p.waitForTimeout(180);
+  const stationary = await frame(settings);
+  expect(stationary.x).toBeCloseTo(middle.x, 0);
+  expect(stationary.y).toBeCloseTo(middle.y, 0);
+  expect(stationary.width).toBeCloseTo(middle.width, 0);
+  expect(stationary.height).toBeCloseTo(middle.height, 0);
+
+  await touch.move({ x: point.x, y: point.y - 190 });
+  await p.waitForTimeout(70);
+  const trace = await p.evaluate(() => window.__expoTouchTrace);
+  const childLost = trace.find(event => event.target === 'settings');
+  expect(childLost).toMatchObject({ pointerType: 'touch', tracking: true });
+  const further = await frame(settings);
+  expect(area(further)).toBeLessThan(area(middle) * 0.85);
+  await touch.move({ x: point.x, y: point.y - 70 });
+  await p.waitForTimeout(70);
+  const retreat = await frame(settings);
+  expect(area(retreat)).toBeGreaterThan(area(further) * 1.1);
+  await touch.move({ x: point.x, y: point.y - 210 });
+  await touch.end();
+  await expect(shell).toHaveClass(/expo-mode/);
+  await expect(shell).not.toHaveClass(/expo-tracking/);
+  expect(area(await frame(settings))).toBeLessThan(area(further));
+});
+
 test('short bottom-center release and pointer cancellation restore the workspace endpoint', async ({
   page: p,
 }) => {
@@ -144,6 +229,39 @@ test('short bottom-center release and pointer cancellation restore the workspace
   await p.mouse.up();
 });
 
+test('trusted touch short release and cancellation restore the workspace endpoint', async ({
+  page: p,
+}) => {
+  await p.route('**/api/**', r => r.abort());
+  await p.goto('/native/');
+  await p.getByText('settings', { exact: true }).first().click();
+  await p.waitForTimeout(600);
+  const shell = p.locator('#touch-shell');
+  const settings = card(p, 'settings');
+  const expected = await frame(settings);
+  const point = await bottomCenter(p);
+  const touch = await touchDriver(p);
+
+  await touch.start(point);
+  await touch.move({ x: point.x, y: point.y - 70 });
+  await expect(shell).toHaveClass(/expo-tracking/);
+  await p.waitForTimeout(140);
+  await touch.end();
+  await expect(shell).not.toHaveClass(/expo-tracking/);
+  await expect(shell).not.toHaveClass(/expo-mode/);
+  expect((await frame(settings)).width).toBeCloseTo(expected.width, 0);
+  expect((await frame(settings)).height).toBeCloseTo(expected.height, 0);
+
+  await touch.start(point);
+  await touch.move({ x: point.x, y: point.y - 100 });
+  await expect(shell).toHaveClass(/expo-tracking/);
+  await touch.cancel();
+  await expect(shell).not.toHaveClass(/expo-tracking/);
+  await expect(shell).not.toHaveClass(/expo-mode/);
+  expect((await frame(settings)).width).toBeCloseTo(expected.width, 0);
+  expect((await frame(settings)).height).toBeCloseTo(expected.height, 0);
+});
+
 test('bottom corners remain outside the Expo entry gesture', async ({ page: p }) => {
   await p.route('**/api/**', r => r.abort());
   await p.goto('/native/');
@@ -161,6 +279,23 @@ test('bottom corners remain outside the Expo entry gesture', async ({ page: p })
     await expect(shell).not.toHaveClass(/expo-mode/);
     await p.mouse.up();
   }
+});
+
+test('trusted touch toss still dismisses an Expo card after capture handoff', async ({
+  page: p,
+}) => {
+  await p.route('**/api/**', r => r.abort());
+  await p.goto('/native/');
+  await p.getByText('settings', { exact: true }).first().click();
+  await expo(p);
+  const settings = card(p, 'settings');
+  const point = await center(settings);
+  const touch = await touchDriver(p);
+  await touch.start(point);
+  await touch.move({ x: point.x, y: point.y - 150 });
+  await touch.end();
+  await expect(settings).toHaveCSS('opacity', '0');
+  await expect(p.locator('#touch-shell')).toHaveClass(/expo-mode/);
 });
 
 test('bottom-center Expo entry scrubs correctly on a tablet desk', async ({ page: p }) => {

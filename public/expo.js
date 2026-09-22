@@ -53,7 +53,15 @@
         ['pointermove', e => this.move(e)],
         ['pointerup', e => this.up(e)],
         ['pointercancel', () => this.cancel()],
-        ['lostpointercapture', () => this.cancel()],
+        [
+          'lostpointercapture',
+          e => {
+            // Touch initially captures the child under the finger. Its capture loss
+            // bubbles here when we take over; only losing our own capture cancels.
+            const gesture = this.swipe || this.drag;
+            if (e.target === this.root && e.pointerId === gesture?.id) this.cancel();
+          },
+        ],
         [
           'click',
           e => {
