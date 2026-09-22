@@ -17,6 +17,178 @@ const center = async el => {
   const r = await el.boundingBox();
   return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
 };
+const frame = async el => {
+  const r = await el.boundingBox();
+  return { x: r.x, y: r.y, width: r.width, height: r.height };
+};
+const area = r => r.width * r.height;
+const bottomCenter = async p => {
+  const r = await p.locator('#touch-shell').boundingBox();
+  return { x: r.x + r.width / 2, y: r.y + r.height - 4 };
+};
+
+test('bottom-center Expo entry follows a held finger and settles at the overview endpoint', async ({
+  page: p,
+}) => {
+  await p.route('**/api/**', r => r.abort());
+  await p.goto('/native/');
+  await p.getByText('settings', { exact: true }).first().click();
+  await p.waitForTimeout(600);
+  const shell = p.locator('#touch-shell');
+  const settings = card(p, 'settings');
+  const start = await frame(settings);
+  const point = await bottomCenter(p);
+  await p.mouse.move(point.x, point.y);
+  await p.mouse.down();
+  await p.waitForTimeout(180);
+  const held = await frame(settings);
+  expect(held.x).toBeCloseTo(start.x, 0);
+  expect(held.y).toBeCloseTo(start.y, 0);
+  expect(held.width).toBeCloseTo(start.width, 0);
+  expect(held.height).toBeCloseTo(start.height, 0);
+
+  await p.mouse.move(point.x, point.y - 70, { steps: 3 });
+  await expect(shell).toHaveClass(/expo-tracking/);
+  await expect(shell).toHaveClass(/expo-mode/);
+  await p.waitForTimeout(70);
+  const middle = await frame(settings);
+  expect(area(middle)).toBeLessThan(area(start) * 0.95);
+  await expect(settings.locator(':scope > .workspace-label')).toHaveCSS('opacity', '0');
+  await p.screenshot({ path: 'artifacts/browser/expo-finger-phone-intermediate.png' });
+  await p.waitForTimeout(180);
+  const stationary = await frame(settings);
+  expect(stationary.x).toBeCloseTo(middle.x, 0);
+  expect(stationary.y).toBeCloseTo(middle.y, 0);
+  expect(stationary.width).toBeCloseTo(middle.width, 0);
+  expect(stationary.height).toBeCloseTo(middle.height, 0);
+
+  await p.mouse.move(point.x, point.y - 190, { steps: 5 });
+  await p.waitForTimeout(70);
+  const further = await frame(settings);
+  expect(area(further)).toBeLessThan(area(middle) * 0.85);
+  const lateFrame = await settings.evaluate(card => {
+    const label = card.querySelector(':scope > .workspace-label');
+    const labelStyle = getComputedStyle(label);
+    const frameStyle = getComputedStyle(card, '::after');
+    return {
+      labelOpacity: Number(labelStyle.opacity),
+      labelTop: parseFloat(labelStyle.top),
+      labelLeft: parseFloat(labelStyle.left),
+      labelRight: parseFloat(labelStyle.right),
+      frameTop: parseFloat(frameStyle.top),
+      frameLeft: parseFloat(frameStyle.left),
+      frameRight: parseFloat(frameStyle.right),
+    };
+  });
+  expect(lateFrame.labelOpacity).toBeGreaterThan(0);
+  expect(lateFrame.labelTop).toBeGreaterThan(lateFrame.frameTop);
+  expect(lateFrame.labelLeft).toBeGreaterThan(lateFrame.frameLeft);
+  expect(lateFrame.labelRight).toBeGreaterThan(lateFrame.frameRight);
+  await p.mouse.move(point.x, point.y - 70, { steps: 5 });
+  await p.waitForTimeout(70);
+  const retreat = await frame(settings);
+  expect(area(retreat)).toBeGreaterThan(area(further) * 1.1);
+  await p.mouse.move(point.x, point.y - 210, { steps: 5 });
+  await p.mouse.up();
+  await expect(shell).toHaveClass(/expo-mode/);
+  await expect(shell).not.toHaveClass(/expo-tracking/);
+  const endpoint = await frame(settings);
+  expect(area(endpoint)).toBeLessThan(area(further));
+  await p.screenshot({ path: 'artifacts/browser/expo-finger-phone-endpoint.png' });
+});
+
+test('short bottom-center release and pointer cancellation restore the workspace endpoint', async ({
+  page: p,
+}) => {
+  await p.route('**/api/**', r => r.abort());
+  await p.goto('/native/');
+  await p.getByText('settings', { exact: true }).first().click();
+  await p.waitForTimeout(600);
+  const shell = p.locator('#touch-shell');
+  const settings = card(p, 'settings');
+  const expected = await frame(settings);
+  const point = await bottomCenter(p);
+
+  await p.mouse.move(point.x, point.y);
+  await p.mouse.down();
+  await p.mouse.move(point.x, point.y - 70, { steps: 3 });
+  await expect(shell).toHaveClass(/expo-tracking/);
+  await p.waitForTimeout(140);
+  await p.mouse.up();
+  await expect(shell).not.toHaveClass(/expo-tracking/);
+  await expect(shell).not.toHaveClass(/expo-mode/);
+  const released = await frame(settings);
+  expect(released.x).toBeCloseTo(expected.x, 0);
+  expect(released.y).toBeCloseTo(expected.y, 0);
+  expect(released.width).toBeCloseTo(expected.width, 0);
+  expect(released.height).toBeCloseTo(expected.height, 0);
+  await p.waitForTimeout(100);
+  const settled = await frame(settings);
+  expect(settled.x).toBeCloseTo(expected.x, 0);
+  expect(settled.y).toBeCloseTo(expected.y, 0);
+  expect(settled.width).toBeCloseTo(expected.width, 0);
+  expect(settled.height).toBeCloseTo(expected.height, 0);
+
+  await p.mouse.move(point.x, point.y);
+  await p.mouse.down();
+  await p.mouse.move(point.x, point.y - 100, { steps: 3 });
+  await expect(shell).toHaveClass(/expo-tracking/);
+  await shell.dispatchEvent('pointercancel');
+  await expect(shell).not.toHaveClass(/expo-tracking/);
+  await expect(shell).not.toHaveClass(/expo-mode/);
+  const cancelled = await frame(settings);
+  expect(cancelled.x).toBeCloseTo(expected.x, 0);
+  expect(cancelled.y).toBeCloseTo(expected.y, 0);
+  expect(cancelled.width).toBeCloseTo(expected.width, 0);
+  expect(cancelled.height).toBeCloseTo(expected.height, 0);
+  await p.mouse.up();
+});
+
+test('bottom corners remain outside the Expo entry gesture', async ({ page: p }) => {
+  await p.route('**/api/**', r => r.abort());
+  await p.goto('/native/');
+  await p.getByText('settings', { exact: true }).first().click();
+  await p.waitForTimeout(600);
+  const shell = p.locator('#touch-shell');
+  const box = await shell.boundingBox();
+  for (const x of [box.x + 12, box.x + box.width - 12]) {
+    const y = box.y + box.height - 4;
+    await p.mouse.move(x, y);
+    await p.mouse.down();
+    await p.mouse.move(x, y - 210, { steps: 5 });
+    await p.waitForTimeout(80);
+    await expect(shell).not.toHaveClass(/expo-tracking/);
+    await expect(shell).not.toHaveClass(/expo-mode/);
+    await p.mouse.up();
+  }
+});
+
+test('bottom-center Expo entry scrubs correctly on a tablet desk', async ({ page: p }) => {
+  await p.setViewportSize({ width: 1194, height: 834 });
+  await p.route('**/api/**', r => r.abort());
+  await p.goto('/native/');
+  await expect(p.locator('html')).toHaveClass(/desk-mode/);
+  const shell = p.locator('#touch-shell');
+  const home = card(p, 'home');
+  const start = await frame(home);
+  const point = await bottomCenter(p);
+  await p.mouse.move(point.x, point.y);
+  await p.mouse.down();
+  await p.mouse.move(point.x, point.y - 110, { steps: 4 });
+  await expect(shell).toHaveClass(/expo-tracking/);
+  await expect(shell).toHaveClass(/expo-mode/);
+  await p.waitForTimeout(70);
+  const middle = await frame(home);
+  expect(area(middle)).toBeLessThan(area(start) * 0.95);
+  await p.screenshot({ path: 'artifacts/browser/expo-finger-tablet-intermediate.png' });
+  await p.mouse.move(point.x, point.y - 220, { steps: 5 });
+  await p.mouse.up();
+  await expect(shell).toHaveClass(/expo-mode/);
+  await expect(shell).not.toHaveClass(/expo-tracking/);
+  const endpoint = await frame(home);
+  expect(area(endpoint)).toBeLessThan(area(middle));
+});
+
 test('Home-only startup, toss dismissal, long press reorder and protected Home', async ({
   page: p,
 }) => {

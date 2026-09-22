@@ -335,3 +335,5 @@ Android weather units follow the device’s regional temperature preference, inc
 Set `ANDROID_RELEASE_HOST_URL` to a reachable private HTTPS host when running `python scripts/android-release-smoke.py` to verify live Home before and after the signed update. Userdebug Android images force WebView debugging independently of the release APK; the fixture records that platform limitation.
 
 Android embedded pages keep square top corners beneath visible browser controls and round all corners when the controls are hidden or the page is a saved web app. Native scroll handling follows the toolbar visibility supplied by the shell.
+
+Dragging upward from the bottom center now moves windows into Expo progressively with your finger. Reverse the drag to move them back; release a short drag to cancel, or drag farther/flick upward to open Expo. Bottom corners retain their keyboard gesture. Reduced-motion settings shorten the release animation.
