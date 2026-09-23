@@ -3,6 +3,7 @@ package dev.omarchy.remote;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.*;
+import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.*;
 import android.net.Uri;
@@ -61,6 +62,7 @@ public final class ShellActivity extends Activity {
   @Override
   public void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
+    applyOrientation(getResources().getConfiguration());
     deviceLocation = new DeviceLocation(this);
     deviceFiles = new DeviceFiles(this);
     deviceBuilds = new DeviceBuilds(this);
@@ -1060,7 +1062,17 @@ public final class ShellActivity extends Activity {
   @Override
   public void onConfigurationChanged(Configuration configuration) {
     super.onConfigurationChanged(configuration);
+    applyOrientation(configuration);
     publishHardwareKeyboard();
+  }
+
+  // Phone-sized screens keep the portrait shell; only screens large enough for the desk layout
+  // (600 dp on the shorter side, the web shell's threshold) rotate, as on iPhone and iPad.
+  private void applyOrientation(Configuration configuration) {
+    setRequestedOrientation(
+        configuration.smallestScreenWidthDp < 600
+            ? ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
   }
 
   @Override
