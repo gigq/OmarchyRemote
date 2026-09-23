@@ -79,6 +79,9 @@ public final class ShellActivity extends Activity {
     root = new FrameLayout(this);
     root.setBackgroundColor(Color.rgb(25, 23, 36));
     setContentView(root);
+    root.addOnLayoutChangeListener(
+        (view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
+            reserveEdgeSwipes(right - left, bottom - top));
     assets =
         new WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
@@ -1064,6 +1067,18 @@ public final class ShellActivity extends Activity {
     super.onConfigurationChanged(configuration);
     applyOrientation(configuration);
     publishHardwareKeyboard();
+  }
+
+  // Side-edge swipes switch workspaces in the shell (public/index.html: the outer 8% of the width).
+  // Android caps an app's claim on each side edge at 200 dp of height, so the middle 200 dp belongs
+  // to the shell and the rest of each edge keeps the system Back gesture.
+  private void reserveEdgeSwipes(int width, int height) {
+    int band = Math.min(height, Math.round(200 * getResources().getDisplayMetrics().density));
+    int edge = (int) Math.ceil(width * 0.08);
+    int top = (height - band) / 2;
+    root.setSystemGestureExclusionRects(
+        List.of(
+            new Rect(0, top, edge, top + band), new Rect(width - edge, top, width, top + band)));
   }
 
   // Phone-sized screens keep the portrait shell; only screens large enough for the desk layout
