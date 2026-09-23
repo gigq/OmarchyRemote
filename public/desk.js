@@ -14,7 +14,8 @@
   // Linux and Windows desktops reserve Super, so the desktop client keeps the Ctrl+Alt+Shift form.
   const MOVE_ALT = NATIVE && (APPLE || window.__OMARCHY_PLATFORM__ !== 'desktop');
   const { mount, node } = window.HyprlandUtil;
-  const isDesk = () => Math.min(window.innerWidth, window.innerHeight) >= MIN_SIDE;
+  const isDesk = () =>
+    !!window.HyprlandSolo?.key || Math.min(window.innerWidth, window.innerHeight) >= MIN_SIDE;
 
   // ---- workspace model: pure functions over the shell state ---------------------------------
   // `open` stays the ordered list of open apps; `tiles` maps each app to its desk index (home is desk 0).
@@ -866,7 +867,8 @@
     }
     actions(allProviders = false, defaults = false) {
       const result = [];
-      for (const b of bindings()) {
+      // A solo app window has no workspaces or windows; only the app's own keys remain.
+      for (const b of window.HyprlandSolo?.key ? [] : bindings()) {
         if ((b.desk && !this.logic.state.desk) || (b.browserOnly && NATIVE)) continue;
         for (const code of KEY_CODES.filter(code => b.code.test(code))) {
           let label = b.label;

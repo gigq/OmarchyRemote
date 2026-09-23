@@ -19,6 +19,7 @@ export class Store {
       directory: clean(data.directory),
       snapshots: data.snapshots && typeof data.snapshots === 'object' ? data.snapshots : {},
       forceDark: data.forceDark === true,
+      bounds: data.bounds && typeof data.bounds === 'object' ? data.bounds : {},
     };
     this.save();
   }
@@ -43,6 +44,15 @@ export class Store {
     this.data.snapshots[scope] = values;
     this.save();
     return true;
+  }
+  /* Window position and size, per app window ('' is the full shell). */
+  bounds(key) {
+    const b = this.data.bounds[key];
+    return b && ['x', 'y', 'width', 'height'].every(k => Number.isFinite(b[k])) ? b : null;
+  }
+  saveBounds(key, bounds) {
+    this.data.bounds[key] = bounds;
+    this.save();
   }
   set forceDark(value) {
     this.data.forceDark = !!value;

@@ -1,0 +1,49 @@
+/* Solo windows (?app=<key>, public/solo.js): one app fills the window with no shell chrome.
+   The app's own card rule is injected with its key. */
+.solo-mode .shell-topbar,
+.solo-mode .expo-swipe-hint,
+.solo-mode .shell-overlay,
+.solo-mode .workspace-label,
+.solo-mode .desk-dividers,
+.solo-mode .desk-window-tabs {
+  display: none !important;
+}
+/* No wallpaper, window frame or pane layer: the host window is the frame. */
+.solo-mode #touch-shell::before,
+.solo-mode [data-workspace]::before,
+.solo-mode [data-workspace]::after {
+  display: none !important;
+}
+.solo-mode #touch-shell {
+  background: var(--theme-background) !important;
+}
+.solo-missing {
+  position: fixed;
+  inset: 40% 24px auto;
+  margin: 0;
+  text-align: center;
+  color: var(--theme-secondary);
+  font:
+    13px 'JetBrains Mono',
+    monospace;
+}
+.solo-settings .solo-app-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.solo-settings .solo-app {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.solo-settings .solo-app-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.solo-settings .keycap[aria-pressed='true'] {
+  color: var(--theme-accent);
+}

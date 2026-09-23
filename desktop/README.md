@@ -2,15 +2,16 @@
 
 An Electron client for Linux, macOS, and Windows. It loads a host’s `/native/` shell and provides the same bridges as the iOS and Android apps, so the web shell needs no desktop-specific code beyond a platform check or two. See the [feature reference](../docs/features.md#desktop-app) for behavior.
 
-| File              | Role                                                                                                  |
-| ----------------- | ----------------------------------------------------------------------------------------------------- |
-| `src/main.js`     | Window, host picker, bridge dispatch, navigation and permission guards, save dialog, menus.           |
-| `src/preload.cjs` | Recreates `window.webkit.messageHandlers` and `navigator.share` for the selected host only.           |
-| `src/pages.js`    | Browser tabs and pinned web apps as `WebContentsView`s placed over their tiles; find, Dark, previews. |
-| `src/keys.js`     | Matches keys typed in a page against the shell’s published action registry.                           |
-| `src/hosts.js`    | Saved-host directory, matching `public/hosts.js`.                                                     |
-| `src/store.js`    | Device state in the user-data folder.                                                                 |
-| `src/find.*`      | The find bar shown over a page.                                                                       |
+| File               | Role                                                                                                  |
+| ------------------ | ----------------------------------------------------------------------------------------------------- |
+| `src/main.js`      | Window, host picker, bridge dispatch, navigation and permission guards, save dialog, menus.           |
+| `src/preload.cjs`  | Recreates `window.webkit.messageHandlers` and `navigator.share` for the selected host only.           |
+| `src/pages.js`     | Browser tabs and pinned web apps as `WebContentsView`s placed over their tiles; find, Dark, previews. |
+| `src/keys.js`      | Matches keys typed in a page against the shell’s published action registry.                           |
+| `src/launchers.js` | Linux application-launcher entries that open one app with `--app=<key>`.                              |
+| `src/hosts.js`     | Saved-host directory, matching `public/hosts.js`.                                                     |
+| `src/store.js`     | Device state in the user-data folder.                                                                 |
+| `src/find.*`       | The find bar shown over a page.                                                                       |
 
 ## Run
 
@@ -19,7 +20,7 @@ npm install
 npm start -- --host=https://machine.tailnet.ts.net
 ```
 
-`npm start` regenerates `ios/Generated/Web` first; development runs read the host picker from there. On the host machine itself, `--host=http://127.0.0.1:4187` uses the development server. `OMARCHY_USER_DATA` points the app at another profile folder, and `OMARCHY_DEVTOOLS=1` opens developer tools for the shell.
+`npm start -- --app=herdr` opens only Herdr, without the shell; running the client again with another `--app` adds a window to the running process. `npm start` regenerates `ios/Generated/Web` first; development runs read the host picker from there. On the host machine itself, `--host=http://127.0.0.1:4187` uses the development server. `OMARCHY_USER_DATA` points the app at another profile folder, and `OMARCHY_DEVTOOLS=1` opens developer tools for the shell.
 
 ## Test
 

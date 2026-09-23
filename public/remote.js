@@ -1405,7 +1405,8 @@
     async closeApp(key) {
       const spec = HyprlandApps.get(key),
         app = this.apps[key] || null;
-      if (!spec) return;
+      // A solo window never closes, or ends the sessions of, another window's app.
+      if (!spec || (window.HyprlandSolo?.key && key !== window.HyprlandSolo.key)) return;
       if (spec.provider?.close) await spec.provider.close(app, this, spec);
       if (app) {
         app.dispose?.();

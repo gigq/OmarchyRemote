@@ -11,7 +11,7 @@ export const HOST = process.env.REMOTE_TEST_URL || 'http://127.0.0.1:4187';
 
 /* Launches the client with a throwaway profile. Linux needs a display: Xvfb, or a Wayland
    session when WAYLAND_DISPLAY is set. */
-export async function launch(profile, env = {}) {
+export async function launch(profile, env = {}, extra = []) {
   const app = await _electron.launch({
     // OMARCHY_DESKTOP_EXECUTABLE tests a packaged build; otherwise run the sources in Electron.
     executablePath:
@@ -19,6 +19,7 @@ export async function launch(profile, env = {}) {
     args: [
       ...(process.env.WAYLAND_DISPLAY ? ['--ozone-platform=wayland'] : []),
       ...(process.env.OMARCHY_DESKTOP_EXECUTABLE ? [] : [desktop]),
+      ...extra,
     ],
     env: { ...process.env, OMARCHY_USER_DATA: profile, ...env },
   });

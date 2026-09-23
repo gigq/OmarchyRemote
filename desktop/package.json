@@ -42,6 +42,10 @@
           "hosts.js",
           "vendor/darkreader/**"
         ]
+      },
+      {
+        "from": "../public/icons/icon-512.png",
+        "to": "icon.png"
       }
     ],
     "linux": {

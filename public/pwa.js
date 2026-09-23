@@ -3,6 +3,8 @@
 function deskMode() {
   return (
     window.__OMARCHY_PLATFORM__ === 'visionos' ||
+    // A solo app window uses the 1:1 desk layout at any size.
+    !!window.HyprlandSolo?.key ||
     Math.min(window.innerWidth, window.innerHeight) >= 600
   );
 }

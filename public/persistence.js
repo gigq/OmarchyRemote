@@ -259,10 +259,12 @@
   function bind(value) {
     logic = value;
     HyprlandThemes.restore?.();
-    logic.set(layout(logic.state));
+    const saved = layout(logic.state);
+    // A solo app window keeps only the shortcut overrides and never saves a layout.
+    if (!window.HyprlandSolo?.bind(logic, saved)) logic.set(saved);
   }
   function update(value) {
-    if (!started || !logic) return;
+    if (!started || !logic || window.HyprlandSolo?.key) return;
     const s = value.state;
     storage.write(s.desk ? 'omarchy-layout-desk' : 'omarchy-layout-phone', {
       open: s.open,

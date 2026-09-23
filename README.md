@@ -177,9 +177,12 @@ Build from Xcode with a paired device, or headlessly with `xcodebuild` and the O
 
 `desktop/` is an Electron client for Linux, macOS, and Windows, including the machine the host itself runs on. Like the phone apps, it keeps a device-local list of saved hosts, loads the chosen host’s `/native/` shell, and gives it the native bridges. Browser tabs and pinned web apps open as embedded pages inside their tiles, with find, Dark, zoom, and previews. Shell shortcuts typed inside an embedded page still reach the shell. Files saves through the system save dialog. Every key goes to the shell, including ⌘W and ⌘T, so the desk bindings work as they do on an iPad.
 
+Any app can also run on its own, as a desktop app without the shell around it: `--app=herdr` opens Herdr in its own window, and launching again with another key adds that app's window to the running client. Settings › app windows opens any app this way and, on Linux, adds or removes an application-launcher entry for it. In a browser, `/native/?app=<key>` shows the same single-app view.
+
 ```sh
 cd desktop && npm install
 npm start -- --host=https://machine.tailnet.ts.net   # or OMARCHY_REMOTE_URL; http://127.0.0.1:4187 on the host itself
+npm start -- --app=codexbar                            # one app in its own window
 npm run dist:linux                                     # AppImage and pacman package in desktop/dist
 ```
 
