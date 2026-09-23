@@ -1,6 +1,7 @@
 //! Read-only CodexBar telemetry shared by the app and its Home widget.
 use anyhow::Result;
 use serde_json::{Value, json};
+use std::ffi::OsString;
 use std::time::Duration;
 use tokio::process::Command;
 
@@ -59,10 +60,18 @@ pub fn provider(provider: &str, raw: Value) -> Value {
     json!({"id":provider,"windows":windows,"details":details,"updated_at":usage["updatedAt"],"error":if usage.is_null() || !entry["error"].is_null() {Some("Usage unavailable")} else {None}})
 }
 
+// CODEXBAR_BIN lets a host substitute a compatible wrapper (same arguments, same
+// JSON); everywhere else the packaged CLI runs.
+fn program() -> OsString {
+    std::env::var_os("CODEXBAR_BIN")
+        .filter(|path| !path.is_empty())
+        .unwrap_or_else(|| OsString::from("/usr/bin/codexbar"))
+}
+
 async fn command(args: &[&str]) -> Result<Value> {
     let output = tokio::time::timeout(
         Duration::from_secs(45),
-        Command::new("/usr/bin/codexbar")
+        Command::new(program())
             .args(args)
             .kill_on_drop(true)
             .output(),

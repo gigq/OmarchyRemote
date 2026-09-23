@@ -43,6 +43,7 @@ Optional settings:
 - `OMARCHY_ORIGINS` is a comma-separated list of full origins a browser may load the shell from; both services read it. Defaults to `http://127.0.0.1:4187,http://localhost:4187`, so the published HTTPS origin must be added here.
 - `OMARCHY_HOST_NAME` is the name shown in the app's status lines and capabilities. Defaults to the kernel hostname.
 - `OMARCHY_HERDR_SOCKET` defaults to `$HOME/.config/herdr/herdr.sock`.
+- `CODEXBAR_BIN` defaults to `/usr/bin/codexbar`. Set it to a wrapper that accepts the same arguments and prints the same JSON to change what the CodexBar app reports, for example combined usage across several accounts.
 - `SHELL` selects the terminal shell. The installed service uses `/bin/bash` with the user's login configuration and starts in their home directory. Agent-specific environment and the proxy secret are removed from child shells.
 
 The optional TUI programs are `btop`, `systemctl-tui`, `lazydocker`, `dua`, and `lnav` (tested with lnav 0.14.1). Lnav starts `journalctl --no-pager -f -n 1000 -o short-iso` using its command capture. Lnav waits for a frontend `ready` message after screen restoration and sizing, so its startup capability queries reach the client. Child PTYs receive host-side cursor-query replies so startup does not depend on a connected browser; frontend DSR replies are suppressed to avoid duplicate input.
