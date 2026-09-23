@@ -481,6 +481,21 @@
   flex: none;
   margin-bottom: 12px;
 }
+.herdr-search-field .herdr-new {
+  flex: none;
+  margin-right: -6px;
+}
+/* The folder chooser covers the whole Herdr tile; Files' window offsets do not apply. */
+#remote-herdr-app > .herdr-folder-picker {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: var(--theme-background);
+}
+/* Herdr's tile ends 38px above the shell's bottom edge; keep the footer above the keyboard. */
+#remote-herdr-app > .herdr-folder-picker:focus-within {
+  bottom: max(0px, calc(var(--keyboard-inset, 0px) - 30px));
+}
 .herdr-list {
   flex: 1;
   overflow-y: auto;

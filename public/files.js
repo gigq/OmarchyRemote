@@ -68,8 +68,10 @@
     trash: '\uf1f8',
   };
   class FilesApp {
-    constructor(root, openTerminal, windowKey = 'files') {
+    /* `pick` turns the browser into a folder chooser: { title, label, choose(path), cancel() }. */
+    constructor(root, openTerminal, windowKey = 'files', { pick } = {}) {
       this.root = root;
+      this.pick = pick;
       this.pathKey = 'omarchy-' + windowKey + '-path';
       this.openTerminal = openTerminal;
       this.path = '';
@@ -79,7 +81,7 @@
       this.entries = [];
       this.selected = new Set();
       this.recents = read('omarchy-files-recents', []);
-      this.mode = read('omarchy-files-mode', 'browse');
+      this.mode = pick ? 'browse' : read('omarchy-files-mode', 'browse');
       this.searchMode = 'names';
       this.query = '';
       this.glob = '';
@@ -89,6 +91,7 @@
         this.path = localStorage.getItem(this.pathKey) || '';
       } catch {}
       root.classList.add('files-app');
+      root.classList.toggle('files-picking', !!pick);
       this.heading = node('div', 'files-heading');
       this.location = node('nav', 'files-path');
       this.location.setAttribute('aria-label', 'Folder path');
@@ -261,6 +264,7 @@
         : path;
     }
     remember(e) {
+      if (this.pick) return;
       this.recents = [e, ...this.recents.filter(x => x.path !== e.path)].slice(0, 8);
       store('omarchy-files-recents', this.recents);
     }
@@ -276,7 +280,7 @@
       this.text = null;
     }
     async browse(path, keepMode = false) {
-      if (!keepMode) {
+      if (!keepMode && !this.pick) {
         this.mode = 'browse';
         store('omarchy-files-mode', this.mode);
       }
@@ -339,7 +343,8 @@
         node(
           'span',
           'files-path-count',
-          `${dirs} ${dirs === 1 ? 'dir' : 'dirs'} · ${files} ${files === 1 ? 'file' : 'files'}`
+          `${dirs} ${dirs === 1 ? 'dir' : 'dirs'}` +
+            (this.pick ? '' : ` · ${files} ${files === 1 ? 'file' : 'files'}`)
         )
       );
       requestAnimationFrame(() => {
@@ -417,6 +422,31 @@
           actions.append(b);
         }
         this.footer.append(actions);
+      } else if (this.pick) {
+        this.heading.append(node('h2', '', this.pick.title));
+        const choose = this.key(
+          this.pick.label,
+          async () => {
+            choose.disabled = true;
+            this.status.textContent = 'Starting…';
+            try {
+              await this.pick.choose(this.path);
+            } catch (e) {
+              if (!this.disposed) this.status.textContent = e.message;
+            }
+            if (!this.disposed) choose.disabled = false;
+          },
+          `${this.pick.label} in ${this.short(this.path)}`,
+          glyph.terminal,
+          null,
+          'accent files-pick'
+        );
+        choose.disabled = !this.homePath;
+        this.footer.append(
+          this.key('cancel', () => this.pick.cancel(), 'Cancel'),
+          this.key('folder', () => this.newFolder(), 'New folder', glyph.plus),
+          choose
+        );
       } else if (this.query && this.mode !== 'fuzzy') {
         for (const [label, key] of [
           ['-i', 'sensitive'],
@@ -485,7 +515,7 @@
           node('span', 'remote-status', 'in: ~'),
           this.button('browse', () => this.setMode('browse'))
         );
-      } else if (this.query) {
+      } else if (this.query && !this.pick) {
         for (const mode of ['names', 'contents', 'everywhere']) {
           const b = this.button(mode, () => {
             this.searchMode = mode;
@@ -506,15 +536,17 @@
         this.drawRecents();
         return;
       }
-      for (const directory of [true, false]) {
+      for (const directory of this.pick ? [true] : [true, false]) {
         const rows = this.entries.filter(e => e.directory === directory);
         if (!rows.length) continue;
         const group = this.group(directory ? 'DIRECTORIES' : 'FILES');
         for (const e of rows) group.append(this.entry(e));
         this.body.append(group);
       }
-      if (!this.entries.length)
-        this.body.append(node('p', 'remote-empty', 'This folder is empty.'));
+      if (!this.body.childNodes.length)
+        this.body.append(
+          node('p', 'remote-empty', this.pick ? 'No folders here.' : 'This folder is empty.')
+        );
     }
     entry(e, subpath = false) {
       const row = this.button('', () => {
@@ -546,7 +578,7 @@
       );
       if (this.selecting) row.setAttribute('aria-pressed', String(this.selected.has(e.path)));
       row.onpointerdown = ev => {
-        if (this.selecting || this.query || this.mode === 'fuzzy') return;
+        if (this.selecting || this.query || this.mode === 'fuzzy' || this.pick) return;
         const x = ev.clientX,
           y = ev.clientY;
         const cancel = () => clearTimeout(row.hold);
@@ -593,10 +625,11 @@
       el.append(document.createTextNode(text.slice(from)));
     }
     open(e, line) {
+      if (this.pick && !e.directory) return;
       this.blur();
       if (e.directory) {
         this.mode = 'browse';
-        store('omarchy-files-mode', this.mode);
+        if (!this.pick) store('omarchy-files-mode', this.mode);
         this.remember(e);
         this.browse(e.path);
       } else this.preview(e, line);
@@ -687,10 +720,10 @@
             })
         );
         if (seq !== this.sequence || this.disposed) return;
-        this.results = data.entries;
-        this.status.textContent = `${data.entries.length} results · ${(data.elapsed_ms / 1000).toFixed(2)}s${data.truncated ? ' · limited; narrow your search' : ''}`;
+        this.results = this.pick ? data.entries.filter(e => e.directory) : data.entries;
+        this.status.textContent = `${this.results.length} results · ${(data.elapsed_ms / 1000).toFixed(2)}s${data.truncated ? ' · limited; narrow your search' : ''}`;
         this.body.replaceChildren();
-        for (const e of data.entries) {
+        for (const e of this.results) {
           this.body.append(this.entry(e, true));
           for (const hit of e.lines || []) {
             const row = this.button('', () => this.open(e, hit.number));
@@ -702,7 +735,7 @@
             this.body.append(row);
           }
         }
-        if (!data.entries.length) this.body.append(node('p', 'remote-empty', 'No matches.'));
+        if (!this.results.length) this.body.append(node('p', 'remote-empty', 'No matches.'));
         if (this.mode === 'fuzzy') this.drawRecents();
       } catch (e) {
         if (seq === this.sequence && !this.disposed) {
@@ -1004,20 +1037,7 @@
     }
     newMenu() {
       this.menuSheet('New item', [
-        [
-          'folder',
-          () =>
-            this.form(
-              'New folder',
-              [['name', 'Folder name', '']],
-              async ({ name }) => {
-                await this.json('files/folders', { path: this.path, name });
-                await this.browse(this.path);
-              },
-              'Create'
-            ),
-          { icon: glyph.folder, tone: 'accent' },
-        ],
+        ['folder', () => this.newFolder(), { icon: glyph.folder, tone: 'accent' }],
         [
           'file',
           () =>
@@ -1036,6 +1056,18 @@
           { icon: glyph.file },
         ],
       ]);
+    }
+    newFolder() {
+      this.form(
+        'New folder',
+        [['name', 'Folder name', '']],
+        async ({ name }) => {
+          const created = await this.json('files/folders', { path: this.path, name });
+          // A chooser steps into the new folder so it can be picked at once.
+          await this.browse(this.pick ? created.path : this.path);
+        },
+        'Create'
+      );
     }
     menu() {
       this.menuSheet(

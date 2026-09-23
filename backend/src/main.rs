@@ -341,6 +341,29 @@ async fn pane_input(
             .map_err(error)?,
     ))
 }
+#[derive(Deserialize)]
+struct NewWorkspace {
+    cwd: String,
+}
+fn workspace_folder(root: &std::path::Path, cwd: &str) -> Result<std::path::PathBuf, ApiError> {
+    let invalid = |e: String| (StatusCode::BAD_REQUEST, Json(json!({"error":e})));
+    let path = files::resolve(root, cwd).map_err(|e| invalid(e.to_string()))?;
+    if !path.is_dir() {
+        return Err(invalid("Choose a folder".into()));
+    }
+    Ok(path)
+}
+/* A new workspace starts one shell in the chosen folder; Herdr names it after the folder. */
+async fn new_workspace(
+    State(app): State<App>,
+    Json(request): Json<NewWorkspace>,
+) -> Result<Json<Value>, ApiError> {
+    let root = files::root().map_err(error)?;
+    let path = workspace_folder(&root, &request.cwd)?;
+    let pane = app.herdr.create_workspace(&path).await.map_err(error)?;
+    let snapshot = app.herdr.snapshot().await.ok();
+    Ok(Json(json!({"pane":pane,"snapshot":snapshot})))
+}
 async fn herdr_upgrade(State(app): State<App>, ws: WebSocketUpgrade) -> Response {
     ws.max_message_size(32768)
         .on_upgrade(move |socket| herdr_socket(socket, app.herdr))
@@ -473,6 +496,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/terminal/{id}/ws", get(terminal_upgrade))
         .route("/api/terminal/{id}/close", post(terminal_close))
         .route("/api/herdr/snapshot", get(snapshot))
+        .route("/api/herdr/workspaces", post(new_workspace))
         .route("/api/herdr/panes/{id}", get(pane))
         .route("/api/herdr/panes/{id}/input", post(pane_input))
         .route("/api/herdr/ws", get(herdr_upgrade))
@@ -512,5 +536,24 @@ mod tests {
             true,
             None
         ));
+    }
+    #[test]
+    fn new_workspaces_start_in_folders_inside_home() {
+        let root = std::env::temp_dir().join(format!("omarchy-workspace-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("project")).unwrap();
+        std::fs::write(root.join("notes.txt"), "").unwrap();
+        let root = std::fs::canonicalize(&root).unwrap();
+        assert_eq!(
+            workspace_folder(&root, "project").unwrap(),
+            root.join("project")
+        );
+        assert_eq!(workspace_folder(&root, "").unwrap(), root);
+        for cwd in ["notes.txt", "missing", "/", ".."] {
+            assert_eq!(
+                workspace_folder(&root, cwd).unwrap_err().0,
+                StatusCode::BAD_REQUEST
+            );
+        }
+        std::fs::remove_dir_all(&root).unwrap();
     }
 }

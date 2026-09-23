@@ -1,6 +1,9 @@
 use anyhow::{Result, bail};
 use serde_json::{Value, json};
-use std::{path::PathBuf, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::UnixStream,
@@ -57,6 +60,12 @@ impl Herdr {
     }
     pub async fn read(&self, pane: &str) -> Result<Value> {
         Ok(self.call("pane.read", json!({"pane_id":pane,"source":"recent","lines":300,"format":"ansi","strip_ansi":false})).await?["read"].clone())
+    }
+    pub async fn create_workspace(&self, cwd: &Path) -> Result<Value> {
+        let created = self
+            .call("workspace.create", json!({"cwd":cwd,"focus":false}))
+            .await?;
+        Ok(created["root_pane"].clone())
     }
     pub async fn input(&self, pane: &str, text: &str, keys: &[String]) -> Result<Value> {
         self.call(

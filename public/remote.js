@@ -739,7 +739,16 @@
       };
       const searchKey = node('span', 'kbd', '/');
       searchKey.setAttribute('aria-hidden', 'true');
-      this.searchField.append(node('span', 'prompt-prefix', '❯'), this.search, searchKey);
+      this.newButton = button('+', () => this.chooseFolder());
+      this.newButton.classList.add('herdr-new', 'keycap', 'small');
+      this.newButton.setAttribute('aria-label', 'New pane in a folder');
+      this.newButton.title = 'New pane in a folder';
+      this.searchField.append(
+        node('span', 'prompt-prefix', '❯'),
+        this.search,
+        searchKey,
+        this.newButton
+      );
       root.append(bar, this.searchField, this.list, this.detail, this.placeholder);
       this.detailBar = node('div', 'herdr-detail-bar');
       this.title = node('div', 'herdr-pane-title');
@@ -1106,6 +1115,35 @@
         this.bridge.logic.set({ kb: false });
       }
     }
+    // Files, in its folder-pick mode, chooses where a new workspace's shell starts.
+    chooseFolder() {
+      if (this.folderPicker) return;
+      this.search.blur();
+      const overlay = node('div', 'herdr-folder-picker');
+      this.root.append(overlay);
+      const close = () => {
+        this.folderPicker.dispose();
+        overlay.remove();
+        this.folderPicker = null;
+      };
+      this.folderPicker = new window.HostFilesApp(overlay, null, 'herdr-folder', {
+        pick: {
+          title: 'New pane',
+          label: 'start here',
+          cancel: close,
+          choose: async cwd => {
+            const created = await api('herdr/workspaces', { cwd });
+            if (this.disposed) return;
+            close();
+            if (created.snapshot) {
+              this.snapshot = created.snapshot;
+              this.renderList();
+            }
+            this.select(created.pane.pane_id);
+          },
+        },
+      });
+    }
     move(delta) {
       const panes = this.snapshot ? orderHerdr(this.snapshot).flatMap(g => g.panes) : [];
       const i = panes.findIndex(p => p.pane_id === this.selected);
@@ -1303,6 +1341,7 @@
     }
     dispose() {
       this.disposed = true;
+      this.folderPicker?.dispose();
       this.uploadAbort.abort();
       clearTimeout(this.retry);
       this.ws?.close();

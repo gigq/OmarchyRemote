@@ -27,6 +27,7 @@ Paths are canonicalized and confined to HOME; external symlinks and the proxy-se
 - `WS /api/terminal/{id}/ws`: receive `screen` (UTF-8 bytes plus dimensions), `output` (bytes), `exit`, and `error`; send `input` (`data` string) or `resize` (`cols`, `rows`). A screen snapshot restores the terminal after reconnection. PTYs remain alive across app closure and live reload, until shell exit or backend restart. Up to eight shells may be open. Reconnection restores the current screen, not previous client scrollback.
 - `GET /api/herdr/snapshot`: local Herdr workspaces, tabs, agents, and panes.
 - `GET /api/herdr/panes/{id}`: most recent 300 lines, with ANSI formatting.
+- `POST /api/herdr/workspaces` with `{ "cwd": "…" }`: starts an unfocused Herdr workspace whose shell opens in that folder, named after it. The folder must exist inside the home directory. Returns the new root `pane` and a fresh `snapshot`.
 - `POST /api/herdr/panes/{id}/input` with `text` and/or `keys`: literal text and Herdr key names. Text and Return can be sent atomically in one Herdr request.
 - `WS /api/herdr/ws`: snapshots (checked every 1.2 seconds), selected pane output (checked every 300 ms), heartbeat/error messages, and acknowledged input. Send `select` with `pane_id`, then `input` with `id`, `pane_id`, `text`, and `keys`. Input is rejected if its pane no longer matches the selected pane. Pending input is never replayed after reconnection; an interrupted acknowledgement is reported as uncertain.
 

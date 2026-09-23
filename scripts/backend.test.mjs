@@ -178,6 +178,32 @@ test('real Herdr snapshot, selected pane output, literal input and Return', asyn
   }
 });
 
+test('a new Herdr workspace starts its shell in a chosen home folder', async () => {
+  const { mkdtemp, rm } = await import('node:fs/promises');
+  const folder = await mkdtemp(process.env.HOME + '/omarchy-herdr-test-');
+  let workspace;
+  try {
+    const created = await api('herdr/workspaces', { cwd: folder });
+    workspace = created.pane.workspace_id;
+    assert.equal(created.pane.cwd, folder);
+    const listed = created.snapshot.workspaces.find(w => w.workspace_id === workspace);
+    assert.equal(listed?.label, folder.split('/').pop());
+    assert.ok(created.snapshot.panes.some(p => p.pane_id === created.pane.pane_id));
+    // Folders outside home, missing folders and files never reach Herdr.
+    for (const cwd of ['/tmp', folder + '/missing', process.env.HOME + '/.bashrc']) {
+      const r = await fetch(base + '/api/herdr/workspaces', {
+        method: 'POST',
+        headers: { 'X-Hyprland-Client': '1', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cwd }),
+      });
+      assert.equal(r.status, 400, cwd);
+    }
+  } finally {
+    if (workspace) await herdr('workspace.close', { workspace_id: workspace });
+    await rm(folder, { recursive: true, force: true });
+  }
+});
+
 test('closing an app-owned shell ends it without affecting another session', async () => {
   const first = await api('terminal/session', {}),
     second = await api('terminal/session', {});

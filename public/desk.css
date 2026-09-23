@@ -108,14 +108,14 @@ html.desk-mode {
 .desk-mode #remote-herdr-app,
 .desk-mode .theme-settings,
 .desk-mode .browser-app,
-.desk-mode .files-app {
+.desk-mode .files-app:not(.files-picking) {
   inset: 7px 8px 7px !important;
 }
 .desk-mode .remote-app.with-keyboard,
 .desk-mode .terminal-window.with-keyboard,
 .desk-mode #remote-herdr-app.with-keyboard,
 .desk-mode .browser-app:focus-within,
-.desk-mode .files-app:focus-within {
+.desk-mode .files-app:not(.files-picking):focus-within {
   bottom: 7px !important;
 }
 .desk-mode .files-folder-form {
@@ -421,7 +421,12 @@ html.desk-mode {
 
 .desk-mode
   #touch-shell
-  :is(#remote-herdr-app, .browser-app:not(.browser-reading), .files-app, .theme-settings) {
+  :is(
+    #remote-herdr-app,
+    .browser-app:not(.browser-reading),
+    .files-app:not(.files-picking),
+    .theme-settings
+  ) {
   top: 8px !important;
 }
 
