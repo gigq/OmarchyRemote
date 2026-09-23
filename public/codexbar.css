@@ -80,6 +80,40 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
   gap: 10px;
+  margin-bottom: 12px;
+}
+.usage-windows .usage-card {
+  margin-bottom: 0;
+}
+.usage-plan {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--theme-secondary);
+}
+.usage-limits {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  column-gap: 24px;
+  margin-top: 6px;
+}
+.usage-limit {
+  padding: 10px 0 8px;
+  border-bottom: 1px solid var(--theme-border);
+  font-size: 12px;
+}
+.usage-limit:last-child {
+  border-bottom: 0;
+}
+.usage-limit .widget-line {
+  gap: 8px;
+}
+.usage-limit strong {
+  font-weight: 500;
+  white-space: nowrap;
+}
+.codexbar-app .usage-limit progress {
+  height: 4px;
+  margin: 6px 0 4px;
 }
 .usage-card,
 .usage-details {

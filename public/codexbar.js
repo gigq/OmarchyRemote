@@ -24,30 +24,65 @@
         ? `${Math.floor(minutes / 60)}h ${minutes % 60}m`
         : `${minutes}m`;
   };
+  // Near resets read as a weekday; windows never span more than a week.
+  const when = value => {
+    const time = Date.parse(value);
+    if (!Number.isFinite(time)) return '';
+    const near = time - Date.now() < 6 * 86400000;
+    return new Date(time).toLocaleString(
+      [],
+      near
+        ? { weekday: 'short', hour: 'numeric', minute: '2-digit' }
+        : { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }
+    );
+  };
+  function resets(w, compact) {
+    if (!Number.isFinite(Date.parse(w.resets_at))) return 'Reset time not reported';
+    const left = until(w.resets_at);
+    const text = left === 'Due now' ? 'Resetting now' : 'Resets in ' + left;
+    return compact ? text : text + ' · ' + when(w.resets_at);
+  }
+  function meter(w, className, compact) {
+    const row = node('section', className);
+    const line = node('div', 'widget-line');
+    line.append(
+      node('span', 'widget-truncate', w.label || 'Usage'),
+      node(
+        'strong',
+        '',
+        Number.isFinite(w.used_percent) ? Math.round(w.used_percent) + '% used' : 'Unavailable'
+      )
+    );
+    const bar = node('progress');
+    bar.max = 100;
+    bar.value = Number.isFinite(w.used_percent) ? w.used_percent : 0;
+    bar.hidden = !Number.isFinite(w.used_percent);
+    bar.setAttribute('aria-label', (w.label || 'Usage') + ' used');
+    row.append(line, bar, node('small', 'widget-muted', resets(w, compact)));
+    return row;
+  }
+  // The session/weekly windows lead; extra windows (model-scoped limits, or
+  // per-account rows from a wrapper) follow as a compact list.
   function windows(root, rows, compact = false) {
+    const all = rows || [];
+    const main = all.filter(w => !w.extra);
+    const lead = main.length ? main : all;
+    const rest = main.length ? all.filter(w => w.extra) : [];
     const list = node('div', compact ? 'codexbar-windows' : 'usage-windows');
-    if (!rows?.length) list.append(node('p', 'widget-muted', 'No usage limits reported'));
-    for (const w of rows || []) {
-      const row = node('section', compact ? 'codexbar-window' : 'usage-card');
-      const line = node('div', 'widget-line');
-      line.append(
-        node('span', 'widget-truncate', w.label || 'Usage'),
-        node(
-          'strong',
-          '',
-          Number.isFinite(w.used_percent) ? Math.round(w.used_percent) + '% used' : 'Unavailable'
-        )
-      );
-      const bar = node('progress');
-      bar.max = 100;
-      bar.value = Number.isFinite(w.used_percent) ? w.used_percent : 0;
-      bar.hidden = !Number.isFinite(w.used_percent);
-      bar.setAttribute('aria-label', (w.label || 'Usage') + ' used');
-      row.append(line, bar, node('small', 'widget-muted', 'Resets ' + until(w.resets_at)));
-      if (!compact && w.resets_at) row.append(node('small', 'widget-muted', date(w.resets_at)));
-      list.append(row);
-    }
+    if (!all.length) list.append(node('p', 'widget-muted', 'No usage limits reported'));
+    for (const w of lead)
+      list.append(meter(w, compact ? 'codexbar-window' : 'usage-card', compact));
     root.append(list);
+    // The widget counts the rest in its footer; the app lists them.
+    if (!rest.length || compact) return rest.length;
+    const group = node('details', 'usage-details usage-extra');
+    group.append(node('summary', '', 'More limits · ' + rest.length));
+    group.open = rest.length <= 3;
+    const grid = node('div', 'usage-limits');
+    for (const w of rest) grid.append(meter(w, 'usage-limit', false));
+    group.append(grid);
+    root.append(group);
+    return rest.length;
   }
   const bank = provider => provider?.details?.usage?.codexResetCredits;
   function widget(root, data, { error } = {}) {
@@ -74,16 +109,20 @@
       root.append(node('p', 'widget-muted', error || 'Loading usage…'));
       return;
     }
-    windows(root, p.windows, true);
+    const more = windows(root, p.windows, true);
     if (bank(p))
       root.append(node('small', 'widget-muted', bank(p).availableCount + ' banked resets'));
-    root.append(
-      node(
-        'small',
-        'widget-muted',
-        p.error ? 'Unavailable · showing last known data' : 'Updated ' + date(p.updated_at)
-      )
-    );
+    const footer = [more && '+' + more + ' more in app'];
+    if (p.error) footer.push('Unavailable · showing last known data');
+    else if (Number.isFinite(Date.parse(p.updated_at)))
+      footer.push(
+        'Updated ' +
+          (Date.now() - Date.parse(p.updated_at) < 43200000
+            ? new Date(p.updated_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+            : date(p.updated_at))
+      );
+    if (footer.some(Boolean))
+      root.append(node('small', 'widget-muted', footer.filter(Boolean).join(' · ')));
   }
   // Expandable telemetry retains secondary fields without turning the main screen into JSON.
   function fields(value, title, depth = 0) {
@@ -341,18 +380,30 @@
         [...this.body.querySelectorAll('details')].map(n => [n.firstChild.textContent, n.open])
       );
       this.body.replaceChildren();
-      if (this.select.value === 'codex') resetNews(this.body, this.data?.reset_news);
+      const news = this.select.value === 'codex';
       if (!p) {
         this.body.append(
           node('p', 'widget-muted', this.error || 'Waiting for the host’s first CodexBar sample…')
         );
+        if (news) resetNews(this.body, this.data?.reset_news);
         return;
       }
       if (p.error)
         this.body.append(
           node('p', 'usage-warning', p.error + ' · last update ' + date(p.updated_at))
         );
+      const plan = p.details?.usage?.loginMethod;
+      if (plan)
+        this.body.append(
+          node(
+            'p',
+            'usage-plan',
+            plan.replace(/^./, c => c.toUpperCase())
+          )
+        );
       windows(this.body, p.windows);
+      // Account usage leads; the public reset forecast follows it.
+      if (news) resetNews(this.body, this.data?.reset_news);
       const resets = bank(p);
       if (resets) {
         const section = node('section', 'usage-card usage-resets');
@@ -428,7 +479,11 @@
         node(
           'p',
           'widget-muted',
-          [details.source, details.version, 'Updated ' + date(p.updated_at)]
+          [
+            details.source,
+            details.version,
+            Number.isFinite(Date.parse(p.updated_at)) && 'Updated ' + date(p.updated_at),
+          ]
             .filter(Boolean)
             .join(' · ')
         )

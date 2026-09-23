@@ -51,7 +51,7 @@ pub fn provider(provider: &str, raw: Value) -> Value {
     }
     if let Some(extra) = usage["extraRateWindows"].as_array() {
         for e in extra.iter().take(100) {
-            windows.push(json!({"label":e["title"],"used_percent":e["window"]["usedPercent"].as_f64().map(|n| n.clamp(0.0,100.0)),"resets_at":e["window"]["resetsAt"],"minutes":e["window"]["windowMinutes"]}));
+            windows.push(json!({"label":e["title"],"used_percent":e["window"]["usedPercent"].as_f64().map(|n| n.clamp(0.0,100.0)),"resets_at":e["window"]["resetsAt"],"minutes":e["window"]["windowMinutes"],"description":e["window"]["resetDescription"],"extra":true}));
         }
     }
     let mut details = telemetry(entry, 0);
@@ -129,7 +129,7 @@ mod tests {
     fn exports_resets_and_costs_without_credentials_or_unknown_fields() {
         let value = provider(
             "codex",
-            json!([{"usage":{"accountEmail":"private@example.com","identity":{"token":"secret"},"primary":null,"secondary":{"usedPercent":63},"codexResetCredits":{"availableCount":2,"credits":[{"id":"secret-redemption-id","status":"available","expires_at":"2030-10-01T00:00:00Z","title":"Weekly reset"}]}},"credits":{"remaining":0,"balanceReadSucceeded":true},"diagnostic":"secret","unknown":"secret"}]),
+            json!([{"usage":{"accountEmail":"private@example.com","identity":{"token":"secret"},"primary":null,"secondary":{"usedPercent":63},"extraRateWindows":[{"id":"fable","title":"Fable only","window":{"usedPercent":4,"resetDescription":"Sep 25 at 5:00PM"}}],"codexResetCredits":{"availableCount":2,"credits":[{"id":"secret-redemption-id","status":"available","expires_at":"2030-10-01T00:00:00Z","title":"Weekly reset"}]}},"credits":{"remaining":0,"balanceReadSucceeded":true},"diagnostic":"secret","unknown":"secret"}]),
         );
         assert_eq!(provider("codex", json!([]))["error"], "Usage unavailable");
         assert_eq!(
@@ -137,6 +137,10 @@ mod tests {
             "Usage unavailable"
         );
         assert_eq!(value["windows"][0]["used_percent"], 63.0);
+        assert_eq!(value["windows"][0]["extra"], Value::Null);
+        assert_eq!(value["windows"][1]["label"], "Fable only");
+        assert_eq!(value["windows"][1]["description"], "Sep 25 at 5:00PM");
+        assert_eq!(value["windows"][1]["extra"], true);
         assert_eq!(
             value["details"]["usage"]["codexResetCredits"]["availableCount"],
             2

@@ -5,7 +5,10 @@ const data = {
     {
       id: 'codex',
       updated_at: '2030-01-01T00:00:00Z',
-      windows: [{ label: 'Weekly', used_percent: 63, resets_at: '2030-01-08T00:00:00Z' }],
+      windows: [
+        { label: 'Weekly', used_percent: 63, resets_at: '2030-01-08T00:00:00Z' },
+        { label: 'Fable only', used_percent: 4, resets_at: '2030-01-08T00:00:00Z', extra: true },
+      ],
       details: {
         source: 'cli',
         version: '0.58.0',
@@ -64,9 +67,14 @@ for (const viewport of [
   }) => {
     await page.setViewportSize(viewport);
     await boot(page);
+    await expect(page.locator('#widget-codexbar')).toContainText('+1 more in app');
+    await expect(page.locator('#widget-codexbar')).not.toContainText('Fable only');
     await page.locator('#widget-codexbar').getByText('63% used', { exact: true }).click();
     const app = page.locator('#remote-codexbar-app');
     await expect(app).toBeVisible();
+    await expect(app.locator('.usage-extra')).toContainText('More limits · 1');
+    await expect(app.locator('.usage-extra')).toContainText('Fable only');
+    await expect(app.locator('.usage-extra .usage-limit')).toBeVisible();
     await expect(app).toContainText('2 reported available');
     await expect(app).toContainText('Expires in');
     await expect(app).toContainText('0 remaining');
@@ -85,6 +93,26 @@ for (const viewport of [
     await expect(app).toContainText('Session');
   });
 }
+
+test('many extra windows collapse below the main limits', async ({ page }) => {
+  const extra = ['a', 'b', 'c', 'd'].map(name => ({
+    label: name + ' · Weekly',
+    used_percent: 10,
+    resets_at: '2030-01-08T00:00:00Z',
+    extra: true,
+  }));
+  const codex = { ...data.providers[0], windows: [data.providers[0].windows[0], ...extra] };
+  await boot(page, { ...data, providers: [codex, data.providers[1]] });
+  await expect(page.locator('#widget-codexbar')).toContainText('+4 more in app');
+  await page.locator('#widget-codexbar').getByText('63% used', { exact: true }).click();
+  const more = page.locator('#remote-codexbar-app .usage-extra');
+  await expect(more).toContainText('More limits · 4');
+  await expect(more.locator('.usage-limit').first()).toBeHidden();
+  await more.getByText('More limits · 4', { exact: true }).click();
+  await expect(more.locator('.usage-limit')).toHaveCount(4);
+  await expect(more.locator('.usage-limit').first()).toBeVisible();
+  await expect(more).toContainText('Resets in');
+});
 
 test('widget controls and long press do not launch app; keyboard activation does', async ({
   page,
