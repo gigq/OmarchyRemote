@@ -249,6 +249,12 @@
         follow: this.follow,
       };
     }
+    /* Hold repaints while the terminal is rebuilt from a snapshot (reset, then an asynchronous
+       write); painting its intermediate states flashes the text on slower renderers. */
+    hold(on) {
+      this.held = on;
+      if (!on) this.schedule(true);
+    }
     restore(anchor, source = anchor.source) {
       this.savedAnchor = { ...anchor, source };
       this.follow = anchor.follow;
@@ -410,6 +416,10 @@
     render() {
       const { term, scroller, content } = this;
       if (!this.host.clientHeight) return;
+      if (this.held) {
+        this.dirty = true;
+        return;
+      }
       // Keep selected DOM nodes and scroll position intact until selection finishes.
       if ((this.finger && !this.moved) || this.selecting()) {
         this.dirty = true;

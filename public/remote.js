@@ -1213,6 +1213,8 @@
       const anchor = this.term.buffer.active.getLine(scroll)?.translateToString(true);
       const pane = this.selected;
       this.rendering = true;
+      // The native view keeps showing the previous snapshot until this one is fully written.
+      this.term.nativeView.hold(true);
       this.term.resize(Math.max(cols, dimensions.cols), Math.max(4, dimensions.rows));
       this.term.reset();
       this.term.write(text.replace(/\r?\n/g, '\r\n'), () => {
@@ -1233,6 +1235,7 @@
             this.term.nativeView.restore({ ...viewAnchor, follow: false }, target);
           }
         }
+        this.term.nativeView.hold(false);
         this.rendering = false;
         this.flushRead();
       });
