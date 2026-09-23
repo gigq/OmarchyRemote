@@ -208,7 +208,8 @@
       render();
       document.querySelector('#host-key-hint').textContent =
         'Saved on this device. ' + (apple ? '⌘ Control ' : 'Meta+Ctrl+') + '1–0 switches hosts.';
-      if (bridge) {
+      // Native apps add hosts in a system dialog; the desktop client keeps the inline form.
+      if (bridge && window.__OMARCHY_PLATFORM__ !== 'desktop') {
         const form = document.querySelector('#host-form');
         form.before(button('Add a host', () => request('prompt')));
         form.after(document.querySelector('#host-error'));

@@ -1,6 +1,6 @@
 # Omarchy Remote
 
-A touch shell for an [Omarchy](https://omarchy.org) desktop, used from an iPhone, an iPad, or any browser window. It opens a real shell on the host, browses the home directory, mirrors desktop browser tabs, follows Herdr agent panes, and runs host TUIs (btop, systemctl-tui, lazydocker, dua, lnav) inside phone-sized windows with Hyprland-style workspaces, Expo, keyboard shortcuts, and the Omarchy theme catalog. On larger screens the same shell tiles windows like Hyprland's dwindle layout and takes ⌘ shortcuts.
+A touch shell for an [Omarchy](https://omarchy.org) desktop, used from an iPhone, an iPad, an Android device, a desktop app, or any browser window. It opens a real shell on the host, browses the home directory, mirrors desktop browser tabs, follows Herdr agent panes, and runs host TUIs (btop, systemctl-tui, lazydocker, dua, lnav) inside phone-sized windows with Hyprland-style workspaces, Expo, keyboard shortcuts, and the Omarchy theme catalog. On larger screens the same shell tiles windows like Hyprland's dwindle layout and takes ⌘ shortcuts.
 
 Everything runs on the host you already own. There is no cloud relay: a Rust backend on loopback serves the apps, a small Node server serves the web shell, and a private HTTPS address (Tailscale Serve works well) puts it on your phone.
 
@@ -13,6 +13,7 @@ Everything runs on the host you already own. There is no cloud relay: a Rust bac
 | `scripts/serve.mjs`            | Development server on `127.0.0.1:4187`: static files, live reload, and the `/api/` proxy to the backend.                                                                                                  |
 | `scripts/build.mjs`            | Builds a standalone PWA (Cloudflare Worker plus static client) in `dist/`.                                                                                                                                |
 | `ios/`                         | Native iPhone/iPad wrapper (UIKit + WKWebView) that loads the live shell and bundles an offline copy.                                                                                                     |
+| `desktop/`                     | Desktop client for Linux, macOS, and Windows (Electron) that loads a host’s shell with the native bridges. See [desktop/README.md](desktop/README.md).                                                    |
 | `browser-extension/`           | Vivaldi/Chromium extension that exposes windows, workspaces, and tabs to the Browser app. Its [README](browser-extension/README.md) covers installation and the pinned extension id.                      |
 | `deploy/`                      | systemd user unit templates and `install.sh`.                                                                                                                                                             |
 | `docs/`                        | [Feature reference](docs/features.md).                                                                                                                                                                    |
@@ -172,6 +173,18 @@ Before building, create `ios/Local.xcconfig` (ignored by git) and set three valu
 
 Build from Xcode with a paired device, or headlessly with `xcodebuild` and the OmarchyRemote scheme. `python -m unittest discover -s scripts -p 'test_native_bundle.py'` checks the packaging; `python scripts/prepare-native.py` writes an inspection copy to the ignored `ios/Generated/Web`.
 
+## Desktop app
+
+`desktop/` is an Electron client for Linux, macOS, and Windows, including the machine the host itself runs on. Like the phone apps, it keeps a device-local list of saved hosts, loads the chosen host’s `/native/` shell, and gives it the native bridges. Browser tabs and pinned web apps open as embedded pages inside their tiles, with find, Dark, zoom, and previews. Shell shortcuts typed inside an embedded page still reach the shell. Files saves through the system save dialog. Every key goes to the shell, including ⌘W and ⌘T, so the desk bindings work as they do on an iPad.
+
+```sh
+cd desktop && npm install
+npm start -- --host=https://machine.tailnet.ts.net   # or OMARCHY_REMOTE_URL; http://127.0.0.1:4187 on the host itself
+npm run dist:linux                                     # AppImage and pacman package in desktop/dist
+```
+
+[desktop/README.md](desktop/README.md) covers packaging for macOS and Windows and the tests.
+
 ## Adding your own app
 
 Apps are self-contained: one `define(...)` line in `public/apps.js`, one module in `public/` that calls `HyprlandApps.provide(key, {create, close})`, and, for terminal programs, one row in the `TUIS` table of `backend/src/apps.rs`. Workspaces, Home pins, the launcher, Expo cards, desk tiles, and keyboard routing come from the catalog automatically. [CONTRIBUTING.md](CONTRIBUTING.md) walks through it, including the tests to extend.
@@ -191,6 +204,7 @@ npm test                         # worker, keyboard, and client unit tests
 npm run test:live                # against the running dev server
 npm run test:backend             # backend integration; creates and removes its own Herdr workspace
 npm run test:ui                  # Playwright, headless Chromium at a phone viewport
+npm run test:desktop             # desktop client in Electron; needs a display (Wayland session or Xvfb)
 npm run build && npm test        # standalone PWA build
 ```
 

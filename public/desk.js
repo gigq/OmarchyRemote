@@ -10,6 +10,9 @@
     /Macintosh|iPad|iPhone/.test(navigator.userAgent);
   const MOD = APPLE ? '⌘' : 'Ctrl+Alt';
   const NATIVE = !!window.webkit?.messageHandlers?.shellKeyboard;
+  // Apple's Shift-Command-3/4 take screenshots, so native apps move windows with Option there.
+  // Linux and Windows desktops reserve Super, so the desktop client keeps the Ctrl+Alt+Shift form.
+  const MOVE_ALT = NATIVE && (APPLE || window.__OMARCHY_PLATFORM__ !== 'desktop');
   const { mount, node } = window.HyprlandUtil;
   const isDesk = () => Math.min(window.innerWidth, window.innerHeight) >= MIN_SIDE;
 
@@ -517,9 +520,9 @@
     },
     {
       group: 'Windows',
-      keys: NATIVE ? '⌥ 1…9 / 0' : '⇧ 1…9 / 0',
-      shift: !NATIVE,
-      alt: NATIVE,
+      keys: MOVE_ALT ? '⌥ 1…9 / 0' : '⇧ 1…9 / 0',
+      shift: !MOVE_ALT,
+      alt: MOVE_ALT,
       code: /^Digit[0-9]$/,
       desk: true,
       label: 'Move window to workspace',

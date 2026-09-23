@@ -107,7 +107,12 @@
     }
     showBuilds(builds) {
       this.content.replaceChildren();
-      const nativePlatform = this.android ? 'android' : 'ios';
+      // Desktop clients have no installable builds on the dashboard yet.
+      const nativePlatform = this.android
+        ? 'android'
+        : window.__OMARCHY_PLATFORM__ === 'desktop'
+          ? 'desktop'
+          : 'ios';
       if (window.__HYPRLAND_NATIVE__ || window.webkit?.messageHandlers?.shellInstallBuild)
         builds = builds.filter(build => (build.platform || 'ios') === nativePlatform);
       if (!builds.length) {

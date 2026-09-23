@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self'"
+    />
+    <title>Find in page</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font:
+          13px 'JetBrains Mono',
+          ui-monospace,
+          monospace;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+      }
+      form {
+        box-sizing: border-box;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 6px 0 10px;
+        border: 1px solid #403d52;
+        border-radius: 10px;
+        background: #191724;
+        color: #e0def4;
+      }
+      input {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+      }
+      output {
+        color: #908caa;
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      button {
+        border: 1px solid #403d52;
+        border-radius: 7px;
+        background: #26233a;
+        color: inherit;
+        font: inherit;
+        padding: 4px 8px;
+        cursor: pointer;
+      }
+    </style>
+    <script src="find.js" defer></script>
+  </head>
+  <body>
+    <form>
+      <input
+        type="search"
+        aria-label="Find in page"
+        placeholder="Find in page"
+        spellcheck="false"
+      />
+      <output aria-live="polite"></output>
+      <button type="button" data-action="previous" aria-label="Previous match">‹</button>
+      <button type="button" data-action="next" aria-label="Next match">›</button>
+      <button type="button" data-action="close">Done</button>
+    </form>
+  </body>
+</html>

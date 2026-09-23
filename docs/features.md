@@ -246,6 +246,16 @@ the launcher; pulling down at either corner does nothing in the shell. Native
 build 35 defers only the bottom edge, letting iOS handle its top-edge gestures
 without the app’s previous extra swipe requirement.
 
+## Desktop app
+
+The desktop client in `desktop/` runs on Linux, macOS, and Windows, including the host machine itself. It is an Electron window that loads the selected host’s `/native/` shell and answers the same bridges as the iPhone and Android apps.
+
+- **Hosts.** A fresh install opens the bundled host picker, which keeps its inline Add form on desktop. `--host=<address>` or `OMARCHY_REMOTE_URL` seeds and selects a host, like the configured URL in the phone apps. Hosts, the device ID, and per-host setting snapshots live in the app’s user-data folder, never on a host. An unreachable host, or one that answers with an HTTP error, returns to the picker with the reason.
+- **Keys.** Linux and Windows builds have no menu bar, so every key reaches the shell, including Ctrl+Alt spellings of the ⌘ bindings. macOS keeps a minimal menu for Quit, Hide, Minimize, and editing keys, which the shortcut editor already reserves. Move window to workspace uses ⌘⌥ on macOS and ⌘⇧ (Ctrl+Alt+Shift) on Linux and Windows, where the desktop owns Super.
+- **Embedded pages.** Browser tabs and pinned web apps open as separate pages placed over their tiles, with rounded corners, in a website profile separate from the shell. Pages get no host bridges. Links that open a new window stay in the page. Shell shortcuts typed in a page are forwarded to the shell; editing keys stay with the page. Ctrl+F opens a find bar with match counts. Dark, zoom, back and forward, reload, and Home previews work as on iPhone. Camera, microphone, location, notification, and clipboard-read requests ask first. Page opacity for unfocused windows is not applied.
+- **Files and widgets.** Saving from Files or Builds opens the system save dialog. The weather widget reads the temperature unit from the system locale; location is unavailable on desktop, so choose a city. Builds lists no installable builds for desktop yet.
+- **Packages.** `npm run dist:linux` in `desktop/` builds an AppImage and a pacman package. The packages include only the host picker and Dark Reader from the web bundle; the shell always comes from the host.
+
 ## Native build downloads
 
 The host's `/builds/` page lists published iPhone/iPad builds with release notes, source revision, profile expiry, SHA-256 checksum, a direct IPA download, and an iOS manifest install link. Open it in Safari with Tailscale connected when away from the local network. Installation still requires a device covered by the signing profile and Developer Mode; hosting does not register new devices or renew signing. An available download is not proof that iOS accepted installation.

@@ -1,0 +1,73 @@
+{
+  "name": "omarchy-remote-desktop",
+  "productName": "Omarchy Remote",
+  "version": "0.1.0",
+  "description": "Desktop client for Omarchy Remote hosts on Linux, macOS and Windows.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "src/main.js",
+  "devDependencies": {
+    "electron": "44.4.5",
+    "electron-builder": "26.15.3"
+  },
+  "homepage": "https://omarchy.org",
+  "author": "Omarchy Remote contributors",
+  "scripts": {
+    "prepare-web": "python3 ../scripts/prepare-native.py",
+    "start": "npm run prepare-web && electron .",
+    "test": "node --test test/*.test.mjs",
+    "test:app": "npm run prepare-web && playwright test",
+    "dist": "npm run prepare-web && electron-builder",
+    "dist:linux": "npm run prepare-web && electron-builder --linux"
+  },
+  "build": {
+    "appId": "dev.omarchy.remote.desktop",
+    "productName": "Omarchy Remote",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../ios/Generated/Web",
+        "to": "web",
+        "filter": [
+          "hosts.html",
+          "hosts.css",
+          "hosts.js",
+          "vendor/darkreader/**"
+        ]
+      }
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "pacman"
+      ],
+      "category": "Network",
+      "executableName": "omarchy-remote",
+      "icon": "../public/icons/icon-512.png",
+      "synopsis": "Omarchy Remote desktop client",
+      "maintainer": "Omarchy Remote contributors"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.developer-tools",
+      "icon": "../public/icons/icon-512.png"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "../public/icons/icon-512.png"
+    },
+    "artifactName": "omarchy-remote-${version}-${arch}.${ext}"
+  }
+}
