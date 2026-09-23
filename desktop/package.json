@@ -72,6 +72,17 @@
       ],
       "icon": "../public/icons/icon-512.png"
     },
-    "artifactName": "omarchy-remote-${version}-${arch}.${ext}"
+    "artifactName": "omarchy-remote-${version}-${arch}.${ext}",
+    "pacman": {
+      "depends": [
+        "gtk3",
+        "nss",
+        "alsa-lib",
+        "libxss",
+        "libnotify",
+        "xdg-utils",
+        "at-spi2-core"
+      ]
+    }
   }
 }

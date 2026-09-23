@@ -41,7 +41,9 @@ const icon = app.isPackaged
 protocol.registerSchemesAsPrivileged([
   { scheme: SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);
-if (process.env.OMARCHY_USER_DATA) app.setPath('userData', process.env.OMARCHY_USER_DATA);
+// Session data (caches) must follow a profile override too, or tests write into the real profile.
+if (process.env.OMARCHY_USER_DATA)
+  for (const name of ['userData', 'sessionData']) app.setPath(name, process.env.OMARCHY_USER_DATA);
 
 const origin = url => {
   try {
