@@ -93,3 +93,30 @@ test('Settings adds and removes Linux launcher entries for an app', async ({ pro
     await app.close();
   }
 });
+
+test('a theme chosen in the Settings window repaints the other app windows', async ({
+  profile,
+}) => {
+  const { app, window: settings } = await launch(profile, { OMARCHY_REMOTE_URL: HOST }, [
+    '--app=settings',
+  ]);
+  try {
+    await expect(settings).toHaveURL(HOST + '/native/?app=settings');
+    await settings.evaluate(() =>
+      window.webkit.messageHandlers.shellWindows.postMessage({ action: 'open', app: 'codexbar' })
+    );
+    await expect.poll(() => app.windows().length).toBe(2);
+    const codexbar = app.windows().find(w => w !== settings);
+    await expect(codexbar).toHaveURL(HOST + '/native/?app=codexbar');
+    const theme = page => page.evaluate(() => document.documentElement.dataset.theme);
+    const current = await theme(codexbar);
+    const next = await settings
+      .locator(`[data-theme-choice]:not([data-theme-choice="${current}"])`)
+      .first()
+      .getAttribute('data-theme-choice');
+    await settings.locator(`[data-theme-choice="${next}"]`).click();
+    await expect.poll(() => theme(codexbar)).toBe(next);
+  } finally {
+    await app.close();
+  }
+});

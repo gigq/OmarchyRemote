@@ -84,3 +84,34 @@ test('the full shell is unchanged without ?app=', async ({ page: p }) => {
   await expect(p.locator('.theme-settings')).toBeVisible();
   await expect(p.locator('.solo-settings')).toHaveCount(0);
 });
+
+test('a theme chosen in a Settings window repaints other app windows', async ({
+  page: p,
+  context,
+}) => {
+  await context.route('**/api/**', r => r.abort());
+  await context.routeWebSocket('**/api/herdr/ws', ws =>
+    ws.send(JSON.stringify({ type: 'snapshot', snapshot }))
+  );
+  await p.setViewportSize({ width: 900, height: 800 });
+  await p.goto('/native/?app=herdr');
+  await expect(p.locator('#remote-herdr-app .herdr-pane')).toHaveCount(1);
+  const settings = await context.newPage();
+  await settings.setViewportSize({ width: 900, height: 800 });
+  await settings.goto('/native/?app=settings');
+  await expect(settings).toHaveTitle('settings');
+  const themes = settings.locator('[data-theme-choice]');
+  await expect(themes.first()).toBeVisible();
+  const current = await p.evaluate(() => document.documentElement.dataset.theme);
+  const next = await settings
+    .locator(`[data-theme-choice]:not([data-theme-choice="${current}"])`)
+    .first()
+    .getAttribute('data-theme-choice');
+  await settings.locator(`[data-theme-choice="${next}"]`).click();
+  // The Herdr window follows without reloading, colors included.
+  await expect.poll(() => p.evaluate(() => document.documentElement.dataset.theme)).toBe(next);
+  const color = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  expect(await p.evaluate(color, '--theme-background')).toBe(
+    await settings.evaluate(color, '--theme-background')
+  );
+});

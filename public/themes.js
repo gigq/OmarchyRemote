@@ -295,4 +295,15 @@
     saved = localStorage.getItem('omarchy-theme');
   } catch {}
   apply(saved, false);
+  // Every window of this device shares the theme: a change in one Settings window (another tab, or
+  // a desktop app window) repaints the others at once.
+  window.addEventListener('storage', e => {
+    if (e.key === 'omarchy-wallpapers') {
+      try {
+        const next = JSON.parse(e.newValue || '{}');
+        if (next && typeof next === 'object' && !Array.isArray(next)) wallpapers = next;
+      } catch {}
+      background(wallpapers[current.id], false);
+    } else if (e.key === 'omarchy-theme' && e.newValue !== current.id) apply(e.newValue, false);
+  });
 })();
