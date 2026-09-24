@@ -29,6 +29,12 @@ for (const file of files) {
     type: types[path.extname(file)] || 'application/octet-stream',
   };
 }
+// Backgrounds are generated per host by scripts/import-themes.py; ship an empty index otherwise.
+if (!assets['/backgrounds/catalog.js']) {
+  const empty = Buffer.from('window.OmarchyBackgroundCatalog = {};\n');
+  hash.update('public/backgrounds/catalog.js').update(empty);
+  assets['/backgrounds/catalog.js'] = { body: empty.toString('base64'), type: types['.js'] };
+}
 const version = hash.digest('hex').slice(0, 16);
 const sw = `const CACHE = 'omarchy-remote-${version}';
 const URLS = ${JSON.stringify(['/', ...Object.keys(assets)])};

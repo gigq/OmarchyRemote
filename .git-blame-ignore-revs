@@ -1,4 +1,6 @@
 # Formatting-only commits. Enable with:
 #   git config blame.ignoreRevsFile .git-blame-ignore-revs
-bf634f665f641eedce59e9a895636356ab444b66 Format the web shell, scripts, and tests with Prettier
-b7912b3d4c45f0b8fd841418bd8b5cf7049d82bc Format the native wrapper with swift-format
+# Format the web shell, scripts, and tests with Prettier
+37290250f50963b0d1e41acaca4f1b1ea0ddd130
+# Format the native wrapper with swift-format
+d23a5eab1b31ad8bee85508badab55e06abeb4d1

@@ -15,8 +15,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm test # Prettier check plus the Node unit tests
+      # The worker tests import the standalone build, so build first.
       - run: npm run build
+      - run: npm test # Prettier check plus the Node unit tests
   backend:
     runs-on: ubuntu-latest
     steps:
