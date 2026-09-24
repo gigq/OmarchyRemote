@@ -233,6 +233,30 @@ test('a new Herdr tab joins an existing workspace in a chosen home folder', asyn
   }
 });
 
+test('a pane change that keeps the text the same length still reaches the phone', async () => {
+  const created = await herdr('workspace.create', {
+    label: 'Omarchy automated test',
+    cwd: '/tmp',
+    focus: false,
+  });
+  const pane = created.root_pane.pane_id;
+  const c = await connect('herdr/ws');
+  try {
+    await new Promise(r => setTimeout(r, 1200));
+    c.send({ type: 'select', pane_id: pane });
+    const type = (id, text, keys = []) =>
+      c.send({ type: 'input', id, pane_id: pane, text, keys, typed: true });
+    type('first', 'echo SAME_A');
+    await c.wait(m => m.type === 'pane' && m.read.text.includes('SAME_A'));
+    // Replacing the last character keeps the text length; the update must still be sent.
+    type('replace', '', ['Backspace', 'B']);
+    await c.wait(m => m.type === 'pane' && m.read.text.includes('SAME_B'));
+  } finally {
+    c.ws.close();
+    await herdr('workspace.close', { workspace_id: created.workspace.workspace_id });
+  }
+});
+
 test('Keys-mode input is typed while messages are pasted', async () => {
   const created = await herdr('workspace.create', {
     label: 'Omarchy automated test',

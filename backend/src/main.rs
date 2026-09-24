@@ -405,7 +405,7 @@ async fn herdr_upgrade(State(app): State<App>, ws: WebSocketUpgrade) -> Response
 /* Keystrokes should echo like a local terminal, but Herdr offers no output stream for a pane, only
 cheap reads (well under a millisecond). The selected pane is read every 16 ms for a second after
 each keystroke and every ~100 ms otherwise, so streaming output is not sent sixty times a second.
-A read is sent only when its revision changes. */
+A read is sent only when its text changes; Herdr's revision does not track content. */
 const PANE_ACTIVE: Duration = Duration::from_millis(16);
 const PANE_QUIET_AFTER: Duration = Duration::from_secs(1);
 const PANE_QUIET_EVERY: u32 = 6;
@@ -417,7 +417,7 @@ async fn herdr_socket(mut socket: WebSocket, herdr: herdr::Herdr) {
     let mut heartbeat = interval(Duration::from_secs(15));
     heartbeat.set_missed_tick_behavior(MissedTickBehavior::Skip);
     let mut selected: Option<String> = None;
-    let mut previous: Option<Value> = None;
+    let mut previous: Option<String> = None;
     let mut previous_snapshot = String::new();
     let mut active = std::time::Instant::now();
     let mut quiet_ticks = 0u32;
@@ -438,10 +438,9 @@ async fn herdr_socket(mut socket: WebSocket, herdr: herdr::Herdr) {
                 }
                 match herdr.read(pane).await {
                     Ok(read)=>{
-                        // Herdr bumps the revision whenever the pane's content changes.
-                        let key=json!([read["revision"],read["text"].as_str().map(str::len)]);
-                        if previous.as_ref()!=Some(&key) {
-                            previous=Some(key);
+                        let text=read["text"].as_str().unwrap_or_default();
+                        if previous.as_deref()!=Some(text) {
+                            previous=Some(text.to_owned());
                             if !send(&mut socket,json!({"type":"pane","pane_id":pane,"read":read})).await{break}
                         }
                     },
