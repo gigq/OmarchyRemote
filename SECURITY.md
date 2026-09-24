@@ -9,9 +9,10 @@ It is a single-user tool. There are no user accounts or logins: **anyone who can
 address can open a shell as you.** Keep that address private.
 
 - **Network exposure.** The backend (`127.0.0.1:4188`) and the web server and API gateway
-  (`127.0.0.1:4187`) listen only on loopback. You choose how to publish the web server; the
-  documented setup is Tailscale Serve on a tailnet-only HTTPS address. Do not expose it on the public
-  internet or an untrusted network without access control of your own in front of it.
+  (`127.0.0.1:4187`) listen only on loopback. The officially supported way to reach them is Tailscale
+  Serve on a tailnet-only HTTPS address, which is what the author uses. Any other method that reaches
+  the server can work, but it is not supported, and securing it is up to you. Do not expose it on the
+  public internet or an untrusted network without access control of your own in front of it.
 - **Gateway secret.** The backend accepts requests only when they carry `OMARCHY_PROXY_TOKEN`, which
   the gateway adds. Other local processes and direct connections cannot use the backend. The token
   lives in `~/.config/omarchy-remote/backend.env` (mode 0600) and is never sent to clients; the Files

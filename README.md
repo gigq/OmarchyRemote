@@ -48,7 +48,7 @@ On an iPad, Omarchy Remote uses the desk layout: tiled windows, workspaces and h
 - An Omarchy (Arch + Hyprland) host, or any Linux host with systemd user services. The shell reads Omarchy theme files if present and falls back to its bundled palettes.
 - Rust (stable) and Cargo, Node 20 or newer, Python 3.
 - Optional host programs, each enabling one app: Herdr (agents, through its local socket), `btop`, `systemctl-tui` (`cargo install systemctl-tui --locked`), `lazydocker`, `dua`, `lnav`, `tailscale` (the Tailscale widget), `gio` (trash), `codexbar` (usage app and widget). Programs are looked up on `PATH`, `~/.cargo/bin`, and `~/.local/bin`; an app whose program is missing reports that instead of failing silently.
-- A private HTTPS address for the phone. Tailscale Serve is what this project was built against; any reverse proxy that terminates TLS and forwards WebSockets works.
+- A private HTTPS address for your devices. **Tailscale is the officially supported way to connect**: it is what the author uses and what the project is built and tested against. Any other method that reaches the server can work, such as a reverse proxy that terminates TLS and forwards WebSockets, but it is not supported.
 
 ## Install on the host
 
@@ -82,13 +82,13 @@ On an iPad, Omarchy Remote uses the desk layout: tiled windows, workspaces and h
    loginctl enable-linger "$USER"
    ```
 
-4. Publish the web server on a private HTTPS address, for example with Tailscale Serve:
+4. Publish the web server on a private HTTPS address with Tailscale Serve, the supported method:
 
    ```sh
    tailscale serve --bg --https=12443 http://127.0.0.1:4187
    ```
 
-   Only the loopback listeners exist otherwise. Whoever can reach that address can open a shell as your user, so keep it inside your tailnet or behind equivalent access control. This is a single-user tool, not a multi-tenant service.
+   Only the loopback listeners exist otherwise. Whoever can reach that address can open a shell as your user, so keep it inside your tailnet. Other ways of publishing it can work, but only Tailscale is supported; if you use something else, putting access control in front of it is up to you. This is a single-user tool, not a multi-tenant service.
 
 5. Open the address on the phone. Safari's Share → Add to Home Screen installs it as a web app; open it online once so the offline shell caches. The native app below wraps the same pages at `/native/`.
 
@@ -385,7 +385,7 @@ Android embedded pages keep square top corners beneath visible browser controls 
 
 ## Security
 
-Anyone who can reach the address you publish can open a shell as you. [SECURITY.md](SECURITY.md) describes the security model and how to report a vulnerability privately.
+Anyone who can reach the address you publish can open a shell as you. Tailscale is the officially supported way to connect, so the address stays inside your tailnet; other methods can work but are not supported. [SECURITY.md](SECURITY.md) describes the security model and how to report a vulnerability privately.
 
 ## License
 
