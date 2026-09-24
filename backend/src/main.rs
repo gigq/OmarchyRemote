@@ -399,39 +399,60 @@ async fn herdr_upgrade(State(app): State<App>, ws: WebSocketUpgrade) -> Response
     ws.max_message_size(32768)
         .on_upgrade(move |socket| herdr_socket(socket, app.herdr))
 }
+/* Keystrokes should echo like a local terminal, but Herdr offers no output stream for a pane, only
+cheap reads (well under a millisecond). The selected pane is read every 16 ms for a second after
+each keystroke and every ~100 ms otherwise, so streaming output is not sent sixty times a second.
+A read is sent only when its revision changes. */
+const PANE_ACTIVE: Duration = Duration::from_millis(16);
+const PANE_QUIET_AFTER: Duration = Duration::from_secs(1);
+const PANE_QUIET_EVERY: u32 = 6;
 async fn herdr_socket(mut socket: WebSocket, herdr: herdr::Herdr) {
-    let mut tick = interval(Duration::from_millis(300));
-    tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    let mut snapshots = interval(Duration::from_millis(1200));
+    snapshots.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    let mut reads = interval(PANE_ACTIVE);
+    reads.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    let mut heartbeat = interval(Duration::from_secs(15));
+    heartbeat.set_missed_tick_behavior(MissedTickBehavior::Skip);
     let mut selected: Option<String> = None;
-    let mut previous = String::new();
+    let mut previous: Option<Value> = None;
     let mut previous_snapshot = String::new();
-    let mut ticks = 0u32;
+    let mut active = std::time::Instant::now();
+    let mut quiet_ticks = 0u32;
     let mut last_pong = std::time::Instant::now();
     loop {
         tokio::select! {
-            _=tick.tick()=>{
-                if ticks.is_multiple_of(4) {
-                    match herdr.snapshot().await {
-                        Ok(snapshot)=>{let encoded=snapshot.to_string();if encoded!=previous_snapshot {previous_snapshot=encoded;if !send(&mut socket,json!({"type":"snapshot","snapshot":snapshot})).await{break}}},
-                        Err(e)=>{previous_snapshot.clear();if !send(&mut socket,json!({"type":"error","message":e.to_string()})).await{break}},
-                    }
+            _=snapshots.tick()=>{
+                match herdr.snapshot().await {
+                    Ok(snapshot)=>{let encoded=snapshot.to_string();if encoded!=previous_snapshot {previous_snapshot=encoded;if !send(&mut socket,json!({"type":"snapshot","snapshot":snapshot})).await{break}}},
+                    Err(e)=>{previous_snapshot.clear();if !send(&mut socket,json!({"type":"error","message":e.to_string()})).await{break}},
                 }
-                ticks=ticks.wrapping_add(1);
-                if let Some(ref pane)=selected {
-                    match herdr.read(pane).await {
-                        Ok(read)=>{let text=read["text"].as_str().unwrap_or("").to_owned();if text!=previous {previous=text;if !send(&mut socket,json!({"type":"pane","pane_id":pane,"read":read})).await{break}}},
-                        Err(e)=>{if !send(&mut socket,json!({"type":"pane_error","pane_id":pane,"message":e.to_string()})).await{break}selected=None;},
-                    }
+            },
+            _=reads.tick()=>{
+                let Some(ref pane)=selected else { continue };
+                if active.elapsed()>PANE_QUIET_AFTER {
+                    quiet_ticks=quiet_ticks.wrapping_add(1);
+                    if !quiet_ticks.is_multiple_of(PANE_QUIET_EVERY){continue}
                 }
-                if ticks.is_multiple_of(50){
-                    if last_pong.elapsed()>Duration::from_secs(45){break}
-                    if !matches!(timeout(Duration::from_secs(5),socket.send(Message::Ping(Vec::new().into()))).await,Ok(Ok(()))){break}
+                match herdr.read(pane).await {
+                    Ok(read)=>{
+                        // Herdr bumps the revision whenever the pane's content changes.
+                        let key=json!([read["revision"],read["text"].as_str().map(str::len)]);
+                        if previous.as_ref()!=Some(&key) {
+                            previous=Some(key);
+                            if !send(&mut socket,json!({"type":"pane","pane_id":pane,"read":read})).await{break}
+                        }
+                    },
+                    Err(e)=>{if !send(&mut socket,json!({"type":"pane_error","pane_id":pane,"message":e.to_string()})).await{break}selected=None;},
                 }
+            },
+            _=heartbeat.tick()=>{
+                if last_pong.elapsed()>Duration::from_secs(45){break}
+                if !matches!(timeout(Duration::from_secs(5),socket.send(Message::Ping(Vec::new().into()))).await,Ok(Ok(()))){break}
             },
             event=socket.next()=>match event {
                 Some(Ok(Message::Text(text)))=>{
                     if let Ok(v)=serde_json::from_str::<Value>(&text) {match v["type"].as_str(){
-                        Some("select")=>{selected=v["pane_id"].as_str().filter(|s|s.len()<128).map(str::to_owned);previous.clear();},
+                        Some("select")=>{selected=v["pane_id"].as_str().filter(|s|s.len()<128).map(str::to_owned);previous=None;active=std::time::Instant::now();},
                         Some("input")=>{
                             // Target travels with each key; switching panes never redirects queued input.
                             let result=async {
@@ -440,6 +461,8 @@ async fn herdr_socket(mut socket: WebSocket, herdr: herdr::Herdr) {
                                 let input:PaneInput=serde_json::from_value(v.clone()).map_err(error)?;validate_input(&input)?;
                                 herdr.input(target,&input.text,&input.keys).await.map_err(error)
                             }.await;
+                            // Typing makes the pane active, so its echo is read within one fast tick.
+                            active=std::time::Instant::now();
                             match result {Ok(_)=>{if !send(&mut socket,json!({"type":"ack","id":v["id"]})).await{break}},Err((_,Json(e)))=>{if !send(&mut socket,json!({"type":"input_error","id":v["id"],"message":e["error"]})).await{break}}}
                         },_=>{},}}
                 },Some(Ok(Message::Pong(_)))=>{last_pong=std::time::Instant::now()},Some(Ok(Message::Ping(bytes)))=>{if socket.send(Message::Pong(bytes)).await.is_err(){break}},_=>break,
