@@ -58,6 +58,7 @@
           this.preview.src = v.preview;
           this.preview.hidden = false;
         }
+        if ('back' in v) this.canGoBack = !!v.back;
         if (v.error) this.error(v.error);
         else if (v.loading === false && !this.failed) this.status.replaceChildren();
       };
@@ -78,6 +79,12 @@
         this.frameID = requestAnimationFrame(this.frame);
       };
       this.frameID = requestAnimationFrame(this.frame);
+    }
+    // Back goes back in the web app's own page history.
+    navigateBack() {
+      if (!this.canGoBack || !this.ready) return false;
+      this.command('back').catch(() => {});
+      return true;
     }
     async command(action, extra = {}) {
       return this.bridge.postMessage({ action, appID: this.app.id, ...extra });

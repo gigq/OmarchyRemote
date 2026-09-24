@@ -601,6 +601,14 @@
         { restoring: true }
       );
     }
+    /* Back: close the options, go back in the page's history, then return to the tab list. */
+    navigateBack() {
+      if (this.optionsOpen) this.showOptions(false);
+      else if (!this.pageOpen) return false;
+      else if (!this.back.disabled) this.command('back');
+      else this.showManager();
+      return true;
+    }
     showManager(focus = false) {
       this.restoreTarget = null;
       this.dismiss();

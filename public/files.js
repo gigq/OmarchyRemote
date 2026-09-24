@@ -996,6 +996,20 @@
         this.editor.readOnly = false;
       }
     }
+    /* Back steps out of the innermost view, then up one folder, stopping at home. */
+    navigateBack() {
+      if (this.dialog) this.closeDialog();
+      else if (this.selecting) {
+        this.selecting = false;
+        this.selected.clear();
+        this.drawChrome();
+        this.drawList();
+      } else if (this.previewing) this.back();
+      else if (this.query) this.clearSearch();
+      else if (this.parent && this.path !== this.homePath) this.browse(this.parent);
+      else return false;
+      return true;
+    }
     back() {
       if (this.editing && this.editor.value !== this.text) {
         this.confirm(

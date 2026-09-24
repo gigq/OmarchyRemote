@@ -569,7 +569,12 @@ class Component extends DCLogic {
       return;
     }
     if (s.ov && dy > T && Math.abs(dx) < T) return this.set({ ov: false });
-    if (p.x < E && dx > T) return this.go(s.ws - 1);
+    // On Android the left edge is Back (as Android's own Back gesture is here), stepping back inside
+    // the app before going Home; elsewhere it is the previous workspace.
+    if (p.x < E && dx > T)
+      return window.__OMARCHY_PLATFORM__ === 'android'
+        ? window.HyprlandDesk?.nativeBack()
+        : this.go(s.ws - 1);
     if (p.x > p.w - E && dx < -T) return this.go(s.ws + 1);
   };
   // Card geometry for every catalog app (public/cards.js paints it); the desk replaces it above 600 px.

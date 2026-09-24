@@ -12,6 +12,9 @@ import android.view.*;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.*;
 import android.widget.*;
+import android.window.BackEvent;
+import android.window.OnBackAnimationCallback;
+import android.window.OnBackInvokedDispatcher;
 import androidx.core.text.util.LocalePreferences;
 import androidx.webkit.*;
 import java.io.*;
@@ -82,6 +85,7 @@ public final class ShellActivity extends Activity {
     root.addOnLayoutChangeListener(
         (view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
             reserveEdgeSwipes(right - left, bottom - top));
+    registerEdgeBack();
     assets =
         new WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
@@ -1069,10 +1073,42 @@ public final class ShellActivity extends Activity {
     publishHardwareKeyboard();
   }
 
-  // Side-edge swipes switch workspaces in the shell (public/index.html: the outer 8% of the width).
-  // Android caps an app's claim on each side edge at 200 dp of height, so the middle 200 dp belongs
-  // to the shell and the rest of each edge keeps the system Back gesture.
+  // Android 14+ reports which edge a Back swipe starts from: the whole right edge moves to the next
+  // workspace, and the left edge (and the Back button) steps back inside the shell. The activity
+  // opts in with enableOnBackInvokedCallback, which Android 13 ignores, so it keeps onBackPressed.
+  private int backEdge = -1;
+
+  private void registerEdgeBack() {
+    if (Build.VERSION.SDK_INT < 34) return;
+    getOnBackInvokedDispatcher()
+        .registerOnBackInvokedCallback(
+            OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+            new OnBackAnimationCallback() {
+              @Override
+              public void onBackStarted(BackEvent event) {
+                backEdge = event.getSwipeEdge();
+              }
+
+              @Override
+              public void onBackCancelled() {
+                backEdge = -1;
+              }
+
+              @Override
+              public void onBackInvoked() {
+                int edge = backEdge;
+                backEdge = -1;
+                if (edge == BackEvent.EDGE_RIGHT) evaluate("window.HyprlandDesk?.nativeNext()", null);
+                else onBackPressed();
+              }
+            });
+  }
+
+  // Before Android 14 both side edges are only Back. The shell's own edge swipes (public/index.html:
+  // the outer 8% of the width; on Android left is Back and right the next workspace) keep the middle
+  // 200 dp of each edge, Android's cap, and the rest keeps system Back.
   private void reserveEdgeSwipes(int width, int height) {
+    if (Build.VERSION.SDK_INT >= 34) return;
     int band = Math.min(height, Math.round(200 * getResources().getDisplayMetrics().density));
     int edge = (int) Math.ceil(width * 0.08);
     int top = (height - band) / 2;

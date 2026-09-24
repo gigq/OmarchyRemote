@@ -1599,6 +1599,13 @@
   window.HyprlandDesk = {
     attach: logic => (activeDesk = new Desk(logic)),
     nativeKey,
+    // Android's right-edge swipe: the next workspace, as the phone shell's own edge swipe does.
+    nativeNext: () => {
+      if (!activeDesk) return false;
+      const { logic } = activeDesk;
+      logic.go(logic.state.ws + 1);
+      return true;
+    },
     nativeBack: ({ keyboard = false } = {}) => {
       if (!activeDesk) return false;
       const { logic } = activeDesk;
@@ -1611,6 +1618,10 @@
       else if (logic.state.launch) logic.set({ launch: false, kb: false, query: '' });
       else if (logic.state.ov) logic.set({ ov: false });
       else if (logic.state.map) logic.set({ map: false });
+      // Apps step back inside themselves (a thread, a folder, page history) through navigateBack().
+      else if (logic.remote?.app(logic.cur())?.navigateBack?.()) return true;
+      // Nothing left to go back to in the app: return to Home; Back on Home leaves the shell.
+      else if (logic.state.ws !== 0) logic.go(0);
       else return false;
       return true;
     },

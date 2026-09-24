@@ -1115,6 +1115,16 @@
         this.bridge.logic.set({ kb: false });
       }
     }
+    // Back: close the folder chooser, then leave the open thread for the pane list.
+    navigateBack() {
+      if (this.folderPicker) {
+        this.closeFolderPicker();
+        return true;
+      }
+      if (this.detail.hidden) return false;
+      this.select(null);
+      return true;
+    }
     // Files, in its folder-pick mode, chooses where a new workspace's shell starts.
     chooseFolder() {
       if (this.folderPicker) return;
@@ -1126,6 +1136,7 @@
         overlay.remove();
         this.folderPicker = null;
       };
+      this.closeFolderPicker = close;
       this.folderPicker = new window.HostFilesApp(overlay, null, 'herdr-folder', {
         pick: {
           title: 'New pane',
