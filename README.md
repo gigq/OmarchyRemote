@@ -4,6 +4,16 @@ A touch shell for an [Omarchy](https://omarchy.org) desktop, used from an iPhone
 
 Everything runs on the host you already own. There is no cloud relay: a Rust backend on loopback serves the apps, a small Node server serves the web shell, and a private HTTPS address (Tailscale Serve works well) puts it on your phone.
 
+## Screenshots
+
+On an iPad, Omarchy Remote uses the desk layout: tiled windows, workspaces and hardware-keyboard shortcuts, like Hyprland.
+
+![Home on iPad: the clock, app grid, and live widgets for weather, btop, CodexBar, Herdr and Tailscale](docs/screenshots/ipad-home.webp)
+
+![Herdr following an agent thread, tiled beside a terminal](docs/screenshots/ipad-herdr-terminal.webp)
+
+![Settings with the Omarchy themes and each theme's wallpapers](docs/screenshots/ipad-settings.webp)
+
 ## Layout
 
 | Path                           | What it is                                                                                                                                                                                                      |
