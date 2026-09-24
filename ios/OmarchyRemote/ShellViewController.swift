@@ -76,14 +76,33 @@ private final class ShellInstallBuildBridge: NSObject, WKScriptMessageHandlerWit
         return install.url
     }
 
+    /// The host's build dashboard, which the in-app shell would otherwise load in place of itself.
+    static func dashboardURL(host: URL?) -> URL? {
+        guard let host, host.scheme == "https", host.host != nil, host.user == nil, host.password == nil,
+            var dashboard = URLComponents(url: host, resolvingAgainstBaseURL: false)
+        else { return nil }
+        dashboard.path = "/builds/"
+        dashboard.query = nil
+        dashboard.fragment = nil
+        return dashboard.url
+    }
+
     func userContentController(
         _ controller: WKUserContentController, didReceive message: WKScriptMessage,
         replyHandler: @escaping @MainActor @Sendable (Any?, String?) -> Void
     ) {
         guard message.frameInfo.isMainFrame,
             ShellSource.trusts(message.frameInfo.securityOrigin),
-            let body = message.body as? [String: Any], body.count == 1,
-            let build = body["build"] as? String,
+            let body = message.body as? [String: Any], body.count == 1
+        else {
+            replyHandler(nil, "Invalid build or untrusted host")
+            return
+        }
+        if body["dashboard"] as? Bool == true {
+            openDashboard(replyHandler)
+            return
+        }
+        guard let build = body["build"] as? String,
             let url = Self.installURL(build: build, host: ShellSource.liveURL)
         else {
             replyHandler(nil, "Invalid build or untrusted host")
@@ -94,6 +113,30 @@ private final class ShellInstallBuildBridge: NSObject, WKScriptMessageHandlerWit
                 replyHandler(["opened": true], nil)
             } else {
                 replyHandler(nil, "This device could not open the system installer")
+            }
+        }
+    }
+
+    /// Opens the dashboard in Safari, which alone installs itms-services builds, even when another
+    /// browser is the default; falls back to the default browser if the Safari scheme is refused.
+    private func openDashboard(_ replyHandler: @escaping @MainActor @Sendable (Any?, String?) -> Void) {
+        guard let url = Self.dashboardURL(host: ShellSource.liveURL),
+            let safari = URL(string: "x-safari-" + url.absoluteString)
+        else {
+            replyHandler(nil, "Connect to an HTTPS host to open its dashboard")
+            return
+        }
+        UIApplication.shared.open(safari, options: [:]) { opened in
+            if opened {
+                replyHandler(["opened": true], nil)
+                return
+            }
+            UIApplication.shared.open(url, options: [:]) { opened in
+                if opened {
+                    replyHandler(["opened": true], nil)
+                } else {
+                    replyHandler(nil, "This device could not open Safari")
+                }
             }
         }
     }

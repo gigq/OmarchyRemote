@@ -87,6 +87,24 @@ test('native Install sends only the build identity and reports handoff or failur
   await install.click();
   await expect(app.getByRole('status')).toContainText('could not open the installer');
   await expect(install).toBeEnabled();
+  // The dashboard opens in Safari through the same bridge; no copy-and-paste step.
+  await page.evaluate(() => (window.acceptInstall = true));
+  await expect(app.getByRole('button', { name: 'Copy dashboard link' })).toHaveCount(0);
+  await app.getByRole('button', { name: 'Open in Safari' }).click();
+  expect(await page.evaluate(() => window.installRequests.at(-1))).toEqual({ dashboard: true });
+  await expect(app.getByRole('status')).toHaveText(
+    'Opened the dashboard in Safari. Tap Install there.'
+  );
+  // An app from before this bridge rejects the request; the link is copied instead.
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.evaluate(() => {
+    window.webkit.messageHandlers.shellInstallBuild.postMessage = async () => {
+      throw Error('Invalid build or untrusted host');
+    };
+  });
+  await app.getByRole('button', { name: 'Open in Safari' }).click();
+  await expect(app.getByRole('status')).toContainText('paste it into Safari');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/\/builds\/$/);
 });
 
 test('Android shows only APK builds and explains installation permission', async ({ page }) => {

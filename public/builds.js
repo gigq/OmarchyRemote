@@ -179,20 +179,39 @@
         )
       );
       if (url) {
-        const copy = button(
-          'Copy dashboard link',
-          async () => {
-            try {
-              await navigator.clipboard.writeText(url);
-              this.status.textContent =
-                'Dashboard link copied. Open it in your browser to install.';
-            } catch {
-              this.status.textContent = url;
-            }
-          },
-          'builds-action'
-        );
-        actions.append(copy);
+        const copyLink = async message => {
+          try {
+            await navigator.clipboard.writeText(url);
+            this.status.textContent = message;
+          } catch {
+            this.status.textContent = url;
+          }
+        };
+        const bridge = window.webkit?.messageHandlers?.shellInstallBuild;
+        // The iPhone app hands the dashboard to Safari itself; older apps only accept builds.
+        const dashboard =
+          bridge && !this.android
+            ? button(
+                'Open in Safari',
+                async () => {
+                  try {
+                    const result = await bridge.postMessage({ dashboard: true });
+                    if (result?.opened !== true) throw Error();
+                    this.status.textContent = 'Opened the dashboard in Safari. Tap Install there.';
+                  } catch {
+                    await copyLink(
+                      'This app version cannot open Safari directly. The dashboard link is copied: paste it into Safari.'
+                    );
+                  }
+                },
+                'builds-action'
+              )
+            : button(
+                'Copy dashboard link',
+                () => copyLink('Dashboard link copied. Open it in your browser to install.'),
+                'builds-action'
+              );
+        actions.append(dashboard);
         if (!window.__HYPRLAND_NATIVE__) {
           const link = node('a', 'builds-action', 'Open dashboard');
           link.href = url;
