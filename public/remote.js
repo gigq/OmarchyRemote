@@ -846,7 +846,9 @@
       this.nativeInput = bridge.createInput(
         root,
         true,
-        (text, enter) => this.input({ text, keys: enter ? ['Enter'] : [] }),
+        // Message mode sends a composed message, which Herdr pastes; Keys mode types each key.
+        (text, enter) =>
+          this.input({ text, keys: enter ? ['Enter'] : [], typed: !this.nativeInput.message }),
         { dismissOnSend: true, compactControls: true, draftStore: 'omarchy-herdr-drafts-v1' }
       );
       this.nativeInput.select(this.selected);
@@ -1356,8 +1358,9 @@
         }
       }
     }
+    // Special keys (Esc, arrows, Return in Keys mode, the Ctrl tool) are typed, never pasted.
     key(input) {
-      return this.input(input);
+      return this.input({ ...input, typed: true });
     }
     setStatus(text) {
       this.status.hidden = /^\d+ panes$/.test(text);
@@ -1386,6 +1389,7 @@
         pane_id: this.selected,
         text: input.text,
         keys: input.keys,
+        ...(input.typed ? { typed: true } : {}),
       });
     }
     dispose() {

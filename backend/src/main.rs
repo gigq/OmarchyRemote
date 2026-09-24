@@ -317,6 +317,9 @@ struct PaneInput {
     text: String,
     #[serde(default)]
     keys: Vec<String>,
+    /// Keys mode: deliver as typing rather than as a paste.
+    #[serde(default)]
+    typed: bool,
 }
 fn validate_input(input: &PaneInput) -> Result<(), ApiError> {
     if input.text.len() > 16384 || input.keys.len() > 32 || input.keys.iter().any(|k| k.len() > 64)
@@ -336,7 +339,7 @@ async fn pane_input(
     validate_input(&input)?;
     Ok(Json(
         app.herdr
-            .input(&id, &input.text, &input.keys)
+            .input(&id, &input.text, &input.keys, input.typed)
             .await
             .map_err(error)?,
     ))
@@ -459,7 +462,7 @@ async fn herdr_socket(mut socket: WebSocket, herdr: herdr::Herdr) {
                                 let target=v["pane_id"].as_str().ok_or_else(||error("Missing pane"))?;
                                 if selected.as_deref()!=Some(target){return Err(error("Pane changed; input was not sent"))}
                                 let input:PaneInput=serde_json::from_value(v.clone()).map_err(error)?;validate_input(&input)?;
-                                herdr.input(target,&input.text,&input.keys).await.map_err(error)
+                                herdr.input(target,&input.text,&input.keys,input.typed).await.map_err(error)
                             }.await;
                             // Typing makes the pane active, so its echo is read within one fast tick.
                             active=std::time::Instant::now();

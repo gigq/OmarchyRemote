@@ -233,6 +233,37 @@ test('a new Herdr tab joins an existing workspace in a chosen home folder', asyn
   }
 });
 
+test('Keys-mode input is typed while messages are pasted', async () => {
+  const created = await herdr('workspace.create', {
+    label: 'Omarchy automated test',
+    cwd: '/tmp',
+    focus: false,
+  });
+  const workspace = created.workspace.workspace_id;
+  const pane = created.root_pane.pane_id;
+  const input = body => api(`herdr/panes/${encodeURIComponent(pane)}/input`, body);
+  const screen = async () => (await api(`herdr/panes/${encodeURIComponent(pane)}`)).text;
+  try {
+    await new Promise(r => setTimeout(r, 1200));
+    // A program that asks for bracketed paste sees pastes wrapped in ESC[200~ … ESC[201~.
+    await input({ text: "printf '\\e[?2004h'; cat -v", keys: ['Enter'], typed: true });
+    await new Promise(r => setTimeout(r, 600));
+    await input({ text: 'typed', typed: true });
+    await input({ text: '', keys: ['Enter'], typed: true });
+    await input({ text: 'pasted', keys: ['Enter'] });
+    let text = '';
+    for (let i = 0; i < 20 && !/pasted/.test(text); i++) {
+      await new Promise(r => setTimeout(r, 150));
+      text = await screen();
+    }
+    const lines = text.split('\n').map(l => l.replace(/\x1b\[[0-9;]*m/g, '').trim());
+    assert.ok(lines.includes('typed'), lines.join('\n'));
+    assert.ok(lines.includes('^[[200~pasted^[[201~'), lines.join('\n'));
+  } finally {
+    await herdr('workspace.close', { workspace_id: workspace });
+  }
+});
+
 test('closing an app-owned shell ends it without affecting another session', async () => {
   const first = await api('terminal/session', {}),
     second = await api('terminal/session', {});

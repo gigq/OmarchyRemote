@@ -76,11 +76,35 @@ impl Herdr {
             .await?;
         Ok(created["root_pane"].clone())
     }
-    pub async fn input(&self, pane: &str, text: &str, keys: &[String]) -> Result<Value> {
-        self.call(
-            "pane.send_input",
-            json!({"pane_id":pane,"text":text,"keys":keys}),
-        )
-        .await
+    /* send_input delivers its text as a paste (bracketed when the program asks for it), which suits
+    composed messages. Keystrokes must arrive as typing, or editors such as Vim insert them
+    literally instead of treating them as commands; send_text and send_keys type them. */
+    pub async fn input(
+        &self,
+        pane: &str,
+        text: &str,
+        keys: &[String],
+        typed: bool,
+    ) -> Result<Value> {
+        if !typed {
+            return self
+                .call(
+                    "pane.send_input",
+                    json!({"pane_id":pane,"text":text,"keys":keys}),
+                )
+                .await;
+        }
+        let mut result = json!({"type":"ok"});
+        if !text.is_empty() {
+            result = self
+                .call("pane.send_text", json!({"pane_id":pane,"text":text}))
+                .await?;
+        }
+        if !keys.is_empty() {
+            result = self
+                .call("pane.send_keys", json!({"pane_id":pane,"keys":keys}))
+                .await?;
+        }
+        Ok(result)
     }
 }
