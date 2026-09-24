@@ -64,7 +64,7 @@ test('workspace limit preserves existing navigation and permits opening after cl
 
 test('bottom corners do not request a shell keyboard for a non-input app', () => {
   const c = terminal();
-  c.openApp('browser');
+  c.openApp('files');
   for (const x of [20, 380]) {
     c.ptr = { x, y: 870, cx: x, cy: 870, w: 402, h: 874 };
     c.up({ clientX: x, clientY: 700 });

@@ -4,6 +4,8 @@ import { test, expect } from './fixtures.mjs';
 test.use({ viewport: { width: 1194, height: 834 }, isMobile: false, hasTouch: false });
 test.beforeEach(async ({ page: p }) => {
   await p.goto('/util.js');
+  // The window list below includes the Browser app, which is off by default while it is reworked.
+  await p.evaluate(() => localStorage.setItem('omarchy-experimental-browser', '1'));
   await p.setContent(
     '<div id="phone-viewport" style="width:1194px;height:834px"><div id="touch-shell"><textarea aria-label="Draft"></textarea></div></div>'
   );

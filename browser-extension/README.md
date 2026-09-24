@@ -1,5 +1,7 @@
 # Omarchy Remote Browser · Vivaldi adapter
 
+> **The Browser app is disabled for now.** It needs a lot of work before it is ready, so it no longer appears on Home, in the launcher, in Expo or in shortcuts. Pinned web apps are separate and still work. The code is still here: to try it, run `localStorage.setItem('omarchy-experimental-browser', '1')` in the shell and reload. This extension is only needed for that app.
+
 Build the Rust backend and run `python scripts/install-browser-bridge.py` once.
 Then open `vivaldi://extensions`, turn on Developer mode, choose Load unpacked,
 and select this directory. There is no browser restart or remote-debugging port.

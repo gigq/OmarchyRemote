@@ -6,18 +6,18 @@ Everything runs on the host you already own. There is no cloud relay: a Rust bac
 
 ## Layout
 
-| Path                           | What it is                                                                                                                                                                                                |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `public/`                      | The web shell. `index.html` holds the shell template and component (a Claude Design export kept on its `x-dc` runtime); each app is its own `public/<app>.js` module registered through `public/apps.js`. |
-| `backend/`                     | Rust (axum) host backend on `127.0.0.1:4188`: PTYs, Herdr, files, browser bridge, widgets, uploads. See [backend/README.md](backend/README.md).                                                           |
-| `scripts/serve.mjs`            | Development server on `127.0.0.1:4187`: static files, live reload, and the `/api/` proxy to the backend.                                                                                                  |
-| `scripts/build.mjs`            | Builds a standalone PWA (Cloudflare Worker plus static client) in `dist/`.                                                                                                                                |
-| `ios/`                         | Native iPhone/iPad wrapper (UIKit + WKWebView) that loads the live shell and bundles an offline copy.                                                                                                     |
-| `desktop/`                     | Desktop client for Linux, macOS, and Windows (Electron) that loads a host’s shell with the native bridges. See [desktop/README.md](desktop/README.md).                                                    |
-| `browser-extension/`           | Vivaldi/Chromium extension that exposes windows, workspaces, and tabs to the Browser app. Its [README](browser-extension/README.md) covers installation and the pinned extension id.                      |
-| `deploy/`                      | systemd user unit templates and `install.sh`.                                                                                                                                                             |
-| `docs/`                        | [Feature reference](docs/features.md).                                                                                                                                                                    |
-| `tests/`, `scripts/*.test.mjs` | Playwright and Node tests.                                                                                                                                                                                |
+| Path                           | What it is                                                                                                                                                                                                      |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `public/`                      | The web shell. `index.html` holds the shell template and component (a Claude Design export kept on its `x-dc` runtime); each app is its own `public/<app>.js` module registered through `public/apps.js`.       |
+| `backend/`                     | Rust (axum) host backend on `127.0.0.1:4188`: PTYs, Herdr, files, browser bridge, widgets, uploads. See [backend/README.md](backend/README.md).                                                                 |
+| `scripts/serve.mjs`            | Development server on `127.0.0.1:4187`: static files, live reload, and the `/api/` proxy to the backend.                                                                                                        |
+| `scripts/build.mjs`            | Builds a standalone PWA (Cloudflare Worker plus static client) in `dist/`.                                                                                                                                      |
+| `ios/`                         | Native iPhone/iPad wrapper (UIKit + WKWebView) that loads the live shell and bundles an offline copy.                                                                                                           |
+| `desktop/`                     | Desktop client for Linux, macOS, and Windows (Electron) that loads a host’s shell with the native bridges. See [desktop/README.md](desktop/README.md).                                                          |
+| `browser-extension/`           | Vivaldi/Chromium extension that exposes windows, workspaces, and tabs to the Browser app, which is disabled for now. Its [README](browser-extension/README.md) covers installation and the pinned extension id. |
+| `deploy/`                      | systemd user unit templates and `install.sh`.                                                                                                                                                                   |
+| `docs/`                        | [Feature reference](docs/features.md).                                                                                                                                                                          |
+| `tests/`, `scripts/*.test.mjs` | Playwright and Node tests.                                                                                                                                                                                      |
 
 ## Requirements
 
@@ -101,18 +101,18 @@ install or configure a remote server.
 
 **iPad, Mac, and desktop windows.** When both edges of the viewport are at least 600 px, the shell switches to desk mode: a 1:1 layout that fills the window, Home with the clock, app grid, and all widgets at once, and workspaces that tile windows with Hyprland's dwindle split (up to four per workspace). Hardware keyboards use ⌘ on Apple devices (Omarchy's SUPER) and Ctrl+Alt elsewhere. Press ⌘/ or tap the shortcut button in the top bar for the same table.
 
-| Keys                       | Action                                                |
-| -------------------------- | ----------------------------------------------------- |
-| ⌘1…9 / ⌘0, ⌘[ / ⌘]         | Switch workspace, previous / next workspace           |
-| ⌘E                         | Expo overview                                         |
-| ⌘⌥1…9 / ⌘⌥0, ⌘⇧[ / ⌘⇧]     | Move the focused window to a workspace                |
-| ⌘← ↑ ↓ →, ⌘⇧arrows         | Focus / swap window in a direction                    |
-| ⌘J / ⌘⇧J                   | Next / previous window in the workspace               |
-| ⌘F                         | Toggle fullscreen for the focused window              |
-| ⌘W                         | Close the focused window                              |
-| ⌘⏎, ⌘⇧B, ⌘⇧F, ⌘⇧A, ⌘⇧D, ⌘, | Terminal, browser, files, Herdr, lazydocker, settings |
-| ⌘K                         | Launcher                                              |
-| ⌘/                         | Shortcut sheet; Esc closes sheets and Expo            |
+| Keys                   | Action                                       |
+| ---------------------- | -------------------------------------------- |
+| ⌘1…9 / ⌘0, ⌘[ / ⌘]     | Switch workspace, previous / next workspace  |
+| ⌘E                     | Expo overview                                |
+| ⌘⌥1…9 / ⌘⌥0, ⌘⇧[ / ⌘⇧] | Move the focused window to a workspace       |
+| ⌘← ↑ ↓ →, ⌘⇧arrows     | Focus / swap window in a direction           |
+| ⌘J / ⌘⇧J               | Next / previous window in the workspace      |
+| ⌘F                     | Toggle fullscreen for the focused window     |
+| ⌘W                     | Close the focused window                     |
+| ⌘⏎, ⌘⇧F, ⌘⇧A, ⌘⇧D, ⌘,  | Terminal, files, Herdr, lazydocker, settings |
+| ⌘K                     | Launcher                                     |
+| ⌘/                     | Shortcut sheet; Esc closes sheets and Expo   |
 
 0 selects workspace 10. Window cycling requires multiple windows in the current workspace and follows the focused window in fullscreen. Text fields keep the standard editing shortcuts, including ⌘arrows and ⌘⌫; use ⌘J to cycle while editing. ⌘Space and ⌘backtick are left to the operating system. The native app registers shell commands with UIKit; web browsers can intercept shortcuts before the shell receives them. Numbered moves use Option on iPad because Shift-Command-3/4 are screenshot shortcuts; the browser version retains Shift. ⌘Enter opens Terminal and immediately focuses its input. Native build 36 adds a WebKit focus handoff whenever the active input window changes, including returning to herdr after closing Terminal; older builds retain DOM-only focus. Shift-Return for Browser and Delete for closing windows remain browser-only aliases.
 
@@ -120,7 +120,7 @@ install or configure a remote server.
 
 **CodexBar.** Tap its Home widget or open CodexBar from the launcher to inspect Codex and Claude usage, banked reset counts and expiry, credits, service status, and local token-cost history. Details depend on what the host CLI reports; reset credits are read-only. Reset watch adds willreset.com forecasts, time since the last reset, reset-related posts, and reset history with source links. App providers can register their own linked Home widgets. The herdr widget uses the same system: its widget opens individual project threads, prioritizes attention items, and shows working threads when none need attention.
 
-**Apps.** Terminal (a login shell in a PTY, resumed across reloads), Herdr (workspaces, agents, and pane output with a message composer; **+** starts a new workspace in a folder chosen with Files), Files (browse, preview, edit, search, upload, move, trash, ZIP), Browser (desktop tabs through the extension), btop, Services, lazydocker, dua, lnav (each a persistent host PTY with touch controls), Home widgets (system metrics, Tailscale, weather, CodexBar), and Settings (all Omarchy themes, applied to the shell and to terminal colors). The [feature reference](docs/features.md) describes each in detail.
+**Apps.** Terminal (a login shell in a PTY, resumed across reloads), Herdr (workspaces, agents, and pane output with a message composer; **+** starts a new workspace in a folder chosen with Files), Files (browse, preview, edit, search, upload, move, trash, ZIP), Browser (desktop tabs through the extension; disabled for now, see below), btop, Services, lazydocker, dua, lnav (each a persistent host PTY with touch controls), Home widgets (system metrics, Tailscale, weather, CodexBar), and Settings (all Omarchy themes, applied to the shell and to terminal colors). The [feature reference](docs/features.md) describes each in detail.
 
 **Backgrounds and transparency.** Settings offers the host's Omarchy theme backgrounds, with a separate remembered choice for each theme and a Solid color option. Windows are 95% opaque when focused and 92% otherwise, including native Browser and web-app views. `deploy/install.sh` runs `python scripts/import-themes.py`, which copies the installed palettes into `public/themes-data.js` and converts the theme backgrounds to WebP under the generated, untracked `public/backgrounds/` (needs Pillow: `sudo pacman -S python-pillow`). Rerun it after installing or changing Omarchy themes; a host without Omarchy keeps the committed palettes and offers no backgrounds.
 
@@ -139,6 +139,8 @@ The native shell uses persistent website storage plus a native preferences mirro
 The Rust backend stores the catalog and per-device backups in `settings.sqlite3` under its application data directory (`$XDG_DATA_HOME/omarchy-remote`, or the standard user data directory). Include this database in host backups; use SQLite’s backup API for a consistent copy while the service is running. The schema is versioned, updates use revision checks, and deleted web-app records prevent stale devices from reinstalling removed apps during migration. Browser tests isolate these APIs so they do not create records in the live catalog.
 
 ## Browser navigation and keyboard
+
+> **The Browser app is disabled for now.** It needs a lot of work before it is ready, so it no longer appears on Home, in the launcher, in Expo or in shortcuts. Pinned web apps are separate and still work. The code is still here: to try it, run `localStorage.setItem('omarchy-experimental-browser', '1')` in the shell and reload.
 
 Browser reopens the last viewed HTTP(S) tab on this device if it is still in the desktop snapshot. The saved selection uses the extension's stable profile ID across bridge reconnections. A closed or internal tab falls back to the tab manager; a disconnected profile keeps its selection for reconnection. The back chevron in Browser opens the tab manager explicitly. In its search field, Return opens the first matching web tab. Website navigation still updates the selected desktop tab's URL.
 

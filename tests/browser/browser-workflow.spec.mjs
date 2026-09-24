@@ -1,4 +1,8 @@
 import { test, expect } from './fixtures.mjs';
+// The Browser app is disabled by default while it is reworked; these specs switch it on.
+test.beforeEach(({ context }) =>
+  context.addInitScript(() => localStorage.setItem('omarchy-experimental-browser', '1'))
+);
 const LAST = 'omarchy-browser-last-tab';
 const snapshot = () => ({
   instances: [

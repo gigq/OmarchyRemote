@@ -1,4 +1,8 @@
 import { test, expect } from './fixtures.mjs';
+// These layouts open the Browser app as an ordinary window; it is off by default while reworked.
+test.beforeEach(({ context }) =>
+  context.addInitScript(() => localStorage.setItem('omarchy-experimental-browser', '1'))
+);
 // Desk mode: iPad, Mac, and desktop windows tile workspaces and take ⌘ shortcuts.
 const label = p => p.locator('.desk-ws-label:visible');
 const pills = p => p.locator('.workspace-switcher:visible .workspace-pill');

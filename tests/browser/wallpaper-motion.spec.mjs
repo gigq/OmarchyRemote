@@ -1,4 +1,8 @@
 import { test, expect } from './fixtures.mjs';
+// These layouts open the Browser app as an ordinary window; it is off by default while reworked.
+test.beforeEach(({ context }) =>
+  context.addInitScript(() => localStorage.setItem('omarchy-experimental-browser', '1'))
+);
 test('phone wallpaper moves subtly over ten fixed workspace positions and returns with a swipe', async ({
   page: p,
 }) => {

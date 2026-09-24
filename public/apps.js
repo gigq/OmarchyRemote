@@ -59,23 +59,34 @@
     description: 'files on the host',
     deskKeys: [{ keys: '⇧ F', shift: true, code: /^KeyF$/, label: 'Files' }],
   });
-  define('browser', {
-    name: 'browser',
-    color: 'var(--theme-blue)',
-    glyph: 'br',
-    icon: '\uf0ac',
-    description: 'desktop browser tabs',
-    deskKeys: [
-      {
-        browserOnly: true,
-        keys: '⇧ ↩',
-        shift: true,
-        code: /^(Enter|NumpadEnter)$/,
-        label: 'Browser',
-      },
-      { keys: '⇧ B', shift: true, code: /^KeyB$/, label: 'Browser' },
-    ],
-  });
+  // Browser (desktop tabs synced through the browser extension) is switched off while it is
+  // reworked. Its code stays in browser.js; pinned web apps do not depend on it. To try it, set
+  // localStorage 'omarchy-experimental-browser' to '1' and reload.
+  const browserEnabled = (() => {
+    try {
+      return localStorage.getItem('omarchy-experimental-browser') === '1';
+    } catch {
+      return false;
+    }
+  })();
+  if (browserEnabled)
+    define('browser', {
+      name: 'browser',
+      color: 'var(--theme-blue)',
+      glyph: 'br',
+      icon: '\uf0ac',
+      description: 'desktop browser tabs',
+      deskKeys: [
+        {
+          browserOnly: true,
+          keys: '⇧ ↩',
+          shift: true,
+          code: /^(Enter|NumpadEnter)$/,
+          label: 'Browser',
+        },
+        { keys: '⇧ B', shift: true, code: /^KeyB$/, label: 'Browser' },
+      ],
+    });
   define('herdr', {
     name: 'herdr',
     color: 'var(--theme-cyan)',
@@ -189,7 +200,7 @@
   const DEFAULT_PINS = [
     'terminal',
     'files',
-    'browser',
+    ...(browserEnabled ? ['browser'] : []),
     'herdr',
     'btop',
     'services',

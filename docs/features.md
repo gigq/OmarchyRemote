@@ -34,6 +34,8 @@ The last folder and recent paths are remembered. Access stays inside HOME; exter
 
 ## Browser
 
+> **The Browser app is disabled for now.** It needs a lot of work before it is ready, so it no longer appears on Home, in the launcher, in Expo or in shortcuts. Pinned web apps are separate and still work. The code is still here: to try it, run `localStorage.setItem('omarchy-experimental-browser', '1')` in the shell and reload.
+
 Browser resumes the last viewed web tab if it is still open on the desktop; otherwise it shows the tab manager. ⌘⇧L opens the manager. ⌘W closes the shell window; ⌘⇧W closes the current desktop tab. ⌘/ lists browser shortcuts. Shell workspace and window bindings stay active in Browser: ⌘numbers choose workspaces and ⌘brackets move between them. Ctrl+numbers choose browser tabs, Ctrl+brackets navigate page history, ⌘T creates a browser tab (⌘⇧T reopens one), Ctrl+F finds text, and Ctrl+plus/minus/0 controls zoom. ⌘T creates a tab in the active app, ⌘F toggles fullscreen, and ⌘⇧F opens Files.
 
 Browser mirrors Vivaldi (or another Chromium) windows, workspaces and tabs through the companion extension. It supports desktop tab close and create, window moves, pin and mute, reload and focus. Opening a tab loads its URL inside the themed Browser frame in a separate native WKWebView. The website fills the inside of its workspace border. Scrolling down hides the address and navigation bar; scrolling up or tapping the top of the page reveals it. New page navigation restores the controls. The address field and back, forward, and reload controls navigate that local page; website URL changes also update the originating desktop tab. Website logins persist on each device, separately from the desktop browser and from the shell. The page has no host message bridges. The **…** menu holds Reload and **Dark**. Dark forces a dark palette using bundled Dark Reader; the toggle persists on the device and applies to subsequent page loads. Switch it off to restore the original styling without reloading. Cross-origin stylesheets and embedded frames may remain unmodified. The leftmost **‹** returns to the desktop list, and **return to page** resumes the same local page. The list’s × button closes the actual desktop tab. Expo shows a page preview while the native page is hidden. In the PWA, pages still open externally. Links requiring another app are currently unsupported. Tossing Browser from Expo does not close desktop tabs. Vivaldi workspace groups come from saved metadata and may lag briefly; workspace reassignment is unavailable when the extension API hides those fields. See [browser setup](../browser-extension/README.md).
@@ -168,6 +170,8 @@ behind it with their preview so native content cannot paint over the front windo
 The scratchpad remains a separate slot that can follow you between workspaces.
 
 ### Independent Browser windows
+
+The Browser app is disabled for now (see [Browser](#browser)).
 
 Search actions → New browser window creates another Browser pane with its own tab
 manager, address, back/forward history, find, zoom, and native web surface. Its last

@@ -1238,13 +1238,15 @@
     }
   }
   window.HostBrowserApp = BrowserApp;
-  window.HyprlandApps?.provide('browser', {
-    multiple: true,
-    shortcutDefinitions: browserActions({
-      embedded: true,
-      nativeFind: true,
-      nativeShortcuts: true,
-    }).map(({ run, ...action }) => action),
-    create: (root, host, spec) => new BrowserApp(root, host, spec),
-  });
+  // Registered only while the Browser app is enabled (see public/apps.js).
+  if (window.HyprlandApps?.get('browser'))
+    window.HyprlandApps.provide('browser', {
+      multiple: true,
+      shortcutDefinitions: browserActions({
+        embedded: true,
+        nativeFind: true,
+        nativeShortcuts: true,
+      }).map(({ run, ...action }) => action),
+      create: (root, host, spec) => new BrowserApp(root, host, spec),
+    });
 })();
