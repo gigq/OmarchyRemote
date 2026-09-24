@@ -12,11 +12,11 @@
 - The markup in `public/index.html` is a design-tool export; leave it as exported. Its component script is formatted by `scripts/format-template.mjs`, which `npm run format` runs.
 - New apps follow CONTRIBUTING.md: a `define` in `public/apps.js`, a `public/<key>.js` module that calls `provide`, and host support in `backend/src/apps.rs` or a route module. Do not add app-specific branches to `remote.js`, `desk.js`, `dashboard.js`, or the shell component; add a provider hook instead.
 
-# Validation workers
+# Validation
 
-- The primary agent delegates validation work to a `gpt-5.6-luna` worker with `max` reasoning. Keep implementation decisions and review of findings in the primary thread.
-- Give the worker a bounded scope, required checks, and relevant device/test safety constraints. Reuse completed check results instead of duplicating runs in the primary thread.
-- Validation workers report evidence, failures, and limitations; they do not spawn additional workers unless explicitly requested.
+- Keep implementation decisions, and the review of validation findings, with whoever is making the change.
+- If your tooling can hand validation to a separate worker or session, give it a bounded scope, the required checks below, and the relevant device and test safety constraints. Reuse its results instead of rerunning the same checks.
+- Validation reports evidence, failures, and limitations. It does not start further workers unless asked.
 
 # Checks before reporting done
 

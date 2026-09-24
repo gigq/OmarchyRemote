@@ -10,6 +10,8 @@ const types = {
   '.woff2': 'font/woff2',
   '.png': 'image/png',
   '.webp': 'image/webp',
+  '.txt': 'text/plain; charset=utf-8',
+  '.md': 'text/markdown; charset=utf-8',
 };
 async function walk(dir) {
   const entries = await readdir(dir, { withFileTypes: true });

@@ -215,9 +215,7 @@ npm run build && npm test        # standalone PWA build
 
 To remove the setup: `systemctl --user disable --now omarchy-remote-dev.service omarchy-remote.service`, delete the unit files, and drop the HTTPS listener (`tailscale serve --https=12443 off`).
 
-## License
-
-[MIT](LICENSE).
+## Desk mode in depth
 
 Desk windows support draggable dividers, Command + left-drag to swap tiles, and
 Command + right-drag to resize (Ctrl+Alt in a Linux/Windows browser). Settings →
@@ -267,7 +265,7 @@ shortcut, disable a binding, or restore defaults. Shell and Browser bindings are
 checked together for conflicts. Changes save per device and update keyboard help,
 the action palette, and native registrations immediately (build 33 recommended).
 
-### Publish a native build for remote installation
+## Publish a native build for remote installation
 
 The existing private HTTPS app host also serves `/builds/`: a simple download dashboard with the latest build, notes, older builds, and platform-specific downloads. For iOS, use the **Install on device** link in Safari with Tailscale connected. This works away from home without opening a public port. Devices must already be covered by the provisioning profile and have Developer Mode enabled. Website installation uses an HTTPS manifest; verify acceptance on the device separately from download availability ([Apple's manifest documentation](https://support.apple.com/guide/deployment/depce7cefc4d/web)).
 
@@ -282,11 +280,11 @@ python scripts/publish-native-build.py /path/to/App.ipa \
 
 Set `OMARCHY_DOWNLOAD_BASE_URL` to your private app HTTPS URL plus `/builds` (no trailing slash required). The publisher reads the actual version, build, device families and profile expiry from the IPA, checks its CMS envelope and refuses expired profiles. It does not replace Mac code-signature validation. Downloads stay in `~/.local/share/omarchy-remote/builds`, outside the checkout, with SHA-256 identities and no automatic pruning. To move that directory, set `OMARCHY_BUILDS_DIR` identically for the publisher and dev service. Publish each new signed build with its source revision and notes; no service restart is needed to update the page. Changing the download host requires regenerating manifests for retained builds by publishing those IPAs with the new base URL.
 
-The portable publishing skill is included at [`skills/omarchy-builds/SKILL.md`](skills/omarchy-builds/SKILL.md) and downloadable from the dashboard. Copy that folder into your agent's skills directory, such as `~/.codex/skills/` or `~/.claude/skills/`. It uses this checkout's publisher and your host configuration; it contains no fixed host or signing identity. The server is read-only: agents publish locally on the host or over the user's existing SSH connection, rather than exposing an upload API.
+The portable publishing skill is included at [`skills/omarchy-builds/SKILL.md`](skills/omarchy-builds/SKILL.md) and downloadable from the dashboard. Copy that folder into the skills directory of whichever coding agent you use. It uses this checkout's publisher and your host configuration; it contains no fixed host or signing identity. The server is read-only: agents publish locally on the host or over the user's existing SSH connection, rather than exposing an upload API.
 
 Open **Builds** from the app launcher, or pin it through Home’s app picker. A new host starts with a welcome screen and a **Get the agent skill** link; once an agent publishes a build, the app displays the host’s build history. iOS native build 37 and later provides **Install** on each build, handing the request to iOS for confirmation. Older native versions retain **Copy dashboard link** for installation in Safari. An accepted handoff is not proof of completed installation. No native binary update is needed for the Builds app itself when using the live host.
 
-### Android development (parity work in progress)
+## Android development (parity work in progress)
 
 `android/` builds an Android 11+ native host for the same shell and backend. The initial implementation includes trusted shell messaging, saved hosts and preferences, native keyboard/battery integration, device weather location, Android file upload/save pickers, and independent browser WebViews. Android Back dismisses the keyboard and shell overlays before navigating an embedded website; at the root it backgrounds the task. An unreachable host falls back to bundled UI at the same origin and retries automatically while foregrounded; returning to the app also prompts reconnection. Full iPhone feature parity is **not yet verified**; [the Android parity checklist](docs/android-parity.md) tracks the remaining work.
 
@@ -352,3 +350,11 @@ Android weather units follow the device’s regional temperature preference, inc
 Set `ANDROID_RELEASE_HOST_URL` to a reachable private HTTPS host when running `python scripts/android-release-smoke.py` to verify live Home before and after the signed update. Userdebug Android images force WebView debugging independently of the release APK; the fixture records that platform limitation.
 
 Android embedded pages keep square top corners beneath visible browser controls and round all corners when the controls are hidden or the page is a saved web app. Native scroll handling follows the toolbar visibility supplied by the shell.
+
+## Security
+
+Anyone who can reach the address you publish can open a shell as you. [SECURITY.md](SECURITY.md) describes the security model and how to report a vulnerability privately.
+
+## License
+
+[MIT](LICENSE). Bundled third-party components keep their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
