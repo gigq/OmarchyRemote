@@ -6,6 +6,20 @@ Everything runs on the host you already own. There is no cloud relay: a Rust bac
 
 ## Screenshots
 
+### iPhone
+
+On a phone each app gets its own workspace: swipe from the edges to move between them, and swipe up from the bottom for Expo.
+
+<p>
+  <img src="docs/screenshots/iphone-home.webp" width="19%" alt="Home: the clock, app grid, host metrics and a CodexBar widget">
+  <img src="docs/screenshots/iphone-herdr.webp" width="19%" alt="Herdr following an agent thread">
+  <img src="docs/screenshots/iphone-files.webp" width="19%" alt="Files browsing a folder on the host">
+  <img src="docs/screenshots/iphone-settings.webp" width="19%" alt="Settings with the Omarchy themes and wallpapers">
+  <img src="docs/screenshots/iphone-expo.webp" width="19%" alt="Expo showing every open workspace">
+</p>
+
+### iPad
+
 On an iPad, Omarchy Remote uses the desk layout: tiled windows, workspaces and hardware-keyboard shortcuts, like Hyprland.
 
 ![Home on iPad: the clock, app grid, and live widgets for weather, btop, CodexBar, Herdr and Tailscale](docs/screenshots/ipad-home.webp)
