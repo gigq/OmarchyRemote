@@ -480,16 +480,31 @@ test('native Back dismisses shell overlays before leaving the app', async ({ pag
     logic.set({ ov: true });
     const expo = HyprlandDesk.nativeBack();
     const expoClosed = !logic.state.ov;
+    // With nothing left to close, Back returns Home first; only Back on Home leaves the app.
+    const toHome = HyprlandDesk.nativeBack();
+    const home = logic.state.ws;
     const root = HyprlandDesk.nativeBack();
     logic.set({ kb: true });
     const keyboard = HyprlandDesk.nativeBack({ keyboard: true });
-    return { launcher, launchClosed, expo, expoClosed, root, keyboard, hidden: !logic.state.kb };
+    return {
+      launcher,
+      launchClosed,
+      expo,
+      expoClosed,
+      toHome,
+      home,
+      root,
+      keyboard,
+      hidden: !logic.state.kb,
+    };
   });
   expect(states).toEqual({
     launcher: true,
     launchClosed: true,
     expo: true,
     expoClosed: true,
+    toHome: true,
+    home: 0,
     root: false,
     keyboard: true,
     hidden: true,
