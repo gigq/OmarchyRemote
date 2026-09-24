@@ -68,8 +68,9 @@
     trash: '\uf1f8',
   };
   class FilesApp {
-    /* `pick` turns the browser into a folder chooser: { title, label, choose(path), cancel() }. */
-    constructor(root, openTerminal, windowKey = 'files', { pick } = {}) {
+    /* `pick` turns the browser into a folder chooser: { title, label, choose(path), cancel() }.
+       `path` opens a specific folder instead of the last one this window visited. */
+    constructor(root, openTerminal, windowKey = 'files', { pick, path } = {}) {
       this.root = root;
       this.pick = pick;
       this.pathKey = 'omarchy-' + windowKey + '-path';
@@ -90,6 +91,7 @@
       try {
         this.path = localStorage.getItem(this.pathKey) || '';
       } catch {}
+      if (path) this.path = path;
       root.classList.add('files-app');
       root.classList.toggle('files-picking', !!pick);
       this.heading = node('div', 'files-heading');

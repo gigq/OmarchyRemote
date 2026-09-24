@@ -204,6 +204,35 @@ test('a new Herdr workspace starts its shell in a chosen home folder', async () 
   }
 });
 
+test('a new Herdr tab joins an existing workspace in a chosen home folder', async () => {
+  const { mkdtemp, rm } = await import('node:fs/promises');
+  const folder = await mkdtemp(process.env.HOME + '/omarchy-herdr-tab-test-');
+  let workspace;
+  try {
+    workspace = (await api('herdr/workspaces', { cwd: folder })).pane.workspace_id;
+    const created = await api(`herdr/workspaces/${encodeURIComponent(workspace)}/tabs`, {
+      cwd: folder,
+    });
+    assert.equal(created.pane.workspace_id, workspace);
+    assert.equal(created.pane.cwd, folder);
+    const tabs = created.snapshot.tabs.filter(t => t.workspace_id === workspace);
+    assert.equal(tabs.length, 2);
+    const post = (id, body) =>
+      fetch(`${base}/api/herdr/workspaces/${encodeURIComponent(id)}/tabs`, {
+        method: 'POST',
+        headers: { 'X-Hyprland-Client': '1', 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    // Malformed ids and folders outside home never reach Herdr; unknown workspaces are Herdr errors.
+    assert.equal((await post('../x', { cwd: folder })).status, 400);
+    assert.equal((await post(workspace, { cwd: '/tmp' })).status, 400);
+    assert.equal((await post('nonexistent', { cwd: folder })).status, 502);
+  } finally {
+    if (workspace) await herdr('workspace.close', { workspace_id: workspace });
+    await rm(folder, { recursive: true, force: true });
+  }
+});
+
 test('closing an app-owned shell ends it without affecting another session', async () => {
   const first = await api('terminal/session', {}),
     second = await api('terminal/session', {});

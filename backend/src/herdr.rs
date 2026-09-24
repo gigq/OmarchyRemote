@@ -67,6 +67,15 @@ impl Herdr {
             .await?;
         Ok(created["root_pane"].clone())
     }
+    pub async fn create_tab(&self, workspace: &str, cwd: &Path) -> Result<Value> {
+        let created = self
+            .call(
+                "tab.create",
+                json!({"workspace_id":workspace,"cwd":cwd,"focus":false}),
+            )
+            .await?;
+        Ok(created["root_pane"].clone())
+    }
     pub async fn input(&self, pane: &str, text: &str, keys: &[String]) -> Result<Value> {
         self.call(
             "pane.send_input",

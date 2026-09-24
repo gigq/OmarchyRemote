@@ -786,7 +786,13 @@
       this.paneTabs = node('div', 'herdr-pane-tabs');
       this.detailCenter = node('div', 'herdr-detail-center');
       this.detailCenter.append(this.title, this.paneTabs);
-      this.detailBar.append(this.backButton, this.detailCenter, this.filePicker);
+      this.newTabButton = button('+', () =>
+        this.newTab(this.snapshot?.panes.find(p => p.pane_id === this.selected))
+      );
+      this.newTabButton.classList.add('herdr-new-tab', 'keycap');
+      this.newTabButton.setAttribute('aria-label', 'New tab in this workspace');
+      this.newTabButton.title = 'New tab in this workspace';
+      this.detailBar.append(this.backButton, this.detailCenter, this.newTabButton, this.filePicker);
       this.output = node('div', 'herdr-output');
       this.canvas = node('div', 'herdr-canvas');
       // Fit and ↓ Latest float inside the output panel's bottom-right corner.
@@ -867,6 +873,8 @@
       this.split = split;
       this.root.classList.toggle('herdr-split', split);
       this.syncPanels();
+      // The sidebar's workspace headers carry new-tab buttons only in the split layout.
+      if (this.snapshot) this.renderList();
     }
     syncPanels() {
       const detail = !this.detail.hidden;
@@ -947,6 +955,7 @@
     renderList() {
       const signature = JSON.stringify([
         this.search.value,
+        this.split,
         this.snapshot.workspaces.map(w => [w.workspace_id, w.label]),
         this.snapshot.panes.map(p => [
           p.pane_id,
@@ -986,10 +995,21 @@
         );
         if (!panes.length) continue;
         const group = node('section', 'herdr-group legend');
-        group.append(
-          node('span', 'legend-title', workspace.label || workspace.workspace_id),
-          node('span', 'legend-meta', `${panes.length} pane${panes.length === 1 ? '' : 's'}`)
+        const meta = node(
+          'span',
+          'legend-meta',
+          `${panes.length} pane${panes.length === 1 ? '' : 's'}`
         );
+        // A wide tile has no pane header, so each workspace offers its new-tab button here.
+        if (this.split) {
+          const add = button('+', () =>
+            this.newTab(panes.find(p => p.pane_id === this.selected) || panes[0])
+          );
+          add.className = 'herdr-group-new';
+          add.setAttribute('aria-label', `New tab in ${workspace.label || workspace.workspace_id}`);
+          meta.append(add);
+        }
+        group.append(node('span', 'legend-title', workspace.label || workspace.workspace_id), meta);
         for (const pane of panes) {
           const row = button('', () => this.select(pane.pane_id));
           row.className = 'herdr-pane';
@@ -1125,8 +1145,22 @@
       this.select(null);
       return true;
     }
-    // Files, in its folder-pick mode, chooses where a new workspace's shell starts.
-    chooseFolder() {
+    // A new tab in the pane's workspace starts in the pane's folder unless another is chosen.
+    newTab(pane) {
+      if (!pane) return;
+      this.chooseFolder({
+        title: 'New tab',
+        path: pane.foreground_cwd || pane.cwd,
+        create: cwd =>
+          api(`herdr/workspaces/${encodeURIComponent(pane.workspace_id)}/tabs`, { cwd }),
+      });
+    }
+    // Files, in its folder-pick mode, chooses where a new workspace's (or tab's) shell starts.
+    chooseFolder({
+      title = 'New pane',
+      path,
+      create = cwd => api('herdr/workspaces', { cwd }),
+    } = {}) {
       if (this.folderPicker) return;
       this.search.blur();
       const overlay = node('div', 'herdr-folder-picker');
@@ -1138,12 +1172,13 @@
       };
       this.closeFolderPicker = close;
       this.folderPicker = new window.HostFilesApp(overlay, null, 'herdr-folder', {
+        path,
         pick: {
-          title: 'New pane',
+          title,
           label: 'start here',
           cancel: close,
           choose: async cwd => {
-            const created = await api('herdr/workspaces', { cwd });
+            const created = await create(cwd);
             if (this.disposed) return;
             close();
             if (created.snapshot) {

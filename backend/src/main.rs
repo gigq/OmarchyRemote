@@ -364,6 +364,37 @@ async fn new_workspace(
     let snapshot = app.herdr.snapshot().await.ok();
     Ok(Json(json!({"pane":pane,"snapshot":snapshot})))
 }
+fn workspace_id(id: &str) -> Result<&str, ApiError> {
+    if id.is_empty()
+        || id.len() > 64
+        || !id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, ':' | '_' | '-'))
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error":"Unknown workspace"})),
+        ));
+    }
+    Ok(id)
+}
+/* A new tab in an existing workspace starts one shell in the chosen folder. */
+async fn new_tab(
+    State(app): State<App>,
+    Path(id): Path<String>,
+    Json(request): Json<NewWorkspace>,
+) -> Result<Json<Value>, ApiError> {
+    let workspace = workspace_id(&id)?;
+    let root = files::root().map_err(error)?;
+    let path = workspace_folder(&root, &request.cwd)?;
+    let pane = app
+        .herdr
+        .create_tab(workspace, &path)
+        .await
+        .map_err(error)?;
+    let snapshot = app.herdr.snapshot().await.ok();
+    Ok(Json(json!({"pane":pane,"snapshot":snapshot})))
+}
 async fn herdr_upgrade(State(app): State<App>, ws: WebSocketUpgrade) -> Response {
     ws.max_message_size(32768)
         .on_upgrade(move |socket| herdr_socket(socket, app.herdr))
@@ -497,6 +528,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/terminal/{id}/close", post(terminal_close))
         .route("/api/herdr/snapshot", get(snapshot))
         .route("/api/herdr/workspaces", post(new_workspace))
+        .route("/api/herdr/workspaces/{id}/tabs", post(new_tab))
         .route("/api/herdr/panes/{id}", get(pane))
         .route("/api/herdr/panes/{id}/input", post(pane_input))
         .route("/api/herdr/ws", get(herdr_upgrade))
@@ -536,6 +568,14 @@ mod tests {
             true,
             None
         ));
+    }
+    #[test]
+    fn new_tabs_accept_only_herdr_workspace_ids() {
+        assert_eq!(workspace_id("w9F").unwrap(), "w9F");
+        assert_eq!(workspace_id("w_1-a:b").unwrap(), "w_1-a:b");
+        for id in ["", "../w", "w 1", "w/1", &"w".repeat(65)] {
+            assert_eq!(workspace_id(id).unwrap_err().0, StatusCode::BAD_REQUEST);
+        }
     }
     #[test]
     fn new_workspaces_start_in_folders_inside_home() {

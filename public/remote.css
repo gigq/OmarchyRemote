@@ -587,6 +587,22 @@
 .herdr-detail-bar > button {
   flex: none;
 }
+.herdr-new-tab {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 18px;
+}
+.herdr-group-new {
+  border: 0;
+  background: none;
+  color: var(--theme-accent);
+  font: inherit;
+  font-size: 13px;
+  line-height: 13px;
+  padding: 0 0 0 8px;
+  cursor: pointer;
+}
 .herdr-back {
   width: 36px;
   height: 36px;
