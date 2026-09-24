@@ -579,7 +579,9 @@ class Component extends DCLogic {
     const dur = '.5s',
       ease = 'cubic-bezier(.22,.9,.24,1)',
       // Width and height animate too, so a surviving desk tile grows into freed space instead of snapping.
-      tr = `transform ${dur} ${ease}, width ${dur} ${ease}, height ${dur} ${ease}, opacity ${dur} ${ease}, border-color .3s, border-radius ${dur} ${ease}`;
+      // The corner radius switches at once: animating it on a clipping card repaints the card's whole
+      // content every frame, which slower Android phones cannot keep up with during Expo.
+      tr = `transform ${dur} ${ease}, width ${dur} ${ease}, height ${dur} ${ease}, opacity ${dur} ${ease}, border-color .3s`;
     const n = s.open.length,
       cols = n <= 4 ? 2 : 3,
       sc = n <= 4 ? 0.35 : n > 9 ? 0.19 : 0.26,
