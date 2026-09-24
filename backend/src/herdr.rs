@@ -61,6 +61,18 @@ impl Herdr {
     pub async fn read(&self, pane: &str) -> Result<Value> {
         Ok(self.call("pane.read", json!({"pane_id":pane,"source":"recent","lines":300,"format":"ansi","strip_ansi":false})).await?["read"].clone())
     }
+    /// Names of the pane's foreground processes, such as ["fish"] at a prompt or ["nvim"].
+    pub async fn foreground(&self, pane: &str) -> Result<Value> {
+        let info = self
+            .call("pane.process_info", json!({"pane_id":pane}))
+            .await?;
+        Ok(json!(
+            info["process_info"]["foreground_processes"]
+                .as_array()
+                .map(|all| all.iter().map(|p| p["name"].clone()).collect::<Vec<_>>())
+                .unwrap_or_default()
+        ))
+    }
     pub async fn create_workspace(&self, cwd: &Path) -> Result<Value> {
         let created = self
             .call("workspace.create", json!({"cwd":cwd,"focus":false}))

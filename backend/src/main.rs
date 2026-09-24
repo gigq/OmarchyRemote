@@ -437,10 +437,12 @@ async fn herdr_socket(mut socket: WebSocket, herdr: herdr::Herdr) {
                     if !quiet_ticks.is_multiple_of(PANE_QUIET_EVERY){continue}
                 }
                 match herdr.read(pane).await {
-                    Ok(read)=>{
+                    Ok(mut read)=>{
                         let text=read["text"].as_str().unwrap_or_default();
                         if previous.as_deref()!=Some(text) {
                             previous=Some(text.to_owned());
+                            // The client draws a cursor only for a shell prompt; see HerdrApp.
+                            read["foreground"]=herdr.foreground(pane).await.unwrap_or(Value::Null);
                             if !send(&mut socket,json!({"type":"pane","pane_id":pane,"read":read})).await{break}
                         }
                     },

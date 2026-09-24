@@ -30,6 +30,40 @@
     if (!response.ok) throw Error(value.error || 'Host unavailable');
     return value;
   };
+  // Herdr reports neither a pane's cursor nor its screen mode, so a cursor is drawn only at a shell
+  // prompt, where it sits at the end of the typed text: after the last text written, or where a dim
+  // or grey autosuggestion (fish, zsh-autosuggestions) starts. Full-screen programs such as Vim, and
+  // agents, get no cursor rather than a misplaced one.
+  const SHELLS = new Set([
+    'fish',
+    'bash',
+    'zsh',
+    'sh',
+    'dash',
+    'ksh',
+    'tcsh',
+    'csh',
+    'nu',
+    'elvish',
+    'xonsh',
+    'pwsh',
+  ]);
+  function suggestionColumn(term) {
+    const b = term.buffer.active;
+    const line = b.getLine(b.baseY + b.cursorY);
+    if (!line) return null;
+    const cell = b.getNullCell();
+    let x = b.cursorX,
+      suggested = false;
+    while (x > 0) {
+      line.getCell(x - 1, cell);
+      const color = cell.isFgPalette() ? cell.getFgColor() : -1;
+      if (!cell.isDim() && color !== 8 && !(color >= 238 && color <= 246)) break;
+      if (cell.getChars().trim()) suggested = true;
+      x--;
+    }
+    return suggested ? x : null;
+  }
   const socket = path =>
     new WebSocket(
       `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/${path}`
@@ -1283,9 +1317,16 @@
             this.term.nativeView.restore({ ...viewAnchor, follow: false }, target);
           }
         }
-        this.term.nativeView.hold(false);
-        this.rendering = false;
-        this.flushRead();
+        const release = () => {
+          this.term.nativeView.hold(false);
+          this.rendering = false;
+          this.flushRead();
+        };
+        const prompt = SHELLS.has(read.foreground?.[0]);
+        this.term.nativeView.showCursor = prompt;
+        const column = prompt ? suggestionColumn(this.term) : null;
+        if (column === null) release();
+        else this.term.write(`\x1b[${column + 1}G`, release);
       });
     }
     async uploadFiles(files, pane) {

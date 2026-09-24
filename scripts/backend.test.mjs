@@ -247,7 +247,12 @@ test('a pane change that keeps the text the same length still reaches the phone'
     const type = (id, text, keys = []) =>
       c.send({ type: 'input', id, pane_id: pane, text, keys, typed: true });
     type('first', 'echo SAME_A');
-    await c.wait(m => m.type === 'pane' && m.read.text.includes('SAME_A'));
+    const first = await c.wait(m => m.type === 'pane' && m.read.text.includes('SAME_A'));
+    // Updates name the foreground program, so the phone knows when it is at a shell prompt.
+    assert.ok(
+      Array.isArray(first.read.foreground) && first.read.foreground.length,
+      JSON.stringify(first.read.foreground)
+    );
     // Replacing the last character keeps the text length; the update must still be sent.
     type('replace', '', ['Backspace', 'B']);
     await c.wait(m => m.type === 'pane' && m.read.text.includes('SAME_B'));
