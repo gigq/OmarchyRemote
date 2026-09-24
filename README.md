@@ -269,7 +269,13 @@ the action palette, and native registrations immediately (build 33 recommended).
 
 The existing private HTTPS app host also serves `/builds/`: a simple download dashboard with the latest build, notes, older builds, and platform-specific downloads. For iOS, use the **Install on device** link in Safari with Tailscale connected. This works away from home without opening a public port. Devices must already be covered by the provisioning profile and have Developer Mode enabled. Website installation uses an HTTPS manifest; verify acceptance on the device separately from download availability ([Apple's manifest documentation](https://support.apple.com/guide/deployment/depce7cefc4d/web)).
 
-After validating a signed iOS IPA on the Mac, publish its exact bytes:
+Build the app for a device or **Any iOS Device** with your signing team, then package it on the Mac. `scripts/package-ios-app.sh` checks the app's signature, writes the IPA, and checks the signature again inside it:
+
+```sh
+scripts/package-ios-app.sh ~/Library/Developer/Xcode/DerivedData/OmarchyRemote-*/Build/Products/Debug-iphoneos/OmarchyRemote.app OmarchyRemote.ipa
+```
+
+Publish its exact bytes:
 
 ```sh
 python scripts/publish-native-build.py /path/to/App.ipa \
