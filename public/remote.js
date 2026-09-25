@@ -48,6 +48,12 @@
     'xonsh',
     'pwsh',
   ]);
+  function bufferLines(term) {
+    const buffer = term.buffer.active;
+    return Array.from({ length: buffer.length }, (_, i) =>
+      buffer.getLine(i)?.translateToString(true)
+    );
+  }
   function suggestionColumn(term) {
     const b = term.buffer.active;
     const line = b.getLine(b.baseY + b.cursorY);
@@ -1309,7 +1315,9 @@
       if (!dimensions) return;
       const viewAnchor = this.term.nativeView.anchor(),
         scroll = viewAnchor.source;
-      const anchor = this.term.buffer.active.getLine(scroll)?.translateToString(true);
+      // A run of lines from the top of the view: one line alone is often blank or a rule.
+      const before = bufferLines(this.term);
+      const anchor = before.slice(scroll, scroll + 24);
       const pane = this.selected;
       this.rendering = true;
       // The native view keeps showing the previous snapshot until this one is fully written.
@@ -1327,16 +1335,22 @@
         if (this.selected === pane) {
           if (this.followOutput || !previous) this.term.scrollToBottom();
           else {
-            let target = scroll,
+            const after = bufferLines(this.term);
+            // History loaded above the view pushes its lines down by as many as were added.
+            const expected = Math.min(after.length - 1, scroll + after.length - before.length);
+            let target = Math.max(0, expected),
+              best = 0,
               distance = Infinity;
-            for (let i = 0; i < this.term.buffer.active.length; i++)
-              if (
-                this.term.buffer.active.getLine(i)?.translateToString(true) === anchor &&
-                Math.abs(i - scroll) < distance
-              ) {
+            for (let i = 0; i < after.length; i++) {
+              let run = 0;
+              while (run < anchor.length && after[i + run] === anchor[run]) run++;
+              const d = Math.abs(i - expected);
+              if (run > best || (run && run === best && d < distance)) {
                 target = i;
-                distance = Math.abs(i - scroll);
+                best = run;
+                distance = d;
               }
+            }
             this.term.scrollToLine(target);
             this.term.nativeView.restore({ ...viewAnchor, follow: false }, target);
           }
