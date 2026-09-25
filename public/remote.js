@@ -48,6 +48,14 @@
     'xonsh',
     'pwsh',
   ]);
+  const PRESS_EVENTS = [
+    'pointerdown',
+    'pointerup',
+    'pointercancel',
+    'touchstart',
+    'touchend',
+    'touchcancel',
+  ];
   function bufferLines(term) {
     const buffer = term.buffer.active;
     return Array.from({ length: buffer.length }, (_, i) =>
@@ -1508,10 +1516,20 @@
           this.syncFocus();
         });
       };
-      for (const event of ['focusout', 'pointerup', 'transitionend'])
+      for (const event of ['focusout', 'pointerup', 'transitionend', 'selectionchange'])
         document.addEventListener(event, this.reconcileFocus);
+      // A press can become a text selection, and focusing the input mid-gesture would clear it.
+      this.pressed = false;
+      this.trackPress = e => {
+        if (e.pointerType === 'touch') return;
+        this.pressed = e.touches ? e.touches.length > 0 : e.type === 'pointerdown';
+        if (!this.pressed) this.reconcileFocus();
+      };
+      for (const event of PRESS_EVENTS)
+        document.addEventListener(event, this.trackPress, { capture: true, passive: true });
       window.addEventListener('focus', this.reconcileFocus);
       this.foreground = () => {
+        this.pressed = false;
         if (!document.hidden) for (const app of Object.values(this.apps)) app.resume?.();
       };
       document.addEventListener('visibilitychange', this.foreground);
@@ -1645,6 +1663,7 @@
         this.cancelNativeFocus();
         return;
       }
+      if (this.pressed) return;
       const root = mount(HyprlandApps.get(current)?.mount);
       if (!root) return;
       const selection = window.getSelection();
@@ -1769,8 +1788,10 @@
       this.cancelNativeFocus();
       if (activeBridge === this) activeBridge = null;
       cancelAnimationFrame(this.focusFrame);
-      for (const event of ['focusout', 'pointerup', 'transitionend'])
+      for (const event of ['focusout', 'pointerup', 'transitionend', 'selectionchange'])
         document.removeEventListener(event, this.reconcileFocus);
+      for (const event of PRESS_EVENTS)
+        document.removeEventListener(event, this.trackPress, { capture: true });
       window.removeEventListener('focus', this.reconcileFocus);
       document.removeEventListener('focusin', this.rememberFocus);
       window.removeEventListener('hyprland-hardware-keyboard', this.hardwareChanged);
