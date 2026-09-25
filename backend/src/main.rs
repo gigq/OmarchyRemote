@@ -409,6 +409,9 @@ A read is sent only when its text changes; Herdr's revision does not track conte
 const PANE_ACTIVE: Duration = Duration::from_millis(16);
 const PANE_QUIET_AFTER: Duration = Duration::from_secs(1);
 const PANE_QUIET_EVERY: u32 = 6;
+/* Reading history (the phone scrolled away from the latest output) sends up to Herdr's 1000 lines,
+about 50 KB, so changes are then sent at most every ~0.5 s. */
+const HISTORY_EVERY: u32 = 30;
 async fn herdr_socket(mut socket: WebSocket, herdr: herdr::Herdr) {
     let mut snapshots = interval(Duration::from_millis(1200));
     snapshots.set_missed_tick_behavior(MissedTickBehavior::Skip);
@@ -418,6 +421,7 @@ async fn herdr_socket(mut socket: WebSocket, herdr: herdr::Herdr) {
     heartbeat.set_missed_tick_behavior(MissedTickBehavior::Skip);
     let mut selected: Option<String> = None;
     let mut previous: Option<String> = None;
+    let mut history = false;
     let mut previous_snapshot = String::new();
     let mut active = std::time::Instant::now();
     let mut quiet_ticks = 0u32;
@@ -434,9 +438,9 @@ async fn herdr_socket(mut socket: WebSocket, herdr: herdr::Herdr) {
                 let Some(ref pane)=selected else { continue };
                 if active.elapsed()>PANE_QUIET_AFTER {
                     quiet_ticks=quiet_ticks.wrapping_add(1);
-                    if !quiet_ticks.is_multiple_of(PANE_QUIET_EVERY){continue}
+                    if !quiet_ticks.is_multiple_of(if history {HISTORY_EVERY} else {PANE_QUIET_EVERY}){continue}
                 }
-                match herdr.read(pane).await {
+                match herdr.read_lines(pane,if history {herdr::HISTORY_LINES} else {herdr::PANE_LINES}).await {
                     Ok(mut read)=>{
                         let text=read["text"].as_str().unwrap_or_default();
                         if previous.as_deref()!=Some(text) {
@@ -456,7 +460,9 @@ async fn herdr_socket(mut socket: WebSocket, herdr: herdr::Herdr) {
             event=socket.next()=>match event {
                 Some(Ok(Message::Text(text)))=>{
                     if let Ok(v)=serde_json::from_str::<Value>(&text) {match v["type"].as_str(){
-                        Some("select")=>{selected=v["pane_id"].as_str().filter(|s|s.len()<128).map(str::to_owned);previous=None;active=std::time::Instant::now();},
+                        Some("select")=>{selected=v["pane_id"].as_str().filter(|s|s.len()<128).map(str::to_owned);previous=None;history=false;active=std::time::Instant::now();},
+                        // Deeper history while the phone reads older output; resend at once at the new depth.
+                        Some("history")=>{history=v["deep"].as_bool().unwrap_or(false);previous=None;active=std::time::Instant::now();},
                         Some("input")=>{
                             // Target travels with each key; switching panes never redirects queued input.
                             let result=async {

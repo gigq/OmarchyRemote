@@ -10,6 +10,10 @@ use tokio::{
     time::timeout,
 };
 
+/// Lines sent while following a pane, and while reading its history (Herdr's read maximum).
+pub const PANE_LINES: u32 = 300;
+pub const HISTORY_LINES: u32 = 1000;
+
 #[derive(Clone)]
 pub struct Herdr {
     pub path: PathBuf,
@@ -58,8 +62,12 @@ impl Herdr {
         }
         Ok(snapshot)
     }
+    /// The last `lines` lines of a pane; Herdr returns at most 1000 whatever is asked.
+    pub async fn read_lines(&self, pane: &str, lines: u32) -> Result<Value> {
+        Ok(self.call("pane.read", json!({"pane_id":pane,"source":"recent","lines":lines,"format":"ansi","strip_ansi":false})).await?["read"].clone())
+    }
     pub async fn read(&self, pane: &str) -> Result<Value> {
-        Ok(self.call("pane.read", json!({"pane_id":pane,"source":"recent","lines":300,"format":"ansi","strip_ansi":false})).await?["read"].clone())
+        self.read_lines(pane, PANE_LINES).await
     }
     /// Names of the pane's foreground processes, such as ["fish"] at a prompt or ["nvim"].
     pub async fn foreground(&self, pane: &str) -> Result<Value> {

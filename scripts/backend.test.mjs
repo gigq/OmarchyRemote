@@ -262,6 +262,45 @@ test('a pane change that keeps the text the same length still reaches the phone'
   }
 });
 
+test('reading back loads up to 1000 lines of a pane and following returns to 300', async () => {
+  const created = await herdr('workspace.create', {
+    label: 'Omarchy automated test',
+    cwd: '/tmp',
+    focus: false,
+  });
+  const pane = created.root_pane.pane_id;
+  const c = await connect('herdr/ws');
+  const lines = m => m.read.text.split('\n').length;
+  try {
+    await new Promise(r => setTimeout(r, 1200));
+    c.send({ type: 'select', pane_id: pane });
+    c.send({
+      type: 'input',
+      id: 'fill',
+      pane_id: pane,
+      text: "seq -f 'history line %g' 1 2000",
+      keys: ['Enter'],
+      typed: true,
+    });
+    await c.wait(m => m.type === 'pane' && m.read.text.includes('history line 2000'));
+    await new Promise(r => setTimeout(r, 300));
+    const following = c.messages.filter(m => m.type === 'pane').at(-1);
+    assert.ok(lines(following) <= 300, String(lines(following)));
+    c.messages.length = 0;
+    c.send({ type: 'history', deep: true });
+    const deep = await c.wait(m => m.type === 'pane');
+    assert.equal(lines(deep), 1000);
+    assert.ok(deep.read.text.includes('history line 1100'));
+    c.messages.length = 0;
+    c.send({ type: 'history', deep: false });
+    const back = await c.wait(m => m.type === 'pane');
+    assert.ok(lines(back) <= 300, String(lines(back)));
+  } finally {
+    c.ws.close();
+    await herdr('workspace.close', { workspace_id: created.workspace.workspace_id });
+  }
+});
+
 test('Keys-mode input is typed while messages are pasted', async () => {
   const created = await herdr('workspace.create', {
     label: 'Omarchy automated test',

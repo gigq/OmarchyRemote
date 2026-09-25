@@ -928,7 +928,10 @@
       this.ws = ws;
       this.setStatus('connecting…');
       ws.onopen = () => {
+        // A new connection starts at the normal depth; ask again if reading history.
+        this.deepHistory = false;
         if (this.selected) this.send({ type: 'select', pane_id: this.selected });
+        this.syncHistory();
       };
       ws.onmessage = event => {
         const m = JSON.parse(event.data);
@@ -1161,6 +1164,7 @@
       this.output.scrollLeft = 0;
       this.term.reset();
       this.inputStatus.textContent = '';
+      this.deepHistory = false;
       this.send({ type: 'select', pane_id: id });
       if (id) {
         const pane = this.snapshot?.panes.find(p => p.pane_id === id);
@@ -1252,6 +1256,14 @@
     trackScroll() {
       this.followOutput = this.term.nativeView.follow;
       this.latest.hidden = this.followOutput;
+      this.syncHistory();
+    }
+    // Herdr sends the last 300 lines while following and up to 1000 (its limit) while reading back.
+    syncHistory() {
+      const deep = !!this.selected && !this.followOutput;
+      if (deep === !!this.deepHistory) return;
+      this.deepHistory = deep;
+      this.send({ type: 'history', deep });
     }
     showLatest() {
       this.stopTouchScroll.cancel();
@@ -1259,6 +1271,7 @@
       this.term.scrollToBottom();
       this.output.scrollLeft = 0;
       this.latest.hidden = true;
+      this.syncHistory();
     }
     flushRead() {
       const queued = this.queuedRead;
