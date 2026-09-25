@@ -301,6 +301,35 @@ test('reading back loads up to 1000 lines of a pane and following returns to 300
   }
 });
 
+test('a full-screen program is reported so the phone keeps its layout', async () => {
+  const created = await herdr('workspace.create', {
+    label: 'Omarchy automated test',
+    cwd: '/tmp',
+    focus: false,
+  });
+  const pane = created.root_pane.pane_id;
+  const c = await connect('herdr/ws');
+  const type = (id, text, keys = ['Enter']) =>
+    c.send({ type: 'input', id, pane_id: pane, text, keys, typed: true });
+  try {
+    await new Promise(r => setTimeout(r, 1200));
+    c.send({ type: 'select', pane_id: pane });
+    // Enough output to scroll, so the shell has history that the full-screen program hides.
+    type('fill', "seq -f 'shell line %g' 1 200");
+    const shell = await c.wait(m => m.type === 'pane' && m.read.text.includes('shell line 200'));
+    assert.equal(shell.read.fullscreen, false);
+    type('less', 'seq -f "pager line %g" 1 500 | less');
+    await c.wait(
+      m => m.type === 'pane' && m.read.text.includes('pager line 1') && m.read.fullscreen
+    );
+    type('quit', 'q', []);
+    await c.wait(m => m.type === 'pane' && m.read.fullscreen === false);
+  } finally {
+    c.ws.close();
+    await herdr('workspace.close', { workspace_id: created.workspace.workspace_id });
+  }
+});
+
 test('Keys-mode input is typed while messages are pasted', async () => {
   const created = await herdr('workspace.create', {
     label: 'Omarchy automated test',

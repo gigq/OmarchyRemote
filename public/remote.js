@@ -1235,11 +1235,15 @@
       const i = panes.findIndex(p => p.pane_id === this.selected);
       if (i >= 0 && panes[i + delta]) this.select(panes[i + delta].pane_id);
     }
+    // Full-screen programs such as Vim lay out their own screen, so they are never wrapped.
     applyFit() {
       this.fitButton.textContent = this.fitOutput ? 'Fit' : 'Original';
       this.fitButton.setAttribute('aria-pressed', String(this.fitOutput));
       this.fitButton.setAttribute('aria-label', 'Fit to Phone');
-      this.term.nativeView.setFit(this.fitOutput);
+      this.fitButton.disabled = !!this.fullScreen;
+      this.fitButton.title = this.fullScreen ? 'Full-screen programs keep their own layout' : '';
+      const fit = this.fitOutput && !this.fullScreen;
+      if (fit !== this.term.nativeView.fit) this.term.nativeView.setFit(fit);
     }
     // The composer replaces the prompt row and adopts the attach and ↓ Latest controls.
     placeLatest() {
@@ -1310,6 +1314,13 @@
       this.rendering = true;
       // The native view keeps showing the previous snapshot until this one is fully written.
       this.term.nativeView.hold(true);
+      // Agents that draw full-screen still write prose, which reads better wrapped.
+      const agent = this.snapshot?.panes?.find(p => p.pane_id === pane)?.agent;
+      const fullScreen = !!read.fullscreen && !agent;
+      if (fullScreen !== !!this.fullScreen) {
+        this.fullScreen = fullScreen;
+        this.applyFit();
+      }
       this.term.resize(Math.max(cols, dimensions.cols), Math.max(4, dimensions.rows));
       this.term.reset();
       this.term.write(text.replace(/\r?\n/g, '\r\n'), () => {

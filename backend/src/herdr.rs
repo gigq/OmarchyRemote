@@ -69,6 +69,13 @@ impl Herdr {
     pub async fn read(&self, pane: &str) -> Result<Value> {
         self.read_lines(pane, PANE_LINES).await
     }
+    /// Whether a full-screen program such as Vim or less owns the pane. Herdr does not report the
+    /// alternate screen, but it hides the scrollback and a read is then exactly the screen.
+    pub async fn fullscreen(&self, pane: &str, text: &str) -> Result<bool> {
+        let scroll = &self.call("pane.get", json!({"pane_id":pane})).await?["pane"]["scroll"];
+        let rows = scroll["viewport_rows"].as_u64().unwrap_or(u64::MAX);
+        Ok(scroll["max_offset_from_bottom"] == 0 && text.lines().count() as u64 == rows)
+    }
     /// Names of the pane's foreground processes, such as ["fish"] at a prompt or ["nvim"].
     pub async fn foreground(&self, pane: &str) -> Result<Value> {
         let info = self

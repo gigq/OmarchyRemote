@@ -447,6 +447,7 @@ async fn herdr_socket(mut socket: WebSocket, herdr: herdr::Herdr) {
                             previous=Some(text.to_owned());
                             // The client draws a cursor only for a shell prompt; see HerdrApp.
                             read["foreground"]=herdr.foreground(pane).await.unwrap_or(Value::Null);
+                            read["fullscreen"]=json!(herdr.fullscreen(pane,previous.as_deref().unwrap_or_default()).await.unwrap_or(false));
                             if !send(&mut socket,json!({"type":"pane","pane_id":pane,"read":read})).await{break}
                         }
                     },
