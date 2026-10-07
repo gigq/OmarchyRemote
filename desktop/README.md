@@ -39,3 +39,5 @@ npm run dist           # the current platform's targets: dmg on macOS, NSIS inst
 ```
 
 Build each platform on that platform. macOS and Windows builds are unsigned until you configure signing for electron-builder with your own identity, kept out of the repository.
+
+Herdr’s folder button uses the OS default file manager when the selected server’s `/api/state` host ID matches the local backend’s `~/.local/share/omarchy-remote/settings.sqlite3`. The database is read-only and never created by the client. Missing identities, remote hosts, non-directory paths, and OS opener failures fall back to the in-app Files view. The `shellFolders` bridge is available only to the trusted host shell, not embedded websites.

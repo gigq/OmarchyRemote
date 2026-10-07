@@ -45,7 +45,7 @@ On an iPad, Omarchy Remote uses the desk layout: tiled windows, workspaces and h
 
 Herdr supports host-transcribed dictation with a microphone button or **⌘⌃X**. It defaults to Voxtype; host administrators can configure another transcription command. See [dictation setup](docs/dictation.md). Tap the microphone to talk in **Voice** mode, with a large Talk button and recordings sent automatically; hold it (or hold Talk) to also have new Codex or Claude replies read aloud with speech generated on the host (Piper by default, or the bundled Kokoro and Qwen3-TTS adapters). See [Voice conversations](docs/dictation.md#voice-conversations).
 
-Herdr’s sidebar search, new-pane and folder controls share a uniform icon style; the slash button focuses search. Herdr’s folder button opens Files directly in the current pane’s directory, for browsing and previewing files mentioned by an agent.
+Herdr’s sidebar search, new-pane and folder controls share a uniform icon style; the slash button focuses search. Herdr’s folder button opens the desktop’s default file manager in the current pane’s directory when the desktop client is connected to its own host. Mobile, browser clients, and connections to other hosts open in-app Files instead, for browsing and previewing files mentioned by an agent.
 
 Herdr’s wide-mode sidebar can be resized by dragging its divider, or hidden with the sidebar button. The same button in the pane header restores it. Width and visibility are remembered per device; phone navigation stays unchanged. Focus the divider and use arrow keys to resize, or double-click it to restore the default width.
 

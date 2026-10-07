@@ -915,11 +915,11 @@
       this.browseButton = button('', () => {
         const pane = this.snapshot?.panes.find(p => p.pane_id === this.selected);
         const path = pane?.foreground_cwd || pane?.cwd;
-        if (path) HyprlandApps.get('files')?.provider?.openAt(this.bridge, path);
+        if (path) HyprlandApps.get('files')?.provider?.openFolder(this.bridge, path);
       });
       this.browseButton.classList.add('herdr-browse', 'keycap', 'herdr-toolbar-key');
-      this.browseButton.setAttribute('aria-label', 'Open pane folder in Files');
-      this.browseButton.title = 'Open pane folder in Files';
+      this.browseButton.setAttribute('aria-label', 'Open pane folder');
+      this.browseButton.title = 'Open pane folder';
       this.browseButton.innerHTML = toolbarIcon(
         'M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z'
       );

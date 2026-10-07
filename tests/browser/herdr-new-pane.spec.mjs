@@ -199,8 +199,26 @@ for (const viewport of [
   });
 }
 
-for (const width of [402, 1194]) {
-  test(`open the selected pane folder in Files at ${width}px`, async ({ page: p }) => {
+for (const [width, nativeResult] of [[402], [1194], [1194, true], [1194, false], [1194, 'error']]) {
+  test(`open the selected pane folder at ${width}px (native: ${nativeResult})`, async ({
+    page: p,
+  }) => {
+    if (nativeResult !== undefined) {
+      await p.addInitScript(result => {
+        window.folderRequests = [];
+        window.webkit = {
+          messageHandlers: {
+            shellFolders: {
+              postMessage: async body => {
+                window.folderRequests.push(body);
+                if (result === 'error') throw new Error('Opener unavailable');
+                return { opened: result };
+              },
+            },
+          },
+        };
+      }, nativeResult);
+    }
     await p.setViewportSize({ width, height: 874 });
     await p.route('**/api/**', r => r.abort());
     await p.route(
@@ -219,7 +237,7 @@ for (const width of [402, 1194]) {
     await p.keyboard.press('Meta+Shift+A');
     const herdr = p.locator('#remote-herdr-app');
     await herdr.locator('.herdr-pane').click();
-    const folder = herdr.getByRole('button', { name: 'Open pane folder in Files' });
+    const folder = herdr.getByRole('button', { name: 'Open pane folder' });
     await expect(folder).toBeVisible();
     if (width > 600) {
       const controls = herdr.locator('.herdr-search-field .herdr-toolbar-key');
@@ -244,6 +262,16 @@ for (const width of [402, 1194]) {
       await expect(herdr.getByRole('searchbox', { name: 'Search panes' })).toBeFocused();
     }
     await folder.click();
+    if (nativeResult !== undefined) {
+      await expect
+        .poll(() => p.evaluate(() => window.folderRequests))
+        .toEqual([{ path: home + '/project' }]);
+    }
+    if (nativeResult === true) {
+      await expect(p.locator('#remote-files-app .files-path')).toHaveCount(0);
+      await expect(herdr).toBeVisible();
+      return;
+    }
     const files = p.locator('#remote-files-app');
     await expect(files.locator('.files-path')).toHaveAttribute('data-path', home + '/project');
     await files.getByRole('button', { name: 'Home folder', exact: true }).click();

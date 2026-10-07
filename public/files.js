@@ -1392,6 +1392,15 @@
   window.HostFilesApp = FilesApp;
   window.HyprlandApps?.provide('files', {
     multiple: true,
+    async openFolder(bridge, path) {
+      const native = window.webkit?.messageHandlers?.shellFolders;
+      if (native) {
+        try {
+          if ((await native.postMessage({ path }))?.opened) return;
+        } catch {}
+      }
+      this.openAt(bridge, path);
+    },
     // Both a fresh Files window and an existing one start at the requested folder.
     // Saved path also carries this handoff into a standalone app window.
     openAt(bridge, path) {

@@ -23,6 +23,7 @@ import { register } from './keys.js';
 import * as launchers from './launchers.js';
 import { Pages, website } from './pages.js';
 import { Store } from './store.js';
+import { openHostFolder } from './folders.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SCHEME = 'omarchy-app';
@@ -204,6 +205,14 @@ class ShellWindow {
         return true;
       case 'shellFiles':
         return this.saveFile(body || {});
+      case 'shellFolders':
+        return {
+          opened: await openHostFolder(body?.path, {
+            selected: () => this.selected,
+            fetch: (url, options) => this.desktop.shellSession.fetch(url, options),
+            openPath: folder => desktop.openPath(folder),
+          }),
+        };
       case 'shellWindows':
         return this.desktop.windowAction(body || {});
       case 'weatherDevice':

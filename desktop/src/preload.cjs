@@ -25,6 +25,7 @@ if (window.top === window) {
           'weatherDevice',
           'browserDevice',
           'shellWindows',
+          'shellFolders',
         ])
           handlers[channel] = Object.freeze({ postMessage: body => request(channel, body) });
         window.webkit = Object.freeze({ messageHandlers: Object.freeze(handlers) });
