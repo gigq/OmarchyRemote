@@ -79,29 +79,35 @@
   align-items: start;
   gap: 10px;
 }
+/* A card takes its state's color in its outline and header band, not an edge stripe. */
 .muster-project {
+  --muster-tint: var(--muster-idle);
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--theme-border);
-  border-left: 3px solid var(--muster-idle);
+  border: 1px solid color-mix(in srgb, var(--muster-tint) 22%, var(--theme-border));
   border-radius: 12px;
   background: var(--theme-surface-raised);
   overflow: hidden;
 }
 .muster-project[data-state='question'] {
-  border-left-color: var(--muster-question);
+  --muster-tint: var(--muster-question);
+  border-color: color-mix(in srgb, var(--muster-tint) 55%, var(--theme-border));
 }
 .muster-project[data-state='ready'] {
-  border-left-color: var(--muster-ready);
+  --muster-tint: var(--muster-ready);
 }
 .muster-project[data-state='working'] {
-  border-left-color: var(--muster-working);
+  --muster-tint: var(--muster-working);
 }
 .muster-project-head {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 6px 6px 6px 12px;
+  background: color-mix(in srgb, var(--muster-tint) 10%, transparent);
+}
+.muster-project[data-state='idle'] .muster-project-head {
+  background: transparent;
 }
 .muster-project-head .muster-icon-button {
   width: 30px;
