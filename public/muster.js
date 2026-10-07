@@ -13,8 +13,10 @@
     review: 'To review',
     quiet: 'Quiet',
   };
-  // The board's columns, in order; a project sits in the first its threads reach.
-  const ORDER = ['question', 'working', 'waiting', 'review', 'quiet'];
+  // The board's columns, in order. A project sits in the column of its most pressing tab, which
+  // the host decides: a question, then work in progress, so a project still working stays under
+  // Working even with a tab to review.
+  const ORDER = ['question', 'review', 'working', 'waiting', 'quiet'];
   const COUNTED = {
     question: 'needs you',
     working: 'working',

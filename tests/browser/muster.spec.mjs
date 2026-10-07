@@ -163,7 +163,7 @@ test('the board groups projects by what they need, each with its tabs', async ({
   const sections = app.locator('.muster-section');
   await expect(sections.locator('.muster-section-head')).toHaveText(['Needs you1', 'Working1']);
   await expect(cards.locator('.muster-project-name')).toHaveText(['PaperDiorama', 'NYCBevy']);
-  await expect(app.locator('.muster-summary')).toHaveText('1 needs you · 1 working · 1 to review');
+  await expect(app.locator('.muster-summary')).toHaveText('1 needs you · 1 to review · 1 working');
   const paper = app.getByRole('region', { name: 'Needs you' }).locator('.muster-project');
   await expect(paper.locator('.muster-row')).toHaveCount(2);
   await expect(paper.locator('.muster-row-question')).toHaveText('Which color do you prefer?');
@@ -201,8 +201,8 @@ test('a wide board puts each state in its own column', async ({ page }) => {
   await expect(sections).toHaveCount(3);
   await expect(sections.locator('.muster-section-head > span:nth-child(2)')).toHaveText([
     'Needs you',
-    'Working',
     'To review',
+    'Working',
   ]);
   const boxes = await sections.evaluateAll(all =>
     all.map(section => section.getBoundingClientRect().toJSON())
@@ -523,7 +523,7 @@ test('the board tells waiting from working, and says what kind of attention', as
     'Waiting',
     'Quiet',
   ]);
-  await expect(app.locator('.muster-summary')).toHaveText('1 needs you · 1 waiting · 1 to review');
+  await expect(app.locator('.muster-summary')).toHaveText('1 needs you · 1 to review · 1 waiting');
   await expect(app.locator('.muster-row-badge')).toHaveText([
     'Approval',
     'Unreadable',
