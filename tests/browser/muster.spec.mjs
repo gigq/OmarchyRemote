@@ -241,7 +241,38 @@ test('a message goes to a thread that is not waiting, and its prose shows', asyn
   await expect
     .poll(() => state.sent)
     .toEqual([{ pane: 'wB:p2', text: 'Also update the changelog' }]);
-  await expect(app.locator('.muster-thread-status')).toHaveText('Sent');
+  // The message shows at once; the old answer folds away as the previous reply.
+  await expect(app.locator('.muster-asked p')).toHaveText('Also update the changelog');
+  const previous = app.locator('.muster-previous');
+  await expect(previous.locator('summary')).toHaveText('Previous reply');
+  await expect(previous).not.toHaveAttribute('open');
+  await expect(app.locator('.muster-body > .muster-said')).toHaveCount(0);
+  await expect(app.locator('.muster-working')).toHaveText('Working on your message…');
+  await page.screenshot({ path: 'artifacts/browser/muster-sent.png' });
+  // The log catches up, then the agent's reply arrives.
+  state.details['wB:p2'] = {
+    prompt: 'Also update the changelog',
+    answered: false,
+    working: true,
+    paragraphs: [{ text: 'Updating the changelog now.' }],
+  };
+  await expect(app.locator('.muster-body > .muster-said')).toHaveText(
+    'Updating the changelog now.'
+  );
+  await expect(app.locator('.muster-working')).toHaveCount(0);
+  await expect(previous).toContainText('README');
+  // The board shows the message until there is a reply, not the old answer.
+  state.projects[1].threads[1] = {
+    ...state.projects[1].threads[1],
+    prompt: 'Also update the changelog',
+    answered: false,
+    latest: '',
+  };
+  await app.getByRole('button', { name: 'Muster' }).click();
+  await expect(app.locator('.muster-row[data-pane="wB:p2"] .muster-row-latest')).toHaveText(
+    'You: Also update the changelog'
+  );
+  await app.locator('.muster-row[data-pane="wB:p2"]').click();
   // Switching tabs within the project.
   await app.locator('.muster-tab').first().click();
   await expect(app.getByLabel('Question')).toBeVisible();

@@ -310,6 +310,8 @@ struct Transcript {
     updated: Value,
     /// How many messages the person has sent, counting `prompt`.
     prompts: usize,
+    /// Whether `answer` replies to `prompt`, rather than to a message before it.
+    answered: bool,
 }
 /// What a person typed: plain text, or the text blocks of a message. Text the agent injects,
 /// such as `<system-reminder>` or `<environment_context>`, starts with a tag and is skipped.
@@ -346,6 +348,7 @@ impl Transcript {
             {
                 self.prompt = text;
                 self.prompts += 1;
+                self.answered = false;
             }
             if p["type"] == "thread_goal_updated"
                 && let Some(goal) = p["goal"]["objective"].as_str()
@@ -408,6 +411,7 @@ impl Transcript {
                         self.paragraphs
                             .put(format!("{}:final", self.turn), text.to_owned(), true);
                         self.answer = json!({"key":p["turn_id"],"text":text});
+                        self.answered = true;
                     }
                     self.candidate.clear();
                 }
@@ -442,6 +446,7 @@ impl Transcript {
                     if let Some(text) = typed(&m["content"]) {
                         self.prompt = text;
                         self.prompts += 1;
+                        self.answered = false;
                     }
                     self.turn = v.get("uuid").cloned().unwrap_or(json!(self.line));
                     self.updates.clear();
@@ -498,11 +503,12 @@ impl Transcript {
             }
             self.candidate.push_str(&text);
             self.answer = json!({"key":id,"text":self.candidate});
+            self.answered = true;
             self.active = false;
         }
     }
     fn value(&self) -> Value {
-        json!({"answer":self.answer,"updates":self.updates,"paragraphs":self.paragraphs.values(),"working":self.active,"background":self.background,"prompt":self.prompt,"title":self.title,"updated":self.updated,"prompts":self.prompts})
+        json!({"answer":self.answer,"updates":self.updates,"paragraphs":self.paragraphs.values(),"working":self.active,"background":self.background,"prompt":self.prompt,"title":self.title,"updated":self.updated,"prompts":self.prompts,"answered":self.answered})
     }
     /// A background task starts when a tool result names it: a background command's
     /// `backgroundTaskId`, a Monitor's `taskId`, or a background agent's `agentId`. It ends with
@@ -1418,6 +1424,8 @@ mod tests {
                 .join("\n"),
         );
         assert_eq!(value["prompt"], "Also add a test");
+        // No reply has come since the last message.
+        assert_eq!(value["answered"], false);
         assert_eq!(value["title"], "Login bug fix");
         assert_eq!(value["updated"], "2026-10-07T10:03:00Z");
         let codex = [
@@ -1545,6 +1553,22 @@ mod tests {
             "First paragraph\n\nSecond paragraph"
         );
         assert_eq!(parse("claude", &log)["working"], false);
+        // A new message makes that answer the previous one, until the next reply.
+        let asked = format!(
+            "{log}\n{}",
+            json!({"type":"user","message":{"content":"And another thing"}})
+        );
+        assert_eq!(parse("claude", &asked)["answered"], false);
+        assert_eq!(
+            parse("claude", &asked)["answer"]["text"],
+            "First paragraph\n\nSecond paragraph"
+        );
+        let replied = format!(
+            "{asked}\n{}",
+            json!({"type":"assistant","message":{"id":"three","stop_reason":"end_turn","content":[{"type":"text","text":"Done"}]}})
+        );
+        assert_eq!(parse("claude", &replied)["answered"], true);
+        assert_eq!(parse("claude", &replied)["answer"]["text"], "Done");
     }
     fn log(rows: &[Value]) -> String {
         rows.iter()

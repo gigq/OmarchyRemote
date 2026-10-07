@@ -260,7 +260,11 @@
         row.append(q);
       } else if (thread.state === 'question')
         row.append(node('span', 'muster-row-question', 'Waiting on you in Herdr'));
-      const text = thread.error ? 'Open in Herdr to read this conversation.' : thread.latest;
+      // Until the agent replies, a thread shows the message it was just sent.
+      const text = thread.error
+        ? 'Open in Herdr to read this conversation.'
+        : thread.latest ||
+          (thread.answered === false && thread.prompt ? 'You: ' + thread.prompt : '');
       if (text) row.append(node('span', 'muster-row-latest', text));
       const more = waiting(thread);
       if (more) row.append(node('span', 'muster-row-meta', more));
@@ -352,8 +356,28 @@
         })
       );
     }
-    renderThread() {
+    // A message sent here shows at once, unanswered, until the agent's log has it.
+    current() {
       const thread = this.thread;
+      const sent = this.sent;
+      if (!sent || sent.pane !== thread.pane_id) return thread;
+      if (thread.prompt?.trim() === sent.text || Date.now() - sent.at > 60000) {
+        this.sent = null;
+        return thread;
+      }
+      return {
+        ...thread,
+        prompt: sent.text,
+        answered: false,
+        paragraphs: [],
+        updates: [],
+        working: true,
+        state: thread.state === 'question' ? 'question' : 'working',
+        earlier: (thread.earlier || 0) + (thread.prompt ? 1 : 0),
+      };
+    }
+    renderThread() {
+      const thread = this.current();
       const project = this.project();
       this.threadTitle.replaceChildren(
         node('strong', '', project?.label || 'Thread'),
@@ -379,6 +403,19 @@
       const parts = [];
       if (thread.title) parts.push(node('h3', 'muster-thread-heading', thread.title));
       if (thread.earlier > 0) parts.push(this.recapCard(thread));
+      // The reply to the message before yours stays at hand, folded away and marked as past.
+      if (thread.answered === false && thread.answer?.text) {
+        const key = `${thread.pane_id}:${thread.earlier}`;
+        const previous = node('details', 'muster-previous');
+        previous.open = this.previousOpen === key;
+        previous.addEventListener('toggle', () => {
+          this.previousOpen = previous.open ? key : null;
+        });
+        const said = node('div', 'muster-said');
+        markdown(said, thread.answer.text);
+        previous.append(node('summary', '', 'Previous reply'), said);
+        parts.push(previous);
+      }
       if (thread.prompt) {
         const asked = node('details', 'muster-asked');
         asked.open = thread.prompt.length < 400;
@@ -392,6 +429,12 @@
         parts.push(said);
       } else if (thread.error)
         parts.push(node('p', 'muster-note', 'Muster cannot read this conversation.'));
+      else if (thread.answered === false && !question && !thread.screen)
+        parts.push(
+          thread.working || thread.state === 'working'
+            ? node('p', 'muster-note muster-working', 'Working on your message…')
+            : node('p', 'muster-note', 'No reply to this message yet.')
+        );
       for (const task of thread.background || [])
         parts.push(node('p', 'muster-task', 'Background · ' + task.description));
       if (question) parts.push(this.questionCard(question));
@@ -461,12 +504,14 @@
     }
     // What the agent said in its latest turn: the answer once it is done, or its prose so far.
     prose(thread) {
-      if (!thread.working && thread.answer?.text) return thread.answer.text;
+      // An answer to an earlier message is not this turn's; it shows as the previous reply.
+      const current = thread.answered !== false;
+      if (current && !thread.working && thread.answer?.text) return thread.answer.text;
       const paragraphs = (thread.paragraphs || []).map(p => p.text);
       if (paragraphs.length) return paragraphs.join('\n\n');
       const updates = (thread.updates || []).map(u => u.text);
       if (updates.length) return updates.join('\n\n');
-      return thread.answer?.text || thread.latest || '';
+      return current ? thread.answer?.text || thread.latest || '' : '';
     }
     questionCard(question) {
       const card = node('section', 'muster-question');
@@ -589,7 +634,13 @@
         ? this.answer({ menu: question.id, text })
         : request(`/panes/${encodeURIComponent(pane)}/send`, { text }).then(
             () => {
-              this.threadStatus.textContent = 'Sent';
+              this.threadStatus.textContent = '';
+              if (pane === this.pane && this.thread) {
+                this.sent = { pane, text, at: Date.now() };
+                this.threadSignature = null;
+                this.renderThread();
+                this.body.scrollTop = this.body.scrollHeight;
+              }
               setTimeout(() => this.load(), 500);
               return true;
             },

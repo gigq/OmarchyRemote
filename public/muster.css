@@ -371,6 +371,20 @@
   margin: 0;
   font-size: 1.1em;
 }
+.muster-previous {
+  opacity: 0.6;
+}
+.muster-previous summary {
+  font-size: 11px;
+  color: var(--theme-secondary);
+  cursor: pointer;
+}
+.muster-previous[open] {
+  opacity: 0.75;
+}
+.muster-previous .muster-said {
+  margin-top: 6px;
+}
 .muster-earlier {
   padding: 6px 10px;
   border: 1px solid var(--theme-border);
@@ -398,7 +412,8 @@
 .muster-recap ul {
   padding-left: 1.4em;
 }
-.muster-summarizing {
+.muster-summarizing,
+.muster-working {
   animation: muster-pulse 1.4s ease-in-out infinite;
 }
 .muster-asked {

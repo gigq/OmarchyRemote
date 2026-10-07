@@ -248,7 +248,8 @@ fn clip(text: &str, limit: usize) -> String {
     format!("{}…", cut.trim_end())
 }
 /// The latest thing the agent said: its answer when a turn is done, else its newest paragraph or
-/// progress note.
+/// progress note. An answer to a message before the person's last one is not current, so a
+/// thread just sent a message has nothing to show until the agent replies.
 fn latest(thread: &Value) -> String {
     let working = thread["working"] == true;
     let last = |key: &str| {
@@ -258,13 +259,15 @@ fn latest(thread: &Value) -> String {
             .and_then(|m| m["text"].as_str())
             .map(str::to_owned)
     };
-    let answer = thread["answer"]["text"].as_str().map(str::to_owned);
+    let progress = last("paragraphs").or_else(|| last("updates"));
+    let answer = thread["answer"]["text"]
+        .as_str()
+        .filter(|_| thread["answered"] != false)
+        .map(str::to_owned);
     if working {
-        last("paragraphs").or_else(|| last("updates")).or(answer)
+        progress.or(answer)
     } else {
-        answer
-            .or_else(|| last("paragraphs"))
-            .or_else(|| last("updates"))
+        answer.or(progress)
     }
     .unwrap_or_default()
 }
@@ -326,6 +329,8 @@ async fn summary(app: &App, pane: &Value, agent: &Value, tabs: &Value, full: boo
         "updated": thread["updated"],
         // Messages before the last one, which the thread view can summarize.
         "earlier": thread["prompts"].as_u64().unwrap_or(0).saturating_sub(1),
+        // False once the person has sent a message the agent has not answered yet.
+        "answered": thread["answered"] != false,
         "background": background,
         "question": question.as_ref().map(Menu::json),
         "error": thread["error"],
@@ -929,5 +934,10 @@ Enter to select · Tab/Arrow keys to navigate · Esc to cancel";
         assert_eq!(latest(&working), "Now this");
         let done = json!({"working":false,"answer":{"text":"Done: all fixed"},"paragraphs":[{"text":"Now this"}]});
         assert_eq!(latest(&done), "Done: all fixed");
+        // The answer to an earlier message is not the latest once the person writes again.
+        let asked = json!({"working":true,"answered":false,"answer":{"text":"Done: all fixed"},"paragraphs":[]});
+        assert_eq!(latest(&asked), "");
+        let replying = json!({"working":true,"answered":false,"answer":{"text":"Done: all fixed"},"paragraphs":[{"text":"On it"}]});
+        assert_eq!(latest(&replying), "On it");
     }
 }
