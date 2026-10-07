@@ -620,7 +620,7 @@ fn recap_source(exchanges: &[(bool, String)]) -> String {
     parts.join("\n\n")
 }
 const RECAP_PROMPT: &str = "You write recaps of conversations between a person and a coding agent, so the person can pick a thread back up after time away. You are not a participant: never continue the conversation, answer it, or speak as the agent.";
-const RECAP_REQUEST: &str = "Recap the transcript above for the person, writing to them (\"You asked…\"). Cover the goal, what was decided and done, and anything left open. Their latest message is not included. At most 120 words: two short paragraphs or a few bullets, in Markdown. Reply with the recap only.";
+const RECAP_REQUEST: &str = "Recap the transcript above for the person, writing to them (\"You asked…\"): the goal, what was decided and done, and what is still open. Their latest message is not included. Hard limit: 80 words. No heading, no preamble; at most two short paragraphs or four bullets, in Markdown. Reply with the recap only.";
 static RECAPS: LazyLock<Mutex<Option<HashMap<String, String>>>> =
     LazyLock::new(|| Mutex::new(None));
 static SUMMARIZING: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
@@ -659,6 +659,11 @@ async fn summarize(source: &str) -> anyhow::Result<String> {
     let model = std::env::var("OMARCHY_MUSTER_SUMMARY_MODEL").unwrap_or_else(|_| "haiku".into());
     let mut child = tokio::process::Command::new(apps::resolve_program("claude")?)
         .args(["-p", "--no-session-persistence", "--tools", ""])
+        // No MCP servers: starting them took most of a summary's time. (`--bare` would skip more,
+        // but also the stored Claude login, which is all the service has.)
+        .arg("--strict-mcp-config")
+        // A recap needs no thinking, which otherwise was most of its output and its time.
+        .env("MAX_THINKING_TOKENS", "0")
         .args(["--output-format", "json", "--model"])
         .arg(model)
         .arg("--system-prompt")
@@ -667,19 +672,23 @@ async fn summarize(source: &str) -> anyhow::Result<String> {
         .current_dir(std::env::temp_dir())
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
         .kill_on_drop(true)
         .spawn()?;
     let mut stdin = child.stdin.take().unwrap();
     let mut stdout = child.stdout.take().unwrap();
+    let mut stderr = child.stderr.take().unwrap();
     // The transcript is quoted, with the request after it, so it reads as material to recap
     // rather than a conversation to join.
     let message = format!("<transcript>\n{source}\n</transcript>\n\n{RECAP_REQUEST}");
     tokio::time::timeout(Duration::from_secs(120), async move {
         stdin.write_all(message.as_bytes()).await?;
         drop(stdin);
-        let mut output = String::new();
-        stdout.read_to_string(&mut output).await?;
+        let (mut output, mut errors) = (String::new(), String::new());
+        tokio::try_join!(
+            stdout.read_to_string(&mut output),
+            stderr.read_to_string(&mut errors)
+        )?;
         let ok = child.wait().await?.success();
         // Only the JSON result counts; a version manager may print a line before it.
         let result = output
@@ -687,10 +696,11 @@ async fn summarize(source: &str) -> anyhow::Result<String> {
             .rev()
             .find_map(|line| serde_json::from_str::<Value>(line).ok())
             .unwrap_or_default();
-        anyhow::ensure!(
-            ok && result["is_error"] != true,
-            "The summary could not be made"
-        );
+        if !ok || result["is_error"] == true {
+            let detail = result["result"].as_str().unwrap_or(errors.trim());
+            eprintln!("muster: summary failed: {}", clip(detail, 500));
+            anyhow::bail!("The summary could not be made");
+        }
         let summary = result["result"].as_str().unwrap_or_default().trim();
         anyhow::ensure!(!summary.is_empty(), "The summary came back empty");
         Ok(summary.to_owned())
