@@ -410,3 +410,41 @@ test('the work between the agent’s paragraphs shows as one gray line', async (
   state.details['wA:p1'] = { ...state.details['wA:p1'], working: false };
   await expect(lines).toHaveCount(2);
 });
+
+test('a thread’s folder opens in Files', async ({ page }) => {
+  const { app, state } = await setup(page);
+  state.details['wB:p2'] = { cwd: '/home/qa/git/PaperDiorama' };
+  await app.locator('.muster-row[data-pane="wB:p2"]').click();
+  await app.getByRole('button', { name: 'Open thread folder' }).click();
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('omarchy-files-path')))
+    .toBe('/home/qa/git/PaperDiorama');
+  await expect(page.locator('#remote-files-app')).toBeVisible();
+});
+
+test('on the host’s own desktop a thread’s folder opens in its file manager', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.opened = [];
+    window.webkit = {
+      messageHandlers: {
+        shellFolders: {
+          postMessage: async message => {
+            window.opened.push(message.path);
+            return { opened: true };
+          },
+        },
+      },
+    };
+  });
+  const { app, state } = await setup(page);
+  state.details['wB:p2'] = { cwd: '/home/qa/git/PaperDiorama' };
+  await app.locator('.muster-row[data-pane="wB:p2"]').click();
+  await app.getByRole('button', { name: 'Open thread folder' }).click();
+  await expect
+    .poll(() => page.evaluate(() => window.opened))
+    .toEqual(['/home/qa/git/PaperDiorama']);
+  expect(await page.evaluate(() => localStorage.getItem('omarchy-files-path'))).toBeNull();
+  // A thread without a folder has no folder button.
+  await app.locator('.muster-tab').first().click();
+  await expect(app.getByRole('button', { name: 'Open thread folder' })).toBeHidden();
+});
