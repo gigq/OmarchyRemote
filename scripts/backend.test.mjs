@@ -340,7 +340,25 @@ test('a message naming an image presses Return after the paste, not with it', as
   const input = body => api(`herdr/panes/${encodeURIComponent(pane)}/input`, body);
   const screen = async () => (await api(`herdr/panes/${encodeURIComponent(pane)}`)).text;
   try {
-    await new Promise(r => setTimeout(r, 1200));
+    // A new shell can print other startup output (a version manager's banner) and take a few
+    // seconds to draw its prompt when the host is busy; typed before then, `cat` is lost. Wait for
+    // a last line that ends like a prompt and has stopped changing.
+    const prompt = text => {
+      const last = text
+        .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+        .split('\n')
+        .map(l => l.trimEnd())
+        .filter(Boolean)
+        .at(-1);
+      return /[❯$#%>]$/.test(last || '') ? last : null;
+    };
+    let ready = null;
+    for (let i = 0; i < 80; i++) {
+      const shown = prompt(await screen());
+      if (shown && shown === ready) break;
+      ready = shown;
+      await new Promise(r => setTimeout(r, 150));
+    }
     await input({ text: 'cat', keys: ['Enter'], typed: true });
     await new Promise(r => setTimeout(r, 600));
     // A shell shows no attachments, so Return follows once the screen settles.
