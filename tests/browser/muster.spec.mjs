@@ -146,20 +146,57 @@ async function setup(page, { width = 402, height = 874 } = {}) {
   return { app, state };
 }
 
-test('the board puts questions first and groups each project’s tabs', async ({ page }) => {
+test('the board groups projects by what they need, each with its tabs', async ({ page }) => {
   const { app } = await setup(page);
   const cards = app.locator('.muster-project');
   await expect(cards).toHaveCount(2);
-  // The backend orders projects; hidden ones stay off the board.
-  await expect(cards.locator('.muster-project-name')).toHaveText(['NYCBevy', 'PaperDiorama']);
+  // A section per state, questions first; hidden projects stay off the board.
+  const sections = app.locator('.muster-section');
+  await expect(sections.locator('.muster-section-head')).toHaveText(['Needs you1', 'Working1']);
+  await expect(cards.locator('.muster-project-name')).toHaveText(['PaperDiorama', 'NYCBevy']);
   await expect(app.locator('.muster-summary')).toHaveText('1 need you · 1 ready · 1 working');
-  const paper = cards.nth(1);
+  const paper = app.getByRole('region', { name: 'Needs you' }).locator('.muster-project');
   await expect(paper.locator('.muster-row')).toHaveCount(2);
   await expect(paper.locator('.muster-row-question')).toHaveText('Which color do you prefer?');
   await expect(paper.locator('.muster-row-tab')).toHaveText(['1 · claude', '2 · claude']);
-  await expect(cards.nth(0).locator('.muster-row-meta')).toHaveText('waiting on 1 background task');
+  await expect(app.getByRole('region', { name: 'Working' }).locator('.muster-row-meta')).toHaveText(
+    'waiting on 1 background task'
+  );
+  // On a phone the sections stack.
+  const [first, second] = await sections.evaluateAll(all =>
+    all.map(section => section.getBoundingClientRect().toJSON())
+  );
+  expect(second.top).toBeGreaterThan(first.bottom - 1);
   await page.waitForTimeout(500);
   await page.screenshot({ path: 'artifacts/browser/muster-board.png' });
+});
+
+test('a wide board puts each state in its own column', async ({ page }) => {
+  const { app, state } = await setup(page, { width: 1400, height: 900 });
+  // A third state, so three columns.
+  state.projects.push({
+    workspace_id: 'wD',
+    label: 'Docs',
+    hidden: false,
+    state: 'ready',
+    updated: '2026-10-07T09:00:00Z',
+    threads: [thread('wD:p1', 'ready', { title: 'Release notes', latest: 'Done.' })],
+  });
+  const sections = app.locator('.muster-section');
+  await expect(sections).toHaveCount(3);
+  await expect(sections.locator('.muster-section-head > span:nth-child(2)')).toHaveText([
+    'Needs you',
+    'Ready',
+    'Working',
+  ]);
+  const boxes = await sections.evaluateAll(all =>
+    all.map(section => section.getBoundingClientRect().toJSON())
+  );
+  expect(boxes[1].top).toBeCloseTo(boxes[0].top, 0);
+  expect(boxes[2].top).toBeCloseTo(boxes[0].top, 0);
+  expect(boxes[1].left).toBeGreaterThan(boxes[0].right - 1);
+  expect(boxes[2].left).toBeGreaterThan(boxes[1].right - 1);
+  await page.screenshot({ path: 'artifacts/browser/muster-board-wide.png' });
 });
 
 test('projects hide from the board and come back', async ({ page }) => {

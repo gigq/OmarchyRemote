@@ -5,6 +5,10 @@
   flex: 1;
   min-height: 0;
 }
+/* The board's own width decides its layout, so a narrow desk tile stacks like a phone. */
+.muster-board {
+  container-type: inline-size;
+}
 .muster-app {
   --muster-question: var(--theme-red);
   --muster-ready: var(--theme-accent);
@@ -72,6 +76,36 @@
   flex-direction: column;
   gap: 10px;
   padding: 0 8px 12px;
+}
+.muster-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.muster-section-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 8px;
+  padding: 0 2px 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--theme-border) 70%, transparent);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--theme-secondary);
+}
+.muster-section-count {
+  margin-left: auto;
+  font-weight: 400;
+}
+/* Wide: one column per state, like a board, each holding as many cards across as it fits. */
+@container (min-width: 900px) {
+  .muster-sections {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(280px, 1fr);
+    align-items: start;
+    gap: 14px;
+  }
 }
 .muster-projects {
   display: grid;

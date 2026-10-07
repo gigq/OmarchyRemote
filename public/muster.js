@@ -113,8 +113,8 @@
       bar.append(heading);
       this.notice = node('div', 'muster-notice');
       this.notice.hidden = true;
-      this.list = node('div', 'muster-projects');
-      this.list.setAttribute('role', 'list');
+      // A section for each state, stacked on a phone and side by side in a wide window.
+      this.list = node('div', 'muster-sections');
       this.hiddenToggle = button('', () => this.toggleHidden(), 'muster-hidden-toggle');
       this.hiddenToggle.setAttribute('aria-expanded', 'false');
       this.hiddenList = node('div', 'muster-hidden');
@@ -217,7 +217,12 @@
       const signature = JSON.stringify(this.projects);
       if (signature !== this.signature) {
         this.signature = signature;
-        this.list.replaceChildren(...shown.map(project => this.card(project)));
+        this.list.replaceChildren(
+          ...['question', 'ready', 'working', 'idle']
+            .map(state => [state, shown.filter(project => project.state === state)])
+            .filter(([, projects]) => projects.length)
+            .map(([state, projects]) => this.section(state, projects))
+        );
         if (!shown.length)
           this.list.append(
             node(
@@ -252,6 +257,22 @@
       const badges = this.bridge.logic.state.badges || {};
       if ((badges.muster || 0) !== questions)
         this.bridge.logic.set({ badges: { ...badges, muster: questions } });
+    }
+    section(state, projects) {
+      const section = node('section', 'muster-section');
+      section.dataset.state = state;
+      section.setAttribute('aria-label', STATES[state]);
+      const head = node('h3', 'muster-section-head');
+      head.append(
+        node('span', 'muster-dot'),
+        node('span', '', STATES[state]),
+        node('span', 'muster-section-count', String(projects.length))
+      );
+      const list = node('div', 'muster-projects');
+      list.setAttribute('role', 'list');
+      list.append(...projects.map(project => this.card(project)));
+      section.append(head, list);
+      return section;
     }
     card(project) {
       const card = node('article', 'muster-project');
