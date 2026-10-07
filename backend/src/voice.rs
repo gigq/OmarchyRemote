@@ -303,6 +303,28 @@ struct Transcript {
     background: Vec<Value>,
     /// What each background tool call is for, until its result names the task.
     launches: HashMap<String, String>,
+    /// The person's latest message, the session's title (Claude's own, or a Codex goal), and
+    /// when the log last recorded anything.
+    prompt: String,
+    title: String,
+    updated: Value,
+}
+/// What a person typed: plain text, or the text blocks of a message. Text the agent injects,
+/// such as `<system-reminder>` or `<environment_context>`, starts with a tag and is skipped.
+fn typed(content: &Value) -> Option<String> {
+    let text = match content.as_str() {
+        Some(text) => text.to_owned(),
+        None => content
+            .as_array()?
+            .iter()
+            .filter(|b| b["type"] == "text" || b["type"] == "input_text")
+            .filter_map(|b| b["text"].as_str())
+            .filter(|t| !t.trim_start().starts_with('<'))
+            .collect::<Vec<_>>()
+            .join("\n\n"),
+    };
+    let text = text.trim();
+    (!text.is_empty() && !text.starts_with('<')).then(|| text.to_owned())
 }
 impl Transcript {
     fn feed(&mut self, agent: &str, line: &str) {
@@ -310,8 +332,23 @@ impl Transcript {
         let Ok(v) = serde_json::from_str::<Value>(line) else {
             return;
         };
+        if v["timestamp"].is_string() {
+            self.updated = v["timestamp"].clone();
+        }
         if agent == "codex" {
             let p = &v["payload"];
+            if v["type"] == "response_item"
+                && p["type"] == "message"
+                && p["role"] == "user"
+                && let Some(text) = typed(&p["content"])
+            {
+                self.prompt = text;
+            }
+            if p["type"] == "thread_goal_updated"
+                && let Some(goal) = p["goal"]["objective"].as_str()
+            {
+                self.title = goal.to_owned();
+            }
             if v["type"] == "response_item"
                 && p["role"] == "assistant"
                 && p["phase"] == "final_answer"
@@ -374,6 +411,11 @@ impl Transcript {
                 _ => {}
             }
         } else if v["isSidechain"] != true {
+            if v["type"] == "ai-title"
+                && let Some(title) = v["aiTitle"].as_str()
+            {
+                self.title = title.to_owned();
+            }
             self.track_background(&v);
             let m = &v["message"];
             let local = m["content"].as_str().is_some_and(|s| {
@@ -394,6 +436,9 @@ impl Transcript {
                     .as_array()
                     .is_some_and(|blocks| blocks.iter().any(|b| b["type"] == "tool_result"));
                 if !tool_result {
+                    if let Some(text) = typed(&m["content"]) {
+                        self.prompt = text;
+                    }
                     self.turn = v.get("uuid").cloned().unwrap_or(json!(self.line));
                     self.updates.clear();
                     self.paragraphs.0.clear();
@@ -453,7 +498,7 @@ impl Transcript {
         }
     }
     fn value(&self) -> Value {
-        json!({"answer":self.answer,"updates":self.updates,"paragraphs":self.paragraphs.values(),"working":self.active,"background":self.background})
+        json!({"answer":self.answer,"updates":self.updates,"paragraphs":self.paragraphs.values(),"working":self.active,"background":self.background,"prompt":self.prompt,"title":self.title,"updated":self.updated})
     }
     /// A background task starts when a tool result names it: a background command's
     /// `backgroundTaskId`, a Monitor's `taskId`, or a background agent's `agentId`. It ends with
@@ -794,20 +839,37 @@ async fn background_of(
     pane: &str,
     agent: Value,
 ) -> anyhow::Result<Vec<Value>> {
+    let value = thread(herdr, pane, agent).await?;
+    Ok(value["background"].as_array().cloned().unwrap_or_default())
+}
+/// What a Claude or Codex pane's conversation shows: its latest prose, the person's last message,
+/// its title, when it was last active, and the background work it still waits on.
+pub async fn thread(
+    herdr: &crate::herdr::Herdr,
+    pane: &str,
+    agent: Value,
+) -> anyhow::Result<Value> {
+    let name = agent["agent"].as_str().unwrap_or_default().to_owned();
+    anyhow::ensure!(
+        name == "codex" || name == "claude",
+        "Only Codex and Claude conversations can be read"
+    );
     let info = herdr
         .call("pane.process_info", json!({"pane_id":pane}))
         .await?;
     tokio::task::spawn_blocking(move || {
-        let path = resolve("claude", &info["process_info"], &agent)?;
-        let value = read_answer("claude", &path)?;
+        let path = resolve(&name, &info["process_info"], &agent)?;
+        let mut value = read_answer(&name, &path)?;
+        // Tasks from before this process started ended with the previous one.
         let started = info["process_info"]["foreground_processes"]
             .as_array()
             .into_iter()
             .flatten()
-            .find(|p| p["name"].as_str().unwrap_or_default().contains("claude"))
+            .find(|p| p["name"].as_str().unwrap_or_default().contains(&name))
             .and_then(|p| p["pid"].as_u64())
             .and_then(process_started);
-        Ok(current_tasks(&value["background"], started))
+        value["background"] = json!(current_tasks(&value["background"], started));
+        Ok(value)
     })
     .await?
 }
@@ -1208,6 +1270,45 @@ mod tests {
                 assert_eq!(cache.remove(&key).unwrap(), pcm_wav(&[1, 0]));
             }
         }
+    }
+
+    #[test]
+    fn transcripts_name_the_last_prompt_the_title_and_the_last_activity() {
+        let claude = [
+            json!({"type":"user","timestamp":"2026-10-07T10:00:00Z","message":{"role":"user","content":"Fix the login bug"}}),
+            json!({"type":"ai-title","aiTitle":"Login bug fix"}),
+            // Notifications and reminders the agent receives are not the person's words.
+            json!({"type":"user","timestamp":"2026-10-07T10:01:00Z","message":{"role":"user","content":"<task-notification><status>completed</status></task-notification>"}}),
+            json!({"type":"user","timestamp":"2026-10-07T10:02:00Z","message":{"role":"user","content":[{"type":"text","text":"<system-reminder>x</system-reminder>"},{"type":"text","text":"Also add a test"}]}}),
+            json!({"type":"user","timestamp":"2026-10-07T10:03:00Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t","content":"ok"}]}}),
+        ];
+        let value = parse(
+            "claude",
+            &claude
+                .iter()
+                .map(Value::to_string)
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+        assert_eq!(value["prompt"], "Also add a test");
+        assert_eq!(value["title"], "Login bug fix");
+        assert_eq!(value["updated"], "2026-10-07T10:03:00Z");
+        let codex = [
+            json!({"type":"response_item","timestamp":"2026-10-07T11:00:00Z","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<environment_context>cwd</environment_context>"}]}}),
+            json!({"type":"response_item","timestamp":"2026-10-07T11:00:01Z","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Make the taxi faster"}]}}),
+            json!({"type":"event_msg","timestamp":"2026-10-07T11:00:02Z","payload":{"type":"thread_goal_updated","goal":{"objective":"Ship the driving game"}}}),
+        ];
+        let value = parse(
+            "codex",
+            &codex
+                .iter()
+                .map(Value::to_string)
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+        assert_eq!(value["prompt"], "Make the taxi faster");
+        assert_eq!(value["title"], "Ship the driving game");
+        assert_eq!(value["updated"], "2026-10-07T11:00:02Z");
     }
 
     #[test]

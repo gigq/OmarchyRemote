@@ -7,6 +7,7 @@ mod dictation;
 mod files;
 mod files_ops;
 mod herdr;
+mod muster;
 mod preferences;
 mod terminal;
 mod uploads;
@@ -602,6 +603,12 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/chat/{id}/attachments/{name}", get(chat::attachment))
         .route("/api/chat/{id}/response", get(chat::response))
         .route("/api/chat/{id}/speech", post(chat::speech))
+        .route("/api/muster", get(muster::board))
+        .route("/api/muster/hidden", post(muster::hide))
+        .route("/api/muster/panes/{id}", get(muster::thread))
+        .route("/api/muster/panes/{id}/answer", post(muster::answer))
+        .route("/api/muster/panes/{id}/keys", post(muster::keys))
+        .route("/api/muster/panes/{id}/send", post(muster::send))
         .route("/api/voice", get(voice::status))
         .route("/api/herdr/panes/{id}/response", get(voice::response))
         .route("/api/herdr/panes/{id}/speech", post(voice::audio))

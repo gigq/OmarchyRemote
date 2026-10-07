@@ -74,7 +74,7 @@ impl Herdr {
     }
     /// The pane's visible screen as plain text. The ANSI read stays fast for full-screen panes,
     /// where Herdr's plain-text read can take seconds.
-    async fn screen(&self, pane: &str) -> String {
+    pub async fn screen(&self, pane: &str) -> String {
         let read = self
             .call(
                 "pane.read",

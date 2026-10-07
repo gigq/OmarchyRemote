@@ -96,6 +96,14 @@
     native: true,
     deskKeys: [{ keys: '⇧ A', shift: true, code: /^KeyA$/, label: 'Herd agents' }],
   });
+  define('muster', {
+    name: 'muster',
+    color: 'var(--theme-yellow)',
+    glyph: 'mu',
+    icon: '\uf1e5',
+    description: 'every agent at a glance',
+    native: true,
+  });
   define('chat', {
     name: 'chat',
     color: 'var(--theme-magenta)',
@@ -210,6 +218,7 @@
     'files',
     ...(browserEnabled ? ['browser'] : []),
     'herdr',
+    'muster',
     'chat',
     'btop',
     'services',

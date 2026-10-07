@@ -98,7 +98,7 @@ test('host gateway rejects cross-site requests and unknown hosts', async () => {
     ws.on('error', () => {});
   });
   assert.equal(status, 403);
-  assert.equal((await api('capabilities')).apps.length, 11);
+  assert.equal((await api('capabilities')).apps.length, 12);
 });
 
 test('persistent real shell accepts input, resizes, and reconnects', async () => {

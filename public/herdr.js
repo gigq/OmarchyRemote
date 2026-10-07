@@ -66,6 +66,13 @@
   }
   HyprlandApps.provide('herdr', {
     create: (root, bridge) => new HerdrApp(root, bridge),
+    // Another app, such as Muster, opens one of Herdr's panes.
+    openPane(bridge, pane) {
+      const app = bridge.app('herdr');
+      if (app) app.select(pane);
+      else window.HyprlandUtil.storage.set('omarchy-herdr-pane', pane);
+      bridge.logic.openApp('herdr');
+    },
     widgets: [{ key: 'herdr', name: 'herdr', endpoint: 'herdr/snapshot', render }],
   });
 })();
