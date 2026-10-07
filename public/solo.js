@@ -52,6 +52,13 @@
       return true;
     }
     document.title = spec.name;
+    // Added to a phone's Home Screen, this page opens only this app, under its name.
+    const manifest = document.querySelector('link[rel="manifest"]');
+    if (manifest)
+      manifest.href = `/manifest.webmanifest?app=${encodeURIComponent(key)}&name=${encodeURIComponent(spec.name)}`;
+    document
+      .querySelector('meta[name="apple-mobile-web-app-title"]')
+      ?.setAttribute('content', spec.name);
     const set = logic.set.bind(logic);
     // Workspace, Expo, launcher and map changes do not exist here; the app stays open and in front.
     logic.set = (patch, ...rest) => {

@@ -115,3 +115,34 @@ test('a theme chosen in a Settings window repaints other app windows', async ({
     await settings.evaluate(color, '--theme-background')
   );
 });
+
+test('a single-app page saved to the Home Screen opens that app, under its name', async ({
+  page: p,
+}) => {
+  await p.setViewportSize({ width: 402, height: 874 });
+  await p.route('**/api/**', r => r.abort());
+  await p.goto('/?app=muster');
+  const manifest = p.locator('link[rel="manifest"]');
+  await expect(manifest).toHaveAttribute('href', '/manifest.webmanifest?app=muster&name=muster');
+  await expect(p.locator('meta[name="apple-mobile-web-app-title"]')).toHaveAttribute(
+    'content',
+    'muster'
+  );
+  const own = await p.evaluate(
+    async href => (await fetch(href)).json(),
+    await manifest.getAttribute('href')
+  );
+  expect(own).toMatchObject({
+    id: '/?app=muster',
+    start_url: '/?app=muster',
+    name: 'muster',
+    short_name: 'muster',
+    display: 'standalone',
+  });
+  // The full shell keeps the shared manifest.
+  await p.goto('/');
+  await expect(manifest).toHaveAttribute('href', '/manifest.webmanifest');
+  expect(
+    await p.evaluate(async () => (await fetch('/manifest.webmanifest?app=..%2Fx')).status)
+  ).toBe(400);
+});

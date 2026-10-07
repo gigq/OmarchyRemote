@@ -142,6 +142,26 @@ const server = http.createServer(async (req, res) => {
       res.end(req.method === 'HEAD' ? undefined : liveScript);
       return;
     }
+    // A single-app page saved to a phone's Home Screen opens that app on its own, under its name.
+    const app = url.searchParams.get('app');
+    if (url.pathname === '/manifest.webmanifest' && app) {
+      if (!/^[A-Za-z0-9][\w.-]{0,127}$/.test(app)) {
+        res.writeHead(400, headers);
+        res.end('Invalid app');
+        return;
+      }
+      const name =
+        (url.searchParams.get('name') || app)
+          .replace(/[\u0000-\u001f\u007f]/g, '')
+          .trim()
+          .slice(0, 40) || app;
+      const manifest = JSON.parse(await readFile(path.join(publicRoot, 'manifest.webmanifest')));
+      const start = '/?app=' + encodeURIComponent(app);
+      Object.assign(manifest, { id: start, start_url: start, name, short_name: name });
+      res.writeHead(200, { ...headers, 'Content-Type': types['.webmanifest'] });
+      res.end(req.method === 'HEAD' ? undefined : JSON.stringify(manifest));
+      return;
+    }
     if (url.pathname === '/native') {
       res.writeHead(307, { ...headers, Location: '/native/' });
       res.end();
