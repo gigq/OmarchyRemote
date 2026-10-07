@@ -74,6 +74,12 @@ fn find_session(root: &FsPath, id: &str) -> anyhow::Result<PathBuf> {
 }
 // Daemon-backed Codex TUIs no longer own rollout file descriptors. The title is
 // supplied by that TUI; match its exact saved name and process cwd, never recency.
+/// Whether a Codex conversation is one a person drives: started by the terminal UI (`cli`) or
+/// through the Codex daemon, as `codex resume` does (`vscode`, which the daemon records for its
+/// clients). Non-interactive `exec` runs and sub-agents are never a pane's conversation.
+fn interactive(source: &Value) -> bool {
+    source == "cli" || source == "vscode"
+}
 fn codex_named_session(base: &FsPath, cwd: &FsPath, title: &str) -> anyhow::Result<PathBuf> {
     anyhow::ensure!(
         !title.trim().is_empty(),
@@ -106,15 +112,17 @@ fn codex_named_session(base: &FsPath, cwd: &FsPath, title: &str) -> anyhow::Resu
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
     )?;
     connection.busy_timeout(std::time::Duration::from_millis(250))?;
-    let suffix = format!(
-        " | {}",
-        cwd.file_name().unwrap_or_default().to_string_lossy()
-    );
+    let folder = cwd.file_name().unwrap_or_default().to_string_lossy();
+    let suffix = format!(" | {folder}");
     let name = title.strip_suffix(&suffix).unwrap_or(title);
+    // Codex titles a conversation that has no name yet with just its folder; then the folder's
+    // only unnamed conversation is the one, and two or more are refused rather than guessed.
+    let unnamed = name == folder;
     let mut statement = connection.prepare(
-        "SELECT id, rollout_path FROM threads WHERE source = 'cli' AND archived = 0 AND cwd = ?1
+        "SELECT id, rollout_path FROM threads WHERE source IN ('cli', 'vscode') AND archived = 0 AND cwd = ?1
          AND COALESCE(NULLIF(name, ''), title) IN (?2, ?3) LIMIT 2",
     )?;
+    let (title, name) = if unnamed { ("", "") } else { (title, name) };
     let matches = statement
         .query_map(
             rusqlite::params![cwd.to_string_lossy(), title, name],
@@ -142,7 +150,7 @@ fn codex_named_session(base: &FsPath, cwd: &FsPath, title: &str) -> anyhow::Resu
     let meta: Value = serde_json::from_str(&head)?;
     anyhow::ensure!(
         meta["type"] == "session_meta"
-            && meta["payload"]["source"] == "cli"
+            && interactive(&meta["payload"]["source"])
             && meta["payload"]["id"] == *id,
         "Codex conversation metadata does not match its session record"
     );
@@ -203,7 +211,7 @@ fn resolve(agent: &str, info: &Value, reported: &Value) -> anyhow::Result<PathBu
                 std::io::BufReader::new(file.take(65536)).read_line(&mut head)?;
                 if let Ok(meta) = serde_json::from_str::<Value>(&head)
                     && meta["type"] == "session_meta"
-                    && meta["payload"]["source"] == "cli"
+                    && interactive(&meta["payload"]["source"])
                 {
                     paths.push(path);
                 }
@@ -367,7 +375,7 @@ fn edited_files(name: &str, input: &Value) -> Vec<String> {
 }
 /// Tags agents wrap around text they add to the person's side of a conversation, such as a
 /// background task's notification or a reminder.
-const INJECTED: [&str; 14] = [
+const INJECTED: [&str; 16] = [
     "task-notification",
     "system-reminder",
     "local-command-caveat",
@@ -377,6 +385,8 @@ const INJECTED: [&str; 14] = [
     "command-message",
     "command-args",
     "environment_context",
+    "codex_internal_context",
+    "image",
     "user_instructions",
     "user-prompt-submit-hook",
     "bash-input",
@@ -386,6 +396,7 @@ const INJECTED: [&str; 14] = [
 fn injected(text: &str) -> bool {
     text.trim_start()
         .strip_prefix('<')
+        .map(|rest| rest.trim_start_matches('/'))
         .and_then(|rest| rest.split(['>', ' ', '\n']).next())
         .is_some_and(|tag| INJECTED.contains(&tag))
 }
@@ -1687,7 +1698,8 @@ mod tests {
         assert_eq!(value["updated"], "2026-10-07T10:03:00Z");
         let codex = [
             json!({"type":"response_item","timestamp":"2026-10-07T11:00:00Z","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<environment_context>cwd</environment_context>"}]}}),
-            json!({"type":"response_item","timestamp":"2026-10-07T11:00:01Z","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Make the taxi faster"}]}}),
+            json!({"type":"response_item","timestamp":"2026-10-07T11:00:01Z","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<image name=[Image #1]>"},{"type":"input_text","text":"</image>"},{"type":"input_text","text":"Make the taxi faster"}]}}),
+            json!({"type":"response_item","timestamp":"2026-10-07T11:00:01Z","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<codex_internal_context source=\"goal\">Keep going</codex_internal_context>"}]}}),
             json!({"type":"event_msg","timestamp":"2026-10-07T11:00:02Z","payload":{"type":"thread_goal_updated","goal":{"objective":"Ship the driving game"}}}),
         ];
         let value = parse(
@@ -2047,6 +2059,32 @@ mod tests {
         db.execute("UPDATE threads SET source = 'subagent'", [])
             .unwrap();
         assert!(codex_named_session(&base, &cwd, "My conversation").is_err());
+        db.execute("UPDATE threads SET source = 'exec'", [])
+            .unwrap();
+        assert!(codex_named_session(&base, &cwd, "My conversation").is_err());
+        // A conversation resumed through the Codex daemon is recorded as `vscode`.
+        db.execute("UPDATE threads SET source = 'vscode'", [])
+            .unwrap();
+        fs::write(
+            &path,
+            json!({"type":"session_meta","payload":{"id":id,"source":"vscode"}}).to_string(),
+        )
+        .unwrap();
+        assert_eq!(
+            codex_named_session(&base, &cwd, "My conversation | project").unwrap(),
+            path
+        );
+        // An unnamed conversation is titled with its folder: the folder's only unnamed one is it.
+        db.execute("UPDATE threads SET name = '', title = ''", [])
+            .unwrap();
+        assert_eq!(codex_named_session(&base, &cwd, "project").unwrap(), path);
+        assert!(codex_named_session(&base, &cwd, "My conversation").is_err());
+        db.execute(
+            "UPDATE threads SET name = 'My conversation', title = 'Original prompt'",
+            [],
+        )
+        .unwrap();
+        assert!(codex_named_session(&base, &cwd, "project").is_err());
         db.execute("UPDATE threads SET source = 'cli'", []).unwrap();
         db.execute("INSERT INTO threads SELECT * FROM threads", [])
             .unwrap();

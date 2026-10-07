@@ -301,6 +301,29 @@ async fn conversation(app: &App, pane: &str, agent: &Value) -> Value {
     cache.insert(key, (Instant::now(), value.clone()));
     value
 }
+/// A thread's title: Claude's own title or a Codex goal, else the name Codex shows in the
+/// terminal title (without its `| folder` suffix, and not when it is only the folder).
+fn title(thread: &Value, agent: &Value, pane: &Value) -> String {
+    if let Some(title) = thread["title"].as_str().filter(|t| !t.is_empty()) {
+        return title.to_owned();
+    }
+    let folder = pane["cwd"]
+        .as_str()
+        .and_then(|cwd| cwd.rsplit('/').next())
+        .unwrap_or_default();
+    let shown = agent["terminal_title_stripped"]
+        .as_str()
+        .unwrap_or_default();
+    let name = shown
+        .strip_suffix(&format!(" | {folder}"))
+        .unwrap_or(shown)
+        .trim();
+    if agent["agent"] == "codex" && name != folder {
+        name.to_owned()
+    } else {
+        String::new()
+    }
+}
 /// One thread's summary; `full` keeps all of its prose for the thread view.
 async fn summary(app: &App, pane: &Value, agent: &Value, tabs: &Value, full: bool) -> Value {
     let id = pane["pane_id"].as_str().unwrap_or_default();
@@ -331,7 +354,7 @@ async fn summary(app: &App, pane: &Value, agent: &Value, tabs: &Value, full: boo
         "agent": agent["agent"],
         "status": status,
         "state": state,
-        "title": clip(thread["title"].as_str().unwrap_or_default(), 120),
+        "title": clip(&title(&thread, agent, pane), 120),
         "prompt": clip(thread["prompt"].as_str().unwrap_or_default(), limit),
         "latest": clip(&latest(&thread), limit),
         "updated": thread["updated"],
@@ -938,6 +961,29 @@ Enter to select · Tab/Arrow keys to navigate · Esc to cancel";
         assert!(source.starts_with("Person: The goal\n\n[Earlier turns omitted]\n\nAgent: Reply"));
         assert!(source.ends_with(&format!("Agent: Reply 39 {}", "x".repeat(2900))));
         assert!(source.len() < 64_000);
+    }
+
+    #[test]
+    fn codex_threads_take_the_name_codex_shows() {
+        let pane = json!({"cwd":"/home/qa/git/NYCBevy"});
+        let codex = |shown: &str| json!({"agent":"codex","terminal_title_stripped":shown});
+        let none = json!({});
+        assert_eq!(
+            title(&none, &codex("Expand NYC driving | NYCBevy"), &pane),
+            "Expand NYC driving"
+        );
+        // An unnamed conversation shows only its folder, which is no title.
+        assert_eq!(title(&none, &codex("NYCBevy"), &pane), "");
+        assert_eq!(
+            title(
+                &json!({"title":"Taxi goal"}),
+                &codex("Other | NYCBevy"),
+                &pane
+            ),
+            "Taxi goal"
+        );
+        let claude = json!({"agent":"claude","terminal_title_stripped":"✳ Working"});
+        assert_eq!(title(&none, &claude, &pane), "");
     }
 
     #[test]
