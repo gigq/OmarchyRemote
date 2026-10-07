@@ -6,7 +6,13 @@ const thread = (pane_id, state, extra = {}) => ({
   tab_id: pane_id.split(':')[0] + ':t1',
   tab: '1',
   agent: 'claude',
-  status: { question: 'blocked', ready: 'done', working: 'working', idle: 'idle' }[state],
+  status: {
+    question: 'blocked',
+    working: 'working',
+    waiting: 'idle',
+    review: 'done',
+    quiet: 'idle',
+  }[state],
   state,
   title: '',
   prompt: '',
@@ -79,7 +85,8 @@ async function setup(page, { width = 402, height = 874 } = {}) {
             prompt: 'Ask me about colors',
             question: COLOR,
           }),
-          thread('wB:p2', 'ready', {
+          thread('wB:p2', 'review', {
+            review_key: 'answer-docs',
             tab: '2',
             title: 'Docs pass',
             prompt: 'Tidy the README',
@@ -91,9 +98,9 @@ async function setup(page, { width = 402, height = 874 } = {}) {
         workspace_id: 'wC',
         label: 'OldThing',
         hidden: true,
-        state: 'idle',
+        state: 'quiet',
         updated: '2026-10-01T10:00:00Z',
-        threads: [thread('wC:p1', 'idle', { title: 'Parked' })],
+        threads: [thread('wC:p1', 'quiet', { title: 'Parked' })],
       },
     ],
     details: {},
@@ -104,6 +111,8 @@ async function setup(page, { width = 402, height = 874 } = {}) {
   };
   const find = pane => state.projects.flatMap(p => p.threads).find(t => t.pane_id === pane);
   await page.route('**/api/**', r => r.abort());
+  // Opening Herdr must not reach the host's real panes.
+  await page.routeWebSocket('**/api/herdr/ws', () => {});
   await page.route('**/api/muster', r => r.fulfill({ json: { projects: state.projects } }));
   await page.route('**/api/muster/hidden', r => {
     const body = r.request().postDataJSON();
@@ -154,7 +163,7 @@ test('the board groups projects by what they need, each with its tabs', async ({
   const sections = app.locator('.muster-section');
   await expect(sections.locator('.muster-section-head')).toHaveText(['Needs you1', 'Working1']);
   await expect(cards.locator('.muster-project-name')).toHaveText(['PaperDiorama', 'NYCBevy']);
-  await expect(app.locator('.muster-summary')).toHaveText('1 need you · 1 ready · 1 working');
+  await expect(app.locator('.muster-summary')).toHaveText('1 needs you · 1 working · 1 to review');
   const paper = app.getByRole('region', { name: 'Needs you' }).locator('.muster-project');
   await expect(paper.locator('.muster-row')).toHaveCount(2);
   await expect(paper.locator('.muster-row-question')).toHaveText('Which color do you prefer?');
@@ -178,16 +187,22 @@ test('a wide board puts each state in its own column', async ({ page }) => {
     workspace_id: 'wD',
     label: 'Docs',
     hidden: false,
-    state: 'ready',
+    state: 'review',
     updated: '2026-10-07T09:00:00Z',
-    threads: [thread('wD:p1', 'ready', { title: 'Release notes', latest: 'Done.' })],
+    threads: [
+      thread('wD:p1', 'review', {
+        title: 'Release notes',
+        latest: 'Done.',
+        review_key: 'answer-notes',
+      }),
+    ],
   });
   const sections = app.locator('.muster-section');
   await expect(sections).toHaveCount(3);
   await expect(sections.locator('.muster-section-head > span:nth-child(2)')).toHaveText([
     'Needs you',
-    'Ready',
     'Working',
+    'To review',
   ]);
   const boxes = await sections.evaluateAll(all =>
     all.map(section => section.getBoundingClientRect().toJSON())
@@ -211,7 +226,7 @@ test('projects hide from the board and come back', async ({ page }) => {
   await expect(hidden.locator('.muster-project-name')).toHaveText(['NYCBevy', 'OldThing']);
   await hidden.filter({ hasText: 'OldThing' }).getByRole('button', { name: 'Show' }).click();
   await expect(app.locator('.muster-project')).toHaveCount(2);
-  expect(state.hides.at(-1)).toEqual({ workspace_id: 'wC', hidden: false });
+  await expect.poll(() => state.hides.at(-1)).toEqual({ workspace_id: 'wC', hidden: false });
   // A question in a hidden project still reaches the top of the board.
   await app.getByRole('button', { name: 'Hide PaperDiorama' }).click();
   await expect(app.locator('.muster-notice')).toContainText(
@@ -447,4 +462,76 @@ test('on the host’s own desktop a thread’s folder opens in its file manager'
   // A thread without a folder has no folder button.
   await app.locator('.muster-tab').first().click();
   await expect(app.getByRole('button', { name: 'Open thread folder' })).toBeHidden();
+});
+
+test('turns to review leave the column once read, or all at once', async ({ page }) => {
+  const { app, state } = await setup(page);
+  const marked = [];
+  await page.route('**/api/muster/reviewed', r => {
+    const { threads } = r.request().postDataJSON();
+    marked.push(...threads);
+    for (const { pane_id } of threads)
+      for (const project of state.projects)
+        for (const thread of project.threads)
+          if (thread.pane_id === pane_id) thread.state = 'quiet';
+    return r.fulfill({ json: { reviewed: marked.length } });
+  });
+  state.projects.push({
+    workspace_id: 'wD',
+    label: 'Docs',
+    hidden: false,
+    state: 'review',
+    updated: '2026-10-07T09:00:00Z',
+    threads: [
+      thread('wD:p1', 'review', { title: 'Release notes', review_key: 'answer-notes' }),
+      thread('wD:p2', 'review', { tab: '2', title: 'Changelog', review_key: 'answer-log' }),
+    ],
+  });
+  const review = app.getByRole('region', { name: 'To review' });
+  await expect(review.locator('.muster-project-name')).toHaveText('Docs');
+  // Opening a finished turn reviews it.
+  await review.locator('.muster-row[data-pane="wD:p1"]').click();
+  await expect.poll(() => marked).toEqual([{ pane_id: 'wD:p1', key: 'answer-notes' }]);
+  await app.getByRole('button', { name: 'Muster' }).click();
+  // The rest go with Mark all reviewed.
+  await expect(review.locator('.muster-row')).toHaveCount(2);
+  await review.getByRole('button', { name: 'Mark all reviewed' }).click();
+  await expect.poll(() => marked.map(m => m.pane_id)).toEqual(['wD:p1', 'wD:p2']);
+});
+
+test('the board tells waiting from working, and says what kind of attention', async ({ page }) => {
+  const { app, state } = await setup(page);
+  // NYCBevy's reply is done, but its build still runs.
+  Object.assign(state.projects[0], { state: 'waiting' });
+  Object.assign(state.projects[0].threads[0], { state: 'waiting', status: 'done' });
+  state.projects[1].threads[0].question = {
+    ...state.projects[1].threads[0].question,
+    kind: 'approval',
+  };
+  state.projects[1].threads[1].error = 'Cannot identify this pane';
+  state.projects.push({
+    workspace_id: 'wE',
+    label: 'Mystery',
+    hidden: false,
+    state: 'quiet',
+    updated: '2026-10-07T08:00:00Z',
+    threads: [thread('wE:p1', 'quiet', { status: 'unknown', title: 'Something' })],
+  });
+  await expect(app.getByRole('region', { name: 'Quiet' })).toBeVisible();
+  await expect(app.locator('.muster-section-head > span:nth-child(2)')).toHaveText([
+    'Needs you',
+    'Waiting',
+    'Quiet',
+  ]);
+  await expect(app.locator('.muster-summary')).toHaveText('1 needs you · 1 waiting · 1 to review');
+  await expect(app.locator('.muster-row-badge')).toHaveText([
+    'Approval',
+    'Unreadable',
+    'Unknown status',
+  ]);
+  // A project with mixed tabs counts each state, so a finished tab does not hide.
+  await expect(
+    app.getByRole('region', { name: 'Needs you' }).locator('.muster-project-counts')
+  ).toHaveText('1 needs you · 1 to review');
+  await page.screenshot({ path: 'artifacts/browser/muster-states.png' });
 });

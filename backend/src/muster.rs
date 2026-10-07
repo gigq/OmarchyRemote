@@ -13,7 +13,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fs,
     sync::{LazyLock, Mutex},
     time::{Duration, Instant},
@@ -43,6 +43,19 @@ struct Menu {
     other: Option<u32>,
 }
 impl Menu {
+    /// `approval` for a permission prompt (a single question answered Yes or No, such as whether
+    /// to run a command), `question` for anything else.
+    fn kind(&self) -> &'static str {
+        let yes = self
+            .choices
+            .first()
+            .is_some_and(|c| c.label.to_ascii_lowercase().starts_with("yes"));
+        if self.tabs.is_empty() && yes {
+            "approval"
+        } else {
+            "question"
+        }
+    }
     fn multi(&self) -> bool {
         self.choices.iter().any(|c| c.checked.is_some())
     }
@@ -66,6 +79,7 @@ impl Menu {
             "tabs": self.tabs.iter().map(|(label, done)| json!({"label":label,"done":done})).collect::<Vec<_>>(),
             "choices": self.choices.iter().map(|c| json!({"number":c.number,"label":c.label,"detail":c.detail,"checked":c.checked})).collect::<Vec<_>>(),
             "multi": self.multi(),
+            "kind": self.kind(),
             "other": self.other,
         })
     }
@@ -198,47 +212,56 @@ fn menu(screen: &str) -> Option<Menu> {
     })
 }
 
-fn hidden_path() -> anyhow::Result<std::path::PathBuf> {
+fn saved_path() -> anyhow::Result<std::path::PathBuf> {
     Ok(apps::data_dir()?.join("muster.json"))
 }
-/// Projects hidden from the board, by Herdr workspace id (which Herdr keeps across restarts).
-fn hidden() -> HashSet<String> {
-    hidden_path()
+/// What Muster keeps on the host: projects hidden from the board, by Herdr workspace id (which
+/// Herdr keeps across restarts), and for each thread the turn last marked reviewed.
+#[derive(Default, Deserialize, serde::Serialize)]
+struct Saved {
+    #[serde(default)]
+    hidden: std::collections::BTreeSet<String>,
+    #[serde(default)]
+    reviewed: std::collections::BTreeMap<String, String>,
+}
+fn saved() -> Saved {
+    saved_path()
         .ok()
         .and_then(|path| fs::read(path).ok())
-        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
-        .and_then(|v| serde_json::from_value(v["hidden"].clone()).ok())
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         .unwrap_or_default()
 }
-fn save_hidden(ids: &HashSet<String>) -> anyhow::Result<()> {
-    let path = hidden_path()?;
-    let mut ids: Vec<&String> = ids.iter().collect();
-    ids.sort();
+fn save(saved: &Saved) -> anyhow::Result<()> {
+    let path = saved_path()?;
     let temp = path.with_extension("json.tmp");
-    fs::write(&temp, serde_json::to_vec_pretty(&json!({"hidden":ids}))?)?;
+    fs::write(&temp, serde_json::to_vec_pretty(saved)?)?;
     fs::rename(temp, path)?;
     Ok(())
 }
+static SAVING: Mutex<()> = Mutex::new(());
 
-/// What the board shows for a thread: `question` while it waits on the person, `ready` once a
-/// turn has finished and not been looked at in Herdr, `working`, or `idle`.
-fn state(status: &str, background: bool) -> &'static str {
+/// What the board shows for a thread: `question` while it waits on the person, `working` while
+/// the agent works, `waiting` once its reply is done but background tasks still run, `review` for
+/// a finished turn not yet looked at (in Muster, or in Herdr, which then reports it idle), and
+/// `quiet` otherwise.
+fn state(status: &str, background: bool, reviewed: bool) -> &'static str {
     match status {
         "blocked" => "question",
         "working" => "working",
-        _ if background => "working",
-        "done" => "ready",
-        _ => "idle",
+        _ if background => "waiting",
+        "done" if !reviewed => "review",
+        _ => "quiet",
     }
 }
-/// Which of a project's threads gives the project its state: a question first, then any work
-/// still in progress, so a project with one tab working and another finished counts as working.
+/// Which of a project's threads gives the project its state: a question first, then work in
+/// progress, then work waiting on background tasks, then a turn to review.
 fn rank(state: &str) -> u8 {
     match state {
         "question" => 0,
         "working" => 1,
-        "ready" => 2,
-        _ => 3,
+        "waiting" => 2,
+        "review" => 3,
+        _ => 4,
     }
 }
 fn clip(text: &str, limit: usize) -> String {
@@ -325,7 +348,14 @@ fn title(thread: &Value, agent: &Value, pane: &Value) -> String {
     }
 }
 /// One thread's summary; `full` keeps all of its prose for the thread view.
-async fn summary(app: &App, pane: &Value, agent: &Value, tabs: &Value, full: bool) -> Value {
+async fn summary(
+    app: &App,
+    pane: &Value,
+    agent: &Value,
+    tabs: &Value,
+    saved: &Saved,
+    full: bool,
+) -> Value {
     let id = pane["pane_id"].as_str().unwrap_or_default();
     let status = pane["agent_status"].as_str().unwrap_or("unknown");
     let thread = conversation(app, id, agent).await;
@@ -334,7 +364,17 @@ async fn summary(app: &App, pane: &Value, agent: &Value, tabs: &Value, full: boo
         .or(thread["background"].as_array())
         .cloned()
         .unwrap_or_default();
-    let state = state(status, !background.is_empty());
+    // A turn is reviewed by its answer, or by Herdr's state counter when its log cannot be read.
+    let review = thread["answer"]["id"]
+        .as_str()
+        .map(str::to_owned)
+        .or_else(|| {
+            pane["state_change_seq"]
+                .as_u64()
+                .map(|n| format!("seq:{n}"))
+        });
+    let reviewed = review.is_some() && saved.reviewed.get(id) == review.as_ref();
+    let state = state(status, !background.is_empty(), reviewed);
     let screen = if state == "question" {
         app.herdr.screen(id).await
     } else {
@@ -354,6 +394,7 @@ async fn summary(app: &App, pane: &Value, agent: &Value, tabs: &Value, full: boo
         "agent": agent["agent"],
         "status": status,
         "state": state,
+        "review_key": review,
         "title": clip(&title(&thread, agent, pane), 120),
         "prompt": clip(thread["prompt"].as_str().unwrap_or_default(), limit),
         "latest": clip(&latest(&thread), limit),
@@ -394,7 +435,7 @@ fn agents(snapshot: &Value) -> HashMap<String, Value> {
 pub async fn board(State(app): State<App>) -> Result<Json<Value>, ApiError> {
     let snapshot = app.herdr.snapshot().await.map_err(error)?;
     let agents = agents(&snapshot);
-    let hidden = hidden();
+    let saved = saved();
     let panes: Vec<&Value> = snapshot["panes"]
         .as_array()
         .into_iter()
@@ -407,7 +448,7 @@ pub async fn board(State(app): State<App>) -> Result<Json<Value>, ApiError> {
         .collect();
     let threads = futures_util::future::join_all(panes.iter().map(|pane| {
         let agent = &agents[pane["pane_id"].as_str().unwrap_or_default()];
-        summary(&app, pane, agent, &snapshot["tabs"], false)
+        summary(&app, pane, agent, &snapshot["tabs"], &saved, false)
     }))
     .await;
     let mut projects: Vec<Value> = snapshot["workspaces"]
@@ -435,7 +476,7 @@ pub async fn board(State(app): State<App>) -> Result<Json<Value>, ApiError> {
             Some(json!({
                 "workspace_id": id,
                 "label": w["label"],
-                "hidden": hidden.contains(id),
+                "hidden": saved.hidden.contains(id),
                 "state": state,
                 "updated": updated,
                 "threads": mine,
@@ -478,7 +519,9 @@ pub async fn thread(
     Path(id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let (pane, agent, tabs) = pane_of(&app, &id).await?;
-    Ok(Json(summary(&app, &pane, &agent, &tabs, true).await))
+    Ok(Json(
+        summary(&app, &pane, &agent, &tabs, &saved(), true).await,
+    ))
 }
 
 fn conflict(message: &str) -> ApiError {
@@ -779,21 +822,54 @@ pub struct Hide {
     workspace_id: String,
     hidden: bool,
 }
-static HIDING: Mutex<()> = Mutex::new(());
 /// Hides a project from the board, or brings it back. Herdr keeps the project as it is.
 pub async fn hide(Json(request): Json<Hide>) -> Result<Json<Value>, ApiError> {
     if request.workspace_id.is_empty() || request.workspace_id.len() > 128 {
         return Err(invalid("Invalid project"));
     }
-    let _lock = HIDING.lock().unwrap();
-    let mut ids = hidden();
+    let _lock = SAVING.lock().unwrap();
+    let mut saved = saved();
     if request.hidden {
-        ids.insert(request.workspace_id);
+        saved.hidden.insert(request.workspace_id);
     } else {
-        ids.remove(&request.workspace_id);
+        saved.hidden.remove(&request.workspace_id);
     }
-    save_hidden(&ids).map_err(error)?;
-    Ok(Json(json!({"hidden": ids.len()})))
+    save(&saved).map_err(error)?;
+    Ok(Json(json!({"hidden": saved.hidden.len()})))
+}
+
+#[derive(Deserialize)]
+pub struct Reviewed {
+    threads: Vec<ReviewedThread>,
+}
+#[derive(Deserialize)]
+pub struct ReviewedThread {
+    pane_id: String,
+    key: String,
+}
+/// Marks threads' latest turns reviewed, by the `review_key` the board showed, so they leave To
+/// review until another turn finishes.
+pub async fn reviewed(Json(request): Json<Reviewed>) -> Result<Json<Value>, ApiError> {
+    if request.threads.is_empty()
+        || request.threads.len() > 200
+        || request
+            .threads
+            .iter()
+            .any(|t| t.pane_id.is_empty() || t.pane_id.len() > 128 || t.key.len() > 128)
+    {
+        return Err(invalid("Invalid threads"));
+    }
+    let _lock = SAVING.lock().unwrap();
+    let mut saved = saved();
+    // Panes come and go; a long list of marks is mostly closed panes.
+    if saved.reviewed.len() > 400 {
+        saved.reviewed.clear();
+    }
+    for thread in request.threads {
+        saved.reviewed.insert(thread.pane_id, thread.key);
+    }
+    save(&saved).map_err(error)?;
+    Ok(Json(json!({"reviewed": saved.reviewed.len()})))
 }
 
 #[cfg(test)]
@@ -841,6 +917,7 @@ Enter to select · Tab/Arrow keys to navigate · Esc to cancel
         assert_eq!(menu.choices[3].detail, "");
         assert_eq!(menu.other, Some(4));
         assert!(!menu.multi());
+        assert_eq!(menu.kind(), "question");
         assert_eq!(menu.id(), super::menu(QUESTIONS).unwrap().id());
     }
 
@@ -910,6 +987,7 @@ Enter to select · Tab/Arrow keys to navigate · Esc to cancel";
         assert_eq!(menu.choices.len(), 3);
         assert_eq!(menu.other, None);
         assert!(menu.tabs.is_empty());
+        assert_eq!(menu.kind(), "approval");
     }
 
     #[test]
@@ -988,13 +1066,18 @@ Enter to select · Tab/Arrow keys to navigate · Esc to cancel";
 
     #[test]
     fn threads_are_ranked_by_what_needs_the_person() {
-        assert_eq!(state("blocked", false), "question");
-        assert_eq!(state("done", false), "ready");
-        assert_eq!(state("done", true), "working");
-        assert_eq!(state("idle", true), "working");
-        assert_eq!(state("idle", false), "idle");
-        assert!(rank("question") < rank("working") && rank("working") < rank("ready"));
-        assert!(rank("ready") < rank("idle"));
+        assert_eq!(state("blocked", false, false), "question");
+        assert_eq!(state("working", true, false), "working");
+        // A finished reply with background tasks still running is waiting, not working.
+        assert_eq!(state("done", true, false), "waiting");
+        assert_eq!(state("idle", true, true), "waiting");
+        assert_eq!(state("done", false, false), "review");
+        // Reviewed in Muster, or looked at in Herdr, a finished turn is quiet.
+        assert_eq!(state("done", false, true), "quiet");
+        assert_eq!(state("idle", false, false), "quiet");
+        assert_eq!(state("unknown", false, false), "quiet");
+        let order = ["question", "working", "waiting", "review", "quiet"];
+        assert!(order.windows(2).all(|w| rank(w[0]) < rank(w[1])));
         assert_eq!(clip("  short  ", 10), "short");
         assert_eq!(clip("a long sentence here", 6), "a long…");
         let working = json!({"working":true,"answer":{"text":"Old answer"},"paragraphs":[{"text":"First"},{"text":"Now this"}]});

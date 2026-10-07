@@ -6,7 +6,34 @@
   const { node, button, storage } = window.HyprlandUtil;
   const headers = { 'X-Hyprland-Client': '1', 'Content-Type': 'application/json' };
   const OPEN = 'omarchy-muster-open';
-  const STATES = { question: 'Needs you', ready: 'Ready', working: 'Working', idle: 'Quiet' };
+  const STATES = {
+    question: 'Needs you',
+    working: 'Working',
+    waiting: 'Waiting',
+    review: 'To review',
+    quiet: 'Quiet',
+  };
+  // The board's columns, in order; a project sits in the first its threads reach.
+  const ORDER = ['question', 'working', 'waiting', 'review', 'quiet'];
+  const COUNTED = {
+    question: 'needs you',
+    working: 'working',
+    waiting: 'waiting',
+    review: 'to review',
+    quiet: 'quiet',
+  };
+  // "1 needs you · 2 working · 1 to review"; quiet threads count only where asked.
+  function counts(threads, withQuiet = false) {
+    const n = {};
+    for (const thread of threads) n[thread.state] = (n[thread.state] || 0) + 1;
+    return ORDER.filter(state => n[state] && (withQuiet || state !== 'quiet'))
+      .map(state =>
+        state === 'question' && n[state] > 1
+          ? `${n[state]} need you`
+          : `${n[state]} ${COUNTED[state]}`
+      )
+      .join(' · ');
+  }
   const ICONS = {
     back: 'm15 18-6-6 6-6',
     hide: 'M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.1A10 10 0 0 1 12 5c5 0 9 4 10 7a13 13 0 0 1-3 4.2M6.6 6.6C4.3 8 2.7 10 2 12c1 3 5 7 10 7a10 10 0 0 0 5.4-1.6',
@@ -214,21 +241,13 @@
     renderBoard() {
       const shown = this.projects.filter(p => !p.hidden);
       const hidden = this.projects.filter(p => p.hidden);
-      const counts = {};
-      for (const project of shown)
-        for (const thread of project.threads)
-          counts[thread.state] = (counts[thread.state] || 0) + 1;
       this.summary.textContent =
-        ['question', 'ready', 'working']
-          .filter(state => counts[state])
-          .map(state => `${counts[state]} ${state === 'question' ? 'need you' : state}`)
-          .join(' · ') || (shown.length ? 'All quiet' : '');
+        counts(shown.flatMap(project => project.threads)) || (shown.length ? 'All quiet' : '');
       const signature = JSON.stringify(this.projects);
       if (signature !== this.signature) {
         this.signature = signature;
         this.list.replaceChildren(
-          ...['question', 'ready', 'working', 'idle']
-            .map(state => [state, shown.filter(project => project.state === state)])
+          ...ORDER.map(state => [state, shown.filter(project => project.state === state)])
             .filter(([, projects]) => projects.length)
             .map(([state, projects]) => this.section(state, projects))
         );
@@ -277,6 +296,15 @@
         node('span', '', STATES[state]),
         node('span', 'muster-section-count', String(projects.length))
       );
+      // Everything that finished before you looked lands here at first; clear it in one go.
+      if (state === 'review')
+        head.append(
+          button(
+            'Mark all reviewed',
+            () => this.markReviewed(projects),
+            'muster-link muster-mark-all'
+          )
+        );
       const list = node('div', 'muster-projects');
       list.setAttribute('role', 'list');
       list.append(...projects.map(project => this.card(project)));
@@ -289,13 +317,22 @@
       card.dataset.state = project.state;
       const head = node('div', 'muster-project-head');
       const name = node('h3', 'muster-project-name', project.label);
+      // With several tabs, how many are in each state, so none hides behind the project's.
+      const mixed = new Set(project.threads.map(thread => thread.state)).size > 1;
+      const tally = mixed
+        ? node('p', 'muster-project-counts', counts(project.threads, true))
+        : null;
       head.append(
         name,
         chip(project.state),
         node('time', 'muster-ago', project.updated ? ago(project.updated) : ''),
         iconButton('hide', `Hide ${project.label}`, () => this.hide(project, true))
       );
-      card.append(head, ...project.threads.map(thread => this.row(thread)));
+      card.append(
+        head,
+        ...(tally ? [tally] : []),
+        ...project.threads.map(thread => this.row(thread))
+      );
       return card;
     }
     row(thread) {
@@ -305,9 +342,24 @@
       const top = node('span', 'muster-row-top');
       top.append(
         node('span', 'muster-dot'),
-        node('span', 'muster-row-title', thread.title || thread.prompt || threadName(thread)),
-        node('span', 'muster-row-tab', threadName(thread))
+        node('span', 'muster-row-title', thread.title || thread.prompt || threadName(thread))
       );
+      // What kind of attention, or why Muster cannot tell.
+      const badge = thread.question
+        ? thread.question.kind === 'approval'
+          ? 'Approval'
+          : 'Question'
+        : thread.error
+          ? 'Unreadable'
+          : thread.status === 'unknown'
+            ? 'Unknown status'
+            : '';
+      if (badge) {
+        const b = node('span', 'muster-row-badge', badge);
+        b.dataset.kind = badge.toLowerCase().replace(' ', '-');
+        top.append(b);
+      }
+      top.append(node('span', 'muster-row-tab', threadName(thread)));
       row.append(top);
       if (thread.question) {
         const q = node('span', 'muster-row-question', thread.question.question || 'Waiting on you');
@@ -332,6 +384,25 @@
         button('Show', () => this.hide(project, false), 'remote-button muster-unhide')
       );
       return row;
+    }
+    // Marks threads reviewed: each thread given, or every thread to review in the projects given.
+    async markReviewed(items, refresh = true) {
+      const threads = items
+        .flatMap(item => item.threads || [item])
+        .filter(thread => thread.state === 'review' && thread.review_key)
+        .filter(thread => this.acked?.get(thread.pane_id) !== thread.review_key);
+      if (!threads.length) return;
+      this.acked ||= new Map();
+      for (const thread of threads) this.acked.set(thread.pane_id, thread.review_key);
+      try {
+        await request('/reviewed', {
+          threads: threads.map(thread => ({ pane_id: thread.pane_id, key: thread.review_key })),
+        });
+        if (refresh) this.refresh();
+      } catch (e) {
+        for (const thread of threads) this.acked.delete(thread.pane_id);
+        this.status.textContent = e.message;
+      }
     }
     toggleHidden(open = this.hiddenList.hidden) {
       this.hiddenList.hidden = !open;
@@ -381,6 +452,8 @@
         const thread = await request('/panes/' + encodeURIComponent(pane));
         if (pane !== this.pane) return;
         this.thread = thread;
+        // Opening a finished turn here reviews it.
+        if (thread.state === 'review' && thread.review_key) this.markReviewed([thread], false);
         this.renderThread();
       } catch (e) {
         if (pane !== this.pane) return;
