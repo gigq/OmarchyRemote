@@ -324,6 +324,8 @@ async fn summary(app: &App, pane: &Value, agent: &Value, tabs: &Value, full: boo
         "prompt": clip(thread["prompt"].as_str().unwrap_or_default(), limit),
         "latest": clip(&latest(&thread), limit),
         "updated": thread["updated"],
+        // Messages before the last one, which the thread view can summarize.
+        "earlier": thread["prompts"].as_u64().unwrap_or(0).saturating_sub(1),
         "background": background,
         "question": question.as_ref().map(Menu::json),
         "error": thread["error"],
@@ -578,6 +580,152 @@ pub async fn send(
     Ok(Json(json!({"type":"ok"})))
 }
 
+/// What came before the person's last message, as the text a summary is made from: each turn
+/// labeled, long messages shortened, and the oldest dropped past a limit (keeping the first
+/// request, which usually names the goal). Empty when the last message is the only one.
+fn recap_source(exchanges: &[(bool, String)]) -> String {
+    let Some(last) = exchanges.iter().rposition(|(person, _)| *person) else {
+        return String::new();
+    };
+    let earlier: Vec<String> = exchanges[..last]
+        .iter()
+        .map(|(person, text)| {
+            format!(
+                "{}: {}",
+                if *person { "Person" } else { "Agent" },
+                clip(text, 3000)
+            )
+        })
+        .collect();
+    let mut kept: Vec<&String> = Vec::new();
+    let mut size = earlier.first().map_or(0, String::len);
+    for turn in earlier.iter().skip(1).rev() {
+        if size + turn.len() > 60_000 {
+            break;
+        }
+        size += turn.len();
+        kept.push(turn);
+    }
+    kept.reverse();
+    let mut parts: Vec<&str> = earlier.first().map(String::as_str).into_iter().collect();
+    if kept.len() + 1 < earlier.len() {
+        parts.push("[Earlier turns omitted]");
+    }
+    parts.extend(kept.iter().map(|s| s.as_str()));
+    parts.join("\n\n")
+}
+const RECAP_PROMPT: &str = "You write recaps of conversations between a person and a coding agent, so the person can pick a thread back up after time away. You are not a participant: never continue the conversation, answer it, or speak as the agent.";
+const RECAP_REQUEST: &str = "Recap the transcript above for the person, writing to them (\"You asked…\"). Cover the goal, what was decided and done, and anything left open. Their latest message is not included. At most 120 words: two short paragraphs or a few bullets, in Markdown. Reply with the recap only.";
+static RECAPS: LazyLock<Mutex<Option<HashMap<String, String>>>> =
+    LazyLock::new(|| Mutex::new(None));
+static SUMMARIZING: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
+fn recaps_path() -> anyhow::Result<std::path::PathBuf> {
+    Ok(apps::data_dir()?.join("muster-summaries.json"))
+}
+/// Summaries already made, by the hash of what they summarize, so a thread is summarized again
+/// only once it has a new turn.
+fn cached_recap(key: &str) -> Option<String> {
+    let mut recaps = RECAPS.lock().unwrap();
+    let recaps = recaps.get_or_insert_with(|| {
+        recaps_path()
+            .ok()
+            .and_then(|path| fs::read(path).ok())
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .unwrap_or_default()
+    });
+    recaps.get(key).cloned()
+}
+fn save_recap(key: String, summary: String) -> anyhow::Result<()> {
+    let mut recaps = RECAPS.lock().unwrap();
+    let recaps = recaps.get_or_insert_with(HashMap::new);
+    if recaps.len() >= 300 {
+        recaps.clear();
+    }
+    recaps.insert(key, summary);
+    let path = recaps_path()?;
+    let temp = path.with_extension("json.tmp");
+    fs::write(&temp, serde_json::to_vec(&*recaps)?)?;
+    fs::rename(temp, path)?;
+    Ok(())
+}
+/// Runs Claude Code once, without tools or a saved session, to summarize `source`.
+async fn summarize(source: &str) -> anyhow::Result<String> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let model = std::env::var("OMARCHY_MUSTER_SUMMARY_MODEL").unwrap_or_else(|_| "haiku".into());
+    let mut child = tokio::process::Command::new(apps::resolve_program("claude")?)
+        .args(["-p", "--no-session-persistence", "--tools", ""])
+        .args(["--output-format", "json", "--model"])
+        .arg(model)
+        .arg("--system-prompt")
+        .arg(RECAP_PROMPT)
+        // Away from any project, so no project instructions are read.
+        .current_dir(std::env::temp_dir())
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .spawn()?;
+    let mut stdin = child.stdin.take().unwrap();
+    let mut stdout = child.stdout.take().unwrap();
+    // The transcript is quoted, with the request after it, so it reads as material to recap
+    // rather than a conversation to join.
+    let message = format!("<transcript>\n{source}\n</transcript>\n\n{RECAP_REQUEST}");
+    tokio::time::timeout(Duration::from_secs(120), async move {
+        stdin.write_all(message.as_bytes()).await?;
+        drop(stdin);
+        let mut output = String::new();
+        stdout.read_to_string(&mut output).await?;
+        let ok = child.wait().await?.success();
+        // Only the JSON result counts; a version manager may print a line before it.
+        let result = output
+            .lines()
+            .rev()
+            .find_map(|line| serde_json::from_str::<Value>(line).ok())
+            .unwrap_or_default();
+        anyhow::ensure!(
+            ok && result["is_error"] != true,
+            "The summary could not be made"
+        );
+        let summary = result["result"].as_str().unwrap_or_default().trim();
+        anyhow::ensure!(!summary.is_empty(), "The summary came back empty");
+        Ok(summary.to_owned())
+    })
+    .await
+    .map_err(|_| anyhow::anyhow!("The summary took too long"))?
+}
+/// A summary of the thread before the person's last message, made when they ask for it.
+pub async fn recap(
+    State(app): State<App>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let (_, agent, _) = pane_of(&app, &id).await?;
+    let (name, path, _) = voice::session_log(&app.herdr, &id, &agent)
+        .await
+        .map_err(error)?;
+    let source = tokio::task::spawn_blocking(move || {
+        voice::exchanges(&name, &path).map(|exchanges| recap_source(&exchanges))
+    })
+    .await
+    .map_err(error)?
+    .map_err(error)?;
+    if source.is_empty() {
+        return Ok(Json(json!({"summary": null})));
+    }
+    // A changed request makes new summaries rather than reusing old ones.
+    let request = format!("{RECAP_PROMPT}{RECAP_REQUEST}{source}");
+    let key = format!("{:x}", Sha256::digest(request.as_bytes()))[..24].to_owned();
+    if let Some(summary) = cached_recap(&key) {
+        return Ok(Json(json!({"summary": summary, "cached": true})));
+    }
+    let _permit = SUMMARIZING.acquire().await.map_err(error)?;
+    if let Some(summary) = cached_recap(&key) {
+        return Ok(Json(json!({"summary": summary, "cached": true})));
+    }
+    let summary = summarize(&source).await.map_err(error)?;
+    save_recap(key, summary.clone()).map_err(error)?;
+    Ok(Json(json!({"summary": summary, "cached": false})))
+}
+
 #[derive(Deserialize)]
 pub struct Hide {
     workspace_id: String,
@@ -734,6 +882,37 @@ Enter to select · Tab/Arrow keys to navigate · Esc to cancel";
             menu(" ❯ No, exit\n   Yes, I trust this folder\n\n Enter to confirm · Esc to cancel"),
             None
         );
+    }
+
+    #[test]
+    fn a_recap_covers_what_came_before_the_last_message() {
+        let turns = |list: &[(bool, &str)]| -> Vec<(bool, String)> {
+            list.iter().map(|(p, t)| (*p, (*t).to_owned())).collect()
+        };
+        assert_eq!(recap_source(&turns(&[(true, "Only message")])), "");
+        assert_eq!(recap_source(&[]), "");
+        let source = recap_source(&turns(&[
+            (true, "Build a taxi game"),
+            (false, "Done: a basic taxi game."),
+            (true, "Add rain"),
+            (false, "Rain is in."),
+            (true, "Now make it night"),
+            (false, "Working on night…"),
+        ]));
+        assert_eq!(
+            source,
+            "Person: Build a taxi game\n\nAgent: Done: a basic taxi game.\n\nPerson: Add rain\n\nAgent: Rain is in."
+        );
+        // A long history keeps the first request and the latest turns.
+        let mut long = vec![(true, "The goal".to_owned())];
+        for i in 0..40 {
+            long.push((false, format!("Reply {i} {}", "x".repeat(2900))));
+        }
+        long.push((true, "Latest".to_owned()));
+        let source = recap_source(&long);
+        assert!(source.starts_with("Person: The goal\n\n[Earlier turns omitted]\n\nAgent: Reply"));
+        assert!(source.ends_with(&format!("Agent: Reply 39 {}", "x".repeat(2900))));
+        assert!(source.len() < 64_000);
     }
 
     #[test]

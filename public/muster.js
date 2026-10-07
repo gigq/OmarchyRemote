@@ -378,6 +378,7 @@
       const bottom = !b.hasChildNodes() || b.scrollHeight - b.scrollTop - b.clientHeight < 80;
       const parts = [];
       if (thread.title) parts.push(node('h3', 'muster-thread-heading', thread.title));
+      if (thread.earlier > 0) parts.push(this.recapCard(thread));
       if (thread.prompt) {
         const asked = node('details', 'muster-asked');
         asked.open = thread.prompt.length < 400;
@@ -395,8 +396,68 @@
         parts.push(node('p', 'muster-task', 'Background · ' + task.description));
       if (question) parts.push(this.questionCard(question));
       else if (thread.screen) parts.push(this.screenCard(thread.screen));
+      const top = b.scrollTop;
       b.replaceChildren(...parts);
-      if (bottom) b.scrollTop = b.scrollHeight;
+      // Opening the recap keeps your place; new output otherwise follows the end.
+      if (this.keepScroll) b.scrollTop = top;
+      else if (bottom) b.scrollTop = b.scrollHeight;
+      this.keepScroll = false;
+    }
+    /* What came before your last message, summarized by the host when you open it, so a thread
+       you come back to makes sense without its whole scrollback. A new turn makes a new one. */
+    recapCard(thread) {
+      const key = `${thread.pane_id}:${thread.earlier}`;
+      if (this.recap?.key !== key)
+        this.recap = {
+          key,
+          pane: thread.pane_id,
+          open: this.recap?.pane === thread.pane_id && this.recap.open,
+        };
+      const recap = this.recap;
+      const details = node('details', 'muster-earlier');
+      details.open = !!recap.open;
+      const count = thread.earlier;
+      details.append(
+        node(
+          'summary',
+          '',
+          `Earlier in this thread · ${count} ${count === 1 ? 'message' : 'messages'}`
+        )
+      );
+      const content = node('div', 'muster-recap');
+      if (recap.text) markdown(content, recap.text);
+      else if (recap.error)
+        content.append(
+          node('p', 'muster-note', recap.error),
+          button('Try again', () => this.loadRecap(), 'muster-link')
+        );
+      else content.append(node('p', 'muster-note muster-summarizing', 'Summarizing…'));
+      details.append(content);
+      details.addEventListener('toggle', () => {
+        recap.open = details.open;
+        if (details.open) this.loadRecap();
+      });
+      if (recap.open) this.loadRecap();
+      return details;
+    }
+    async loadRecap() {
+      const recap = this.recap;
+      if (!recap || recap.text || recap.loading) return;
+      recap.loading = true;
+      recap.error = null;
+      try {
+        const result = await request(`/panes/${encodeURIComponent(recap.pane)}/summary`, {});
+        recap.text = result.summary || 'Nothing came before your last message.';
+      } catch (e) {
+        recap.error = e.message;
+      } finally {
+        recap.loading = false;
+        if (this.recap === recap && this.thread) {
+          this.threadSignature = null;
+          this.keepScroll = true;
+          this.renderThread();
+        }
+      }
     }
     // What the agent said in its latest turn: the answer once it is done, or its prose so far.
     prose(thread) {

@@ -273,3 +273,38 @@ test('a wait Muster cannot read shows the screen with keys to answer it', async 
   await expect(app.locator('.muster-thread-status')).toHaveText('Answer the question above first.');
   expect(state.sent).toEqual([]);
 });
+
+test('what came before your last message is summarized only when you open it', async ({ page }) => {
+  const { app, state } = await setup(page);
+  state.projects[1].threads[1].earlier = 3;
+  const asked = [];
+  let finish;
+  await page.route(/\/api\/muster\/panes\/[^/]+\/summary$/, async r => {
+    asked.push(decodeURIComponent(r.request().url().split('/').at(-2)));
+    await new Promise(resolve => (finish = resolve));
+    return r.fulfill({ json: { summary: 'You asked for a **docs pass**; the agent tidied it.' } });
+  });
+  await app.locator('.muster-row[data-pane="wB:p2"]').click();
+  const earlier = app.locator('.muster-earlier');
+  await expect(earlier.locator('summary')).toHaveText('Earlier in this thread · 3 messages');
+  await expect(earlier).not.toHaveAttribute('open');
+  await page.waitForTimeout(300);
+  expect(asked).toEqual([]);
+  await earlier.locator('summary').click();
+  await expect(earlier.locator('.muster-summarizing')).toHaveText('Summarizing…');
+  await expect.poll(() => asked.length).toBe(1);
+  finish();
+  await expect(earlier.locator('.muster-recap strong')).toHaveText('docs pass');
+  // The thread refreshes every two seconds; the summary stays open and is not asked for again.
+  await page.waitForTimeout(2500);
+  await expect(earlier).toHaveAttribute('open');
+  await expect(earlier.locator('.muster-recap')).toContainText('the agent tidied it');
+  await earlier.locator('summary').click();
+  await earlier.locator('summary').click();
+  await expect(earlier.locator('.muster-recap')).toContainText('the agent tidied it');
+  expect(asked).toEqual(['wB:p2']);
+  // A thread with nothing before its last message has no summary to open.
+  await app.locator('.muster-tab').first().click();
+  await expect(app.getByLabel('Question')).toBeVisible();
+  await expect(app.locator('.muster-earlier')).toHaveCount(0);
+});

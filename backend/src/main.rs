@@ -609,6 +609,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/muster/panes/{id}/answer", post(muster::answer))
         .route("/api/muster/panes/{id}/keys", post(muster::keys))
         .route("/api/muster/panes/{id}/send", post(muster::send))
+        .route("/api/muster/panes/{id}/summary", post(muster::recap))
         .route("/api/voice", get(voice::status))
         .route("/api/herdr/panes/{id}/response", get(voice::response))
         .route("/api/herdr/panes/{id}/speech", post(voice::audio))

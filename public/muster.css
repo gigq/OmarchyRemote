@@ -371,6 +371,36 @@
   margin: 0;
   font-size: 1.1em;
 }
+.muster-earlier {
+  padding: 6px 10px;
+  border: 1px solid var(--theme-border);
+  border-radius: 10px;
+}
+.muster-earlier summary {
+  font-size: 11px;
+  color: var(--theme-secondary);
+  cursor: pointer;
+}
+.muster-recap {
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+.muster-recap > :first-child {
+  margin-top: 0;
+}
+.muster-recap > :last-child {
+  margin-bottom: 0;
+}
+.muster-recap p,
+.muster-recap ul {
+  margin: 0.5em 0;
+}
+.muster-recap ul {
+  padding-left: 1.4em;
+}
+.muster-summarizing {
+  animation: muster-pulse 1.4s ease-in-out infinite;
+}
 .muster-asked {
   padding: 6px 10px;
   border-radius: 10px;

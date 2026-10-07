@@ -308,6 +308,8 @@ struct Transcript {
     prompt: String,
     title: String,
     updated: Value,
+    /// How many messages the person has sent, counting `prompt`.
+    prompts: usize,
 }
 /// What a person typed: plain text, or the text blocks of a message. Text the agent injects,
 /// such as `<system-reminder>` or `<environment_context>`, starts with a tag and is skipped.
@@ -343,6 +345,7 @@ impl Transcript {
                 && let Some(text) = typed(&p["content"])
             {
                 self.prompt = text;
+                self.prompts += 1;
             }
             if p["type"] == "thread_goal_updated"
                 && let Some(goal) = p["goal"]["objective"].as_str()
@@ -438,6 +441,7 @@ impl Transcript {
                 if !tool_result {
                     if let Some(text) = typed(&m["content"]) {
                         self.prompt = text;
+                        self.prompts += 1;
                     }
                     self.turn = v.get("uuid").cloned().unwrap_or(json!(self.line));
                     self.updates.clear();
@@ -498,7 +502,7 @@ impl Transcript {
         }
     }
     fn value(&self) -> Value {
-        json!({"answer":self.answer,"updates":self.updates,"paragraphs":self.paragraphs.values(),"working":self.active,"background":self.background,"prompt":self.prompt,"title":self.title,"updated":self.updated})
+        json!({"answer":self.answer,"updates":self.updates,"paragraphs":self.paragraphs.values(),"working":self.active,"background":self.background,"prompt":self.prompt,"title":self.title,"updated":self.updated,"prompts":self.prompts})
     }
     /// A background task starts when a tool result names it: a background command's
     /// `backgroundTaskId`, a Monitor's `taskId`, or a background agent's `agentId`. It ends with
@@ -844,11 +848,12 @@ async fn background_of(
 }
 /// What a Claude or Codex pane's conversation shows: its latest prose, the person's last message,
 /// its title, when it was last active, and the background work it still waits on.
-pub async fn thread(
+/// A Claude or Codex pane's conversation log, and which agent wrote it.
+pub async fn session_log(
     herdr: &crate::herdr::Herdr,
     pane: &str,
-    agent: Value,
-) -> anyhow::Result<Value> {
+    agent: &Value,
+) -> anyhow::Result<(String, PathBuf, Value)> {
     let name = agent["agent"].as_str().unwrap_or_default().to_owned();
     anyhow::ensure!(
         name == "codex" || name == "claude",
@@ -857,8 +862,23 @@ pub async fn thread(
     let info = herdr
         .call("pane.process_info", json!({"pane_id":pane}))
         .await?;
+    let reported = agent.clone();
+    let lookup = name.clone();
+    let path = tokio::task::spawn_blocking(move || {
+        resolve(&lookup, &info["process_info"], &reported).map(|path| (path, info))
+    })
+    .await??;
+    Ok((name, path.0, path.1))
+}
+/// What a Claude or Codex pane's conversation shows: its latest prose, the person's last message,
+/// its title, when it was last active, and the background work it still waits on.
+pub async fn thread(
+    herdr: &crate::herdr::Herdr,
+    pane: &str,
+    agent: Value,
+) -> anyhow::Result<Value> {
+    let (name, path, info) = session_log(herdr, pane, &agent).await?;
     tokio::task::spawn_blocking(move || {
-        let path = resolve(&name, &info["process_info"], &agent)?;
         let mut value = read_answer(&name, &path)?;
         // Tasks from before this process started ended with the previous one.
         let started = info["process_info"]["foreground_processes"]
@@ -872,6 +892,71 @@ pub async fn thread(
         Ok(value)
     })
     .await?
+}
+/// The conversation as the person and the agent wrote it, oldest first: `(true, text)` for the
+/// person's messages and `(false, text)` for the agent's prose, without tool calls, their output,
+/// thinking, or side conversations. Reads at most the log's last `WINDOW` bytes.
+pub fn exchanges(agent: &str, path: &FsPath) -> anyhow::Result<Vec<(bool, String)>> {
+    let mut file = fs::File::open(path)?;
+    let len = file.metadata()?.len();
+    let start = len.saturating_sub(WINDOW);
+    file.seek(SeekFrom::Start(start))?;
+    let mut bytes = Vec::new();
+    file.take(len - start).read_to_end(&mut bytes)?;
+    let text = String::from_utf8_lossy(&bytes);
+    let mut lines = text.lines();
+    if start > 0 {
+        lines.next();
+    }
+    Ok(exchanges_of(agent, lines))
+}
+fn exchanges_of<'a>(agent: &str, lines: impl Iterator<Item = &'a str>) -> Vec<(bool, String)> {
+    let mut out: Vec<(bool, String)> = Vec::new();
+    let mut push = |person: bool, text: String| {
+        let text = text.trim().to_owned();
+        if text.is_empty() {
+            return;
+        }
+        // An agent's consecutive text blocks are one reply.
+        match out.last_mut() {
+            Some((false, previous)) if !person => {
+                previous.push_str("\n\n");
+                previous.push_str(&text);
+            }
+            _ => out.push((person, text)),
+        }
+    };
+    for line in lines {
+        let Ok(v) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        if agent == "codex" {
+            let p = &v["payload"];
+            if v["type"] != "response_item" || p["type"] != "message" {
+                continue;
+            }
+            if p["role"] == "user" {
+                if let Some(text) = typed(&p["content"]) {
+                    push(true, text);
+                }
+            } else if p["role"] == "assistant" {
+                push(false, blocks(&p["content"]));
+            }
+        } else {
+            if v["isSidechain"] == true || v["isMeta"] == true {
+                continue;
+            }
+            let m = &v["message"];
+            if v["type"] == "user" {
+                if let Some(text) = typed(&m["content"]) {
+                    push(true, text);
+                }
+            } else if v["type"] == "assistant" {
+                push(false, blocks(&m["content"]));
+            }
+        }
+    }
+    out
 }
 pub async fn response(
     State(app): State<App>,
@@ -1270,6 +1355,48 @@ mod tests {
                 assert_eq!(cache.remove(&key).unwrap(), pcm_wav(&[1, 0]));
             }
         }
+    }
+
+    #[test]
+    fn exchanges_keep_only_what_the_person_and_agent_wrote() {
+        let claude = [
+            json!({"type":"user","message":{"role":"user","content":"Fix the login bug"}}),
+            json!({"type":"assistant","message":{"content":[{"type":"thinking","thinking":"hmm"},{"type":"text","text":"Looking at auth.rs."},{"type":"tool_use","name":"Read","input":{}}]}}),
+            json!({"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t","content":"file text"}]}}),
+            json!({"type":"assistant","message":{"content":[{"type":"text","text":"Fixed the refresh."}]}}),
+            json!({"type":"assistant","isSidechain":true,"message":{"content":[{"type":"text","text":"Worker notes"}]}}),
+            json!({"type":"user","isMeta":true,"message":{"role":"user","content":"Caveat"}}),
+            json!({"type":"user","message":{"role":"user","content":"Thanks, now add a test"}}),
+        ];
+        let lines: Vec<String> = claude.iter().map(Value::to_string).collect();
+        assert_eq!(
+            exchanges_of("claude", lines.iter().map(String::as_str)),
+            vec![
+                (true, "Fix the login bug".to_owned()),
+                (
+                    false,
+                    "Looking at auth.rs.\n\nFixed the refresh.".to_owned()
+                ),
+                (true, "Thanks, now add a test".to_owned()),
+            ]
+        );
+        let codex = [
+            json!({"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<environment_context>x</environment_context>"}]}}),
+            json!({"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Make it faster"}]}}),
+            json!({"type":"response_item","payload":{"type":"reasoning","summary":[]}}),
+            json!({"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Profiled; the renderer was the bottleneck."}]}}),
+        ];
+        let lines: Vec<String> = codex.iter().map(Value::to_string).collect();
+        assert_eq!(
+            exchanges_of("codex", lines.iter().map(String::as_str)),
+            vec![
+                (true, "Make it faster".to_owned()),
+                (
+                    false,
+                    "Profiled; the renderer was the bottleneck.".to_owned()
+                ),
+            ]
+        );
     }
 
     #[test]
