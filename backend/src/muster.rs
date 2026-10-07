@@ -231,11 +231,13 @@ fn state(status: &str, background: bool) -> &'static str {
         _ => "idle",
     }
 }
+/// Which of a project's threads gives the project its state: a question first, then any work
+/// still in progress, so a project with one tab working and another finished counts as working.
 fn rank(state: &str) -> u8 {
     match state {
         "question" => 0,
-        "ready" => 1,
-        "working" => 2,
+        "working" => 1,
+        "ready" => 2,
         _ => 3,
     }
 }
@@ -945,7 +947,8 @@ Enter to select · Tab/Arrow keys to navigate · Esc to cancel";
         assert_eq!(state("done", true), "working");
         assert_eq!(state("idle", true), "working");
         assert_eq!(state("idle", false), "idle");
-        assert!(rank("question") < rank("ready") && rank("ready") < rank("working"));
+        assert!(rank("question") < rank("working") && rank("working") < rank("ready"));
+        assert!(rank("ready") < rank("idle"));
         assert_eq!(clip("  short  ", 10), "short");
         assert_eq!(clip("a long sentence here", 6), "a long…");
         let working = json!({"working":true,"answer":{"text":"Old answer"},"paragraphs":[{"text":"First"},{"text":"Now this"}]});
