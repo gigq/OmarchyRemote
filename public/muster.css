@@ -485,6 +485,26 @@
   padding: 3px 8px;
   border: 1px solid var(--theme-border);
 }
+/* The work between two pieces of an agent's text: one quiet line between rules. */
+.muster-work {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0;
+  font-size: 10px;
+  color: var(--theme-secondary);
+  white-space: nowrap;
+}
+.muster-work::before,
+.muster-work::after {
+  content: '';
+  flex: 1;
+  min-width: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--theme-border) 70%, transparent);
+}
+.muster-work.ongoing {
+  color: var(--muster-working);
+}
 .muster-note,
 .muster-task {
   margin: 0;

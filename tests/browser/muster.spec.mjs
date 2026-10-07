@@ -339,3 +339,37 @@ test('what came before your last message is summarized only when you open it', a
   await expect(app.getByLabel('Question')).toBeVisible();
   await expect(app.locator('.muster-earlier')).toHaveCount(0);
 });
+
+test('the work between the agent’s paragraphs shows as one gray line', async ({ page }) => {
+  const { app, state } = await setup(page);
+  const since = new Date(Date.now() - 45000).toISOString();
+  state.details['wA:p1'] = {
+    working: true,
+    turn_parts: [
+      { id: 'a', text: 'Looking at the **physics**.' },
+      { work: { seconds: 92, tools: 4, files: 2, thought: false } },
+      { id: 'c', text: 'Tuned the springs.' },
+      { work: { seconds: 33, tools: 0, files: 0, thought: true } },
+      { id: 'd', text: 'Testing now.' },
+      { work: { since, seconds: null, tools: 1, files: 0, thought: false, ongoing: true } },
+    ],
+  };
+  await app.locator('.muster-row[data-pane="wA:p1"]').click();
+  const lines = app.locator('.muster-work');
+  await expect(app.locator('.muster-body > .muster-said')).toHaveText([
+    'Looking at the physics.',
+    'Tuned the springs.',
+    'Testing now.',
+  ]);
+  await expect(lines.nth(0)).toHaveText('Worked 1m 32s · 4 tool calls · 2 files changed');
+  await expect(lines.nth(1)).toHaveText('Thought for 33s');
+  await expect(lines.nth(2)).toHaveText(/^Working 4[5-9]s · 1 tool call$/);
+  await page.screenshot({ path: 'artifacts/browser/muster-work.png' });
+  // The live line keeps counting while nothing else changes.
+  const before = await lines.nth(2).textContent();
+  await page.waitForTimeout(2500);
+  await expect(lines.nth(2)).not.toHaveText(before);
+  // Once the turn ends, only the finished work lines remain.
+  state.details['wA:p1'] = { ...state.details['wA:p1'], working: false };
+  await expect(lines).toHaveCount(2);
+});

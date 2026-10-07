@@ -68,6 +68,30 @@
   function threadName(thread) {
     return [thread.tab, thread.agent].filter(Boolean).join(' · ');
   }
+  function duration(seconds) {
+    const s = Math.max(0, Math.round(seconds));
+    if (s < 60) return `${s}s`;
+    if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
+    return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+  }
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  // One gray line for the work between two pieces of an agent's text, in place of its tool calls:
+  // "Worked 1m 20s · 8 tool calls · 3 files changed", "Thought for 12s", "Working 45s · 2 tool calls".
+  function workLine(work) {
+    const seconds = work.ongoing ? (Date.now() - Date.parse(work.since)) / 1000 : work.seconds;
+    const time = Number.isFinite(seconds) ? duration(seconds) : '';
+    const lead = work.ongoing
+      ? ['Working', time].filter(Boolean).join(' ')
+      : work.tools
+        ? ['Worked', time].filter(Boolean).join(' ')
+        : work.thought
+          ? ['Thought for', time].filter(Boolean).join(' ')
+          : `${time} later`;
+    const parts = [lead];
+    if (work.tools) parts.push(plural(work.tools, 'tool call'));
+    if (work.files) parts.push(`${plural(work.files, 'file')} changed`);
+    return parts.join(' · ');
+  }
   function waiting(thread) {
     const count = thread.background?.length || 0;
     return count ? `waiting on ${count} background ${count === 1 ? 'task' : 'tasks'}` : '';
@@ -372,6 +396,7 @@
         paragraphs: [],
         updates: [],
         turn_text: '',
+        turn_parts: [],
         working: true,
         state: thread.state === 'question' ? 'question' : 'working',
         earlier: (thread.earlier || 0) + (thread.prompt ? 1 : 0),
@@ -397,7 +422,10 @@
       this.nativeInput.field.placeholder = this.placeholder.textContent;
       if (project) this.renderTabs();
       const signature = JSON.stringify(thread);
-      if (signature === this.threadSignature) return;
+      if (signature === this.threadSignature) {
+        if (this.ongoing) this.ongoing.line.textContent = workLine(this.ongoing.work);
+        return;
+      }
       this.threadSignature = signature;
       const b = this.body;
       const bottom = !b.hasChildNodes() || b.scrollHeight - b.scrollTop - b.clientHeight < 80;
@@ -424,7 +452,25 @@
         parts.push(asked);
       }
       const prose = this.prose(thread);
-      if (prose) {
+      this.ongoing = null;
+      const pieces = thread.turn_parts || [];
+      if (pieces.some(part => part.text) || (thread.working && pieces.length)) {
+        // What the agent wrote since your message, with a line for the work between.
+        for (const part of pieces) {
+          if (part.text) {
+            const said = node('div', 'muster-said');
+            markdown(said, part.text);
+            parts.push(said);
+          } else if (part.work && (!part.work.ongoing || thread.working)) {
+            const line = node('p', 'muster-work', workLine(part.work));
+            if (part.work.ongoing) {
+              line.classList.add('ongoing');
+              this.ongoing = { line, work: part.work };
+            }
+            parts.push(line);
+          }
+        }
+      } else if (prose) {
         const said = node('div', 'muster-said');
         markdown(said, prose);
         parts.push(said);

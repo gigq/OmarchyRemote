@@ -321,6 +321,49 @@ struct Transcript {
     prompts: usize,
     /// Whether `answer` replies to `prompt`, rather than to a message before it.
     answered: bool,
+    /// The current turn as a person follows it: each piece of the agent's text, with a summary
+    /// of the work between pieces in place of the tool calls and their output.
+    parts: Vec<Value>,
+    work: Work,
+}
+/// The work since the agent last wrote: when it began, and the tool calls, changed files and
+/// thinking since.
+#[derive(Default)]
+struct Work {
+    since: Option<String>,
+    tools: u32,
+    files: Vec<String>,
+    thought: bool,
+}
+impl Work {
+    fn json(&self, until: Option<&str>) -> Value {
+        let seconds = self
+            .since
+            .as_deref()
+            .and_then(epoch)
+            .zip(until.and_then(epoch))
+            .map(|(from, to)| (to - from).max(0.0).round());
+        json!({"seconds":seconds,"tools":self.tools,"files":self.files.len(),"thought":self.thought})
+    }
+}
+/// Files a tool call edits: Claude's edit tools name one; a Codex patch names each it touches.
+fn edited_files(name: &str, input: &Value) -> Vec<String> {
+    if ["Edit", "Write", "MultiEdit", "NotebookEdit"].contains(&name) {
+        return ["file_path", "notebook_path"]
+            .iter()
+            .find_map(|key| input[*key].as_str())
+            .map(|path| vec![path.to_owned()])
+            .unwrap_or_default();
+    }
+    let patch = input
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| input.to_string());
+    let files = regex::Regex::new(r#"\*\*\* (?:Add|Update|Delete) File: ([^\n\\"]+)"#).unwrap();
+    files
+        .captures_iter(&patch)
+        .map(|c| c[1].trim().to_owned())
+        .collect()
 }
 /// Tags agents wrap around text they add to the person's side of a conversation, such as a
 /// background task's notification or a reminder.
@@ -370,6 +413,57 @@ fn typed(content: &Value) -> Option<String> {
     (!text.is_empty()).then(|| text.to_owned())
 }
 impl Transcript {
+    /// A new turn, starting at `at`, the time of the person's message.
+    fn start_parts(&mut self, at: &Value) {
+        self.parts.clear();
+        self.work = Work {
+            since: at.as_str().map(str::to_owned),
+            ..Work::default()
+        };
+    }
+    fn tool(&mut self, name: &str, input: &Value) {
+        self.work.tools += 1;
+        for file in edited_files(name, input) {
+            if !self.work.files.contains(&file) {
+                self.work.files.push(file);
+            }
+        }
+    }
+    /// The agent wrote `text` as part of message `id` at `at`. Work since its last text that
+    /// used tools, thought, or took ten seconds or more is noted before it.
+    fn text(&mut self, id: &str, text: &str, at: &Value) {
+        let text = text.trim();
+        if text.is_empty() {
+            return;
+        }
+        let work = self.work.json(at.as_str());
+        let long = work["seconds"].as_f64().is_some_and(|s| s >= 10.0);
+        if self.work.tools > 0 || self.work.thought || long {
+            self.parts.push(json!({"work": work}));
+        }
+        match self.parts.last_mut() {
+            Some(last) if last["id"] == id && last["text"].is_string() => {
+                let joined = format!("{}\n\n{text}", last["text"].as_str().unwrap_or_default());
+                last["text"] = json!(joined);
+            }
+            _ => self.parts.push(json!({"id": id, "text": text})),
+        }
+        self.work = Work {
+            since: at.as_str().map(str::to_owned).or(self.work.since.take()),
+            ..Work::default()
+        };
+    }
+    /// The turn's parts, ending with the work in progress while the agent works.
+    fn turn_parts(&self) -> Value {
+        let mut parts = self.parts.clone();
+        if self.active && (self.work.since.is_some() || self.work.tools > 0) {
+            let mut work = self.work.json(None);
+            work["since"] = json!(self.work.since);
+            work["ongoing"] = json!(true);
+            parts.push(json!({ "work": work }));
+        }
+        json!(parts)
+    }
     fn feed(&mut self, agent: &str, line: &str) {
         self.line += 1;
         let Ok(v) = serde_json::from_str::<Value>(line) else {
@@ -380,6 +474,26 @@ impl Transcript {
         }
         if agent == "codex" {
             let p = &v["payload"];
+            if v["type"] == "response_item" {
+                match p["type"].as_str().unwrap_or_default() {
+                    "message" if p["role"] == "assistant" => {
+                        let id = p["id"]
+                            .as_str()
+                            .map_or_else(|| self.line.to_string(), str::to_owned);
+                        self.text(&id, &blocks(&p["content"]), &v["timestamp"]);
+                    }
+                    "function_call" | "custom_tool_call" | "local_shell_call" => {
+                        let input = p
+                            .get("input")
+                            .or(p.get("arguments"))
+                            .cloned()
+                            .unwrap_or_default();
+                        self.tool(p["name"].as_str().unwrap_or_default(), &input);
+                    }
+                    "reasoning" => self.work.thought = true,
+                    _ => {}
+                }
+            }
             if v["type"] == "response_item"
                 && p["type"] == "message"
                 && p["role"] == "user"
@@ -433,12 +547,14 @@ impl Transcript {
                         .unwrap_or(json!(self.line));
                     self.updates.clear();
                     self.paragraphs.0.clear();
+                    self.start_parts(&v["timestamp"]);
                     self.active = true;
                     self.candidate.clear();
                 }
                 "turn_aborted" => {
                     self.updates.clear();
                     self.paragraphs.0.clear();
+                    self.parts.clear();
                     self.turn = Value::Null;
                     self.active = false;
                     self.candidate.clear();
@@ -488,6 +604,7 @@ impl Transcript {
                     self.prompt = text;
                     self.prompts += 1;
                     self.answered = false;
+                    self.start_parts(&v["timestamp"]);
                     self.turn = v.get("uuid").cloned().unwrap_or(json!(self.line));
                     self.updates.clear();
                     self.paragraphs.0.clear();
@@ -502,6 +619,21 @@ impl Transcript {
                 return;
             }
             self.active = true;
+            let id = m["id"].as_str().unwrap_or_default().to_owned();
+            for block in m["content"].as_array().into_iter().flatten() {
+                match block["type"].as_str().unwrap_or_default() {
+                    "text" => self.text(
+                        &id,
+                        block["text"].as_str().unwrap_or_default(),
+                        &v["timestamp"],
+                    ),
+                    "tool_use" => {
+                        self.tool(block["name"].as_str().unwrap_or_default(), &block["input"])
+                    }
+                    "thinking" | "redacted_thinking" => self.work.thought = true,
+                    _ => {}
+                }
+            }
             if !self.turn.is_null() {
                 let message = m
                     .get("id")
@@ -550,7 +682,7 @@ impl Transcript {
         }
     }
     fn value(&self) -> Value {
-        json!({"answer":self.answer,"updates":self.updates,"paragraphs":self.paragraphs.values(),"working":self.active,"background":self.background,"prompt":self.prompt,"title":self.title,"updated":self.updated,"prompts":self.prompts,"answered":self.answered,"turn_text":self.paragraphs.text()})
+        json!({"answer":self.answer,"updates":self.updates,"paragraphs":self.paragraphs.values(),"working":self.active,"background":self.background,"prompt":self.prompt,"title":self.title,"updated":self.updated,"prompts":self.prompts,"answered":self.answered,"turn_text":self.paragraphs.text(),"turn_parts":self.turn_parts()})
     }
     /// A background task starts when a tool result names it: a background command's
     /// `backgroundTaskId`, a Monitor's `taskId`, or a background agent's `agentId`. It ends with
@@ -1403,6 +1535,55 @@ mod tests {
                 assert_eq!(cache.remove(&key).unwrap(), pcm_wav(&[1, 0]));
             }
         }
+    }
+
+    #[test]
+    fn a_turn_notes_the_work_between_what_the_agent_wrote() {
+        let at = |s: u32| format!("2026-10-07T10:{:02}:{:02}.000Z", s / 60, s % 60);
+        let rows = [
+            json!({"type":"user","timestamp":at(0),"message":{"role":"user","content":"Fix the build"}}),
+            json!({"type":"assistant","timestamp":at(3),"message":{"id":"a","content":[{"type":"text","text":"Looking."}]}}),
+            json!({"type":"assistant","timestamp":at(5),"message":{"id":"a","content":[{"type":"tool_use","name":"Bash","input":{"command":"cargo build"}}]}}),
+            json!({"type":"user","timestamp":at(40),"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t","content":"error"}]}}),
+            json!({"type":"assistant","timestamp":at(42),"message":{"id":"b","content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/src/a.rs"}}]}}),
+            json!({"type":"assistant","timestamp":at(50),"message":{"id":"b","content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/src/a.rs"}}]}}),
+            json!({"type":"assistant","timestamp":at(60),"message":{"id":"b","content":[{"type":"tool_use","name":"Write","input":{"file_path":"/src/b.rs"}}]}}),
+            json!({"type":"assistant","timestamp":at(95),"message":{"id":"c","content":[{"type":"text","text":"Fixed the missing import."}]}}),
+            json!({"type":"assistant","timestamp":at(97),"message":{"id":"c","content":[{"type":"text","text":"Building again."}]}}),
+            json!({"type":"assistant","timestamp":at(99),"message":{"id":"d","content":[{"type":"thinking","thinking":"hmm"}]}}),
+            json!({"type":"assistant","timestamp":at(130),"message":{"id":"d","stop_reason":"end_turn","content":[{"type":"text","text":"All green."}]}}),
+        ];
+        let lines: Vec<String> = rows.iter().map(Value::to_string).collect();
+        let done = parse("claude", &lines.join("\n"));
+        assert_eq!(
+            done["turn_parts"],
+            json!([
+                {"id":"a","text":"Looking."},
+                {"work":{"seconds":92.0,"tools":4,"files":2,"thought":false}},
+                {"id":"c","text":"Fixed the missing import.\n\nBuilding again."},
+                {"work":{"seconds":33.0,"tools":0,"files":0,"thought":true}},
+                {"id":"d","text":"All green."},
+            ])
+        );
+        // While it works, the work since the last text closes the turn.
+        let working = parse("claude", &lines[..5].join("\n"));
+        let parts = working["turn_parts"].as_array().unwrap();
+        assert_eq!(parts.len(), 2);
+        assert_eq!(parts[1]["work"]["ongoing"], true);
+        assert_eq!(parts[1]["work"]["since"], at(3));
+        assert_eq!(parts[1]["work"]["tools"], 2);
+        assert_eq!(parts[1]["work"]["files"], 1);
+        // Codex patches name the files they change.
+        assert_eq!(
+            edited_files(
+                "exec",
+                &json!(
+                    "text(await tools.apply_patch(\"*** Begin Patch\\n*** Update File: /a/b.rs\\n@@\\n*** Add File: /a/c.rs\\n+x\"))"
+                )
+            ),
+            vec!["/a/b.rs".to_owned(), "/a/c.rs".to_owned()]
+        );
+        assert!(edited_files("Bash", &json!({"command":"ls"})).is_empty());
     }
 
     #[test]

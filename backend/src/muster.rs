@@ -348,6 +348,7 @@ async fn summary(app: &App, pane: &Value, agent: &Value, tabs: &Value, full: boo
         value["answer"] = thread["answer"].clone();
         value["working"] = thread["working"].clone();
         value["turn_text"] = thread["turn_text"].clone();
+        value["turn_parts"] = thread["turn_parts"].clone();
         // A wait Muster cannot read as a menu still shows what the agent has on screen.
         if state == "question" && question.is_none() {
             let lines: Vec<&str> = screen.trim_end().lines().collect();
