@@ -268,6 +268,15 @@ impl Paragraphs {
             self.0.push((key, text, complete));
         }
     }
+    /// The turn's prose as written, with its Markdown and code, for showing rather than speaking.
+    fn text(&self) -> String {
+        self.0
+            .iter()
+            .map(|(_, text, _)| text.trim())
+            .filter(|text| !text.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    }
     fn values(&self) -> Vec<Value> {
         let mut values = Vec::new();
         for (key, text, complete) in &self.0 {
@@ -313,8 +322,33 @@ struct Transcript {
     /// Whether `answer` replies to `prompt`, rather than to a message before it.
     answered: bool,
 }
-/// What a person typed: plain text, or the text blocks of a message. Text the agent injects,
-/// such as `<system-reminder>` or `<environment_context>`, starts with a tag and is skipped.
+/// Tags agents wrap around text they add to the person's side of a conversation, such as a
+/// background task's notification or a reminder.
+const INJECTED: [&str; 14] = [
+    "task-notification",
+    "system-reminder",
+    "local-command-caveat",
+    "local-command-stdout",
+    "local-command-stderr",
+    "command-name",
+    "command-message",
+    "command-args",
+    "environment_context",
+    "user_instructions",
+    "user-prompt-submit-hook",
+    "bash-input",
+    "bash-stdout",
+    "bash-stderr",
+];
+fn injected(text: &str) -> bool {
+    text.trim_start()
+        .strip_prefix('<')
+        .and_then(|rest| rest.split(['>', ' ', '\n']).next())
+        .is_some_and(|tag| INJECTED.contains(&tag))
+}
+/// What a person typed: plain text, or the text blocks of a message. Text the agent adds, such as
+/// `<system-reminder>` or `<environment_context>`, is skipped; pasted text keeps its words without
+/// the `<pasted_content>` wrapper.
 fn typed(content: &Value) -> Option<String> {
     let text = match content.as_str() {
         Some(text) => text.to_owned(),
@@ -323,12 +357,17 @@ fn typed(content: &Value) -> Option<String> {
             .iter()
             .filter(|b| b["type"] == "text" || b["type"] == "input_text")
             .filter_map(|b| b["text"].as_str())
-            .filter(|t| !t.trim_start().starts_with('<'))
+            .filter(|t| !injected(t))
             .collect::<Vec<_>>()
             .join("\n\n"),
     };
+    if injected(&text) || text.trim_start().starts_with("[Request interrupted") {
+        return None;
+    }
+    let pasted = regex::Regex::new(r"</?pasted_content[^>]*>").unwrap();
+    let text = pasted.replace_all(&text, "");
     let text = text.trim();
-    (!text.is_empty() && !text.starts_with('<')).then(|| text.to_owned())
+    (!text.is_empty()).then(|| text.to_owned())
 }
 impl Transcript {
     fn feed(&mut self, agent: &str, line: &str) {
@@ -442,15 +481,18 @@ impl Transcript {
                 let tool_result = m["content"]
                     .as_array()
                     .is_some_and(|blocks| blocks.iter().any(|b| b["type"] == "tool_result"));
-                if !tool_result {
-                    if let Some(text) = typed(&m["content"]) {
-                        self.prompt = text;
-                        self.prompts += 1;
-                        self.answered = false;
-                    }
+                // Only the person's own message starts a turn. A background task's notification or
+                // a compaction summary continues the one in progress.
+                let person = typed(&m["content"]).filter(|_| v["isCompactSummary"] != true);
+                if let Some(text) = person.filter(|_| !tool_result) {
+                    self.prompt = text;
+                    self.prompts += 1;
+                    self.answered = false;
                     self.turn = v.get("uuid").cloned().unwrap_or(json!(self.line));
                     self.updates.clear();
                     self.paragraphs.0.clear();
+                } else if !tool_result && self.turn.is_null() {
+                    self.turn = v.get("uuid").cloned().unwrap_or(json!(self.line));
                 }
                 self.active = true;
                 self.candidate.clear();
@@ -508,7 +550,7 @@ impl Transcript {
         }
     }
     fn value(&self) -> Value {
-        json!({"answer":self.answer,"updates":self.updates,"paragraphs":self.paragraphs.values(),"working":self.active,"background":self.background,"prompt":self.prompt,"title":self.title,"updated":self.updated,"prompts":self.prompts,"answered":self.answered})
+        json!({"answer":self.answer,"updates":self.updates,"paragraphs":self.paragraphs.values(),"working":self.active,"background":self.background,"prompt":self.prompt,"title":self.title,"updated":self.updated,"prompts":self.prompts,"answered":self.answered,"turn_text":self.paragraphs.text()})
     }
     /// A background task starts when a tool result names it: a background command's
     /// `backgroundTaskId`, a Monitor's `taskId`, or a background agent's `agentId`. It ends with
@@ -1361,6 +1403,40 @@ mod tests {
                 assert_eq!(cache.remove(&key).unwrap(), pcm_wav(&[1, 0]));
             }
         }
+    }
+
+    #[test]
+    fn a_pasted_message_starts_a_turn_and_notifications_continue_it() {
+        let rows = [
+            json!({"type":"user","message":{"role":"user","content":"Yep, shorts look good now"}}),
+            json!({"type":"assistant","message":{"id":"a","stop_reason":"end_turn","content":[{"type":"text","text":"Drafted the thumbnails."}]}}),
+            json!({"type":"user","message":{"role":"user","content":"\n\n<pasted_content id=\"bf6a\">\nResearch the Mac mini for the video\n</pasted_content id=\"bf6a\">"}}),
+            json!({"type":"assistant","message":{"id":"b","stop_reason":"tool_use","content":[{"type":"text","text":"Looking at **specs** first."}]}}),
+            json!({"type":"user","message":{"role":"user","content":"<task-notification>\n<task-id>x</task-id>\n<status>completed</status>\n</task-notification>"}}),
+            json!({"type":"user","message":{"role":"user","content":"[Request interrupted by user]"}}),
+            json!({"type":"user","isCompactSummary":true,"message":{"role":"user","content":"This session is being continued from a previous conversation."}}),
+            json!({"type":"assistant","message":{"id":"c","stop_reason":"end_turn","content":[{"type":"text","text":"The M5 Mac mini is the one to cover."}]}}),
+        ];
+        let lines: Vec<String> = rows.iter().map(Value::to_string).collect();
+        let value = parse("claude", &lines.join("\n"));
+        assert_eq!(value["prompt"], "Research the Mac mini for the video");
+        assert_eq!(value["prompts"], 2);
+        assert_eq!(value["answered"], true);
+        // Everything since the message, as written, survives the notification mid-turn.
+        assert_eq!(
+            value["turn_text"],
+            "Looking at **specs** first.\n\nThe M5 Mac mini is the one to cover."
+        );
+        assert_eq!(
+            value["answer"]["text"],
+            "The M5 Mac mini is the one to cover."
+        );
+        // Mid-turn, before the reply, the notification has not cleared what was written.
+        let value = parse("claude", &lines[..5].join("\n"));
+        assert_eq!(value["answered"], false);
+        assert_eq!(value["turn_text"], "Looking at **specs** first.");
+        assert!(!injected("<pasted_content id=\"x\">hi"));
+        assert!(injected("  <system-reminder>x</system-reminder>"));
     }
 
     #[test]

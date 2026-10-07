@@ -259,7 +259,13 @@ fn latest(thread: &Value) -> String {
             .and_then(|m| m["text"].as_str())
             .map(str::to_owned)
     };
-    let progress = last("paragraphs").or_else(|| last("updates"));
+    // The newest paragraph written since the person's message, as written.
+    let progress = thread["turn_text"]
+        .as_str()
+        .and_then(|text| text.rsplit("\n\n").find(|p| !p.trim().is_empty()))
+        .map(str::to_owned)
+        .or_else(|| last("paragraphs"))
+        .or_else(|| last("updates"));
     let answer = thread["answer"]["text"]
         .as_str()
         .filter(|_| thread["answered"] != false)
@@ -341,6 +347,7 @@ async fn summary(app: &App, pane: &Value, agent: &Value, tabs: &Value, full: boo
         value["updates"] = thread["updates"].clone();
         value["answer"] = thread["answer"].clone();
         value["working"] = thread["working"].clone();
+        value["turn_text"] = thread["turn_text"].clone();
         // A wait Muster cannot read as a menu still shows what the agent has on screen.
         if state == "question" && question.is_none() {
             let lines: Vec<&str> = screen.trim_end().lines().collect();
@@ -949,5 +956,7 @@ Enter to select · Tab/Arrow keys to navigate · Esc to cancel";
         assert_eq!(latest(&asked), "");
         let replying = json!({"working":true,"answered":false,"answer":{"text":"Done: all fixed"},"paragraphs":[{"text":"On it"}]});
         assert_eq!(latest(&replying), "On it");
+        let written = json!({"working":true,"answered":false,"turn_text":"First **step**.\n\nSecond `step`.","paragraphs":[{"text":"Second step."}]});
+        assert_eq!(latest(&written), "Second `step`.");
     }
 }

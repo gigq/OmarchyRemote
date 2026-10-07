@@ -371,6 +371,7 @@
         answered: false,
         paragraphs: [],
         updates: [],
+        turn_text: '',
         working: true,
         state: thread.state === 'question' ? 'question' : 'working',
         earlier: (thread.earlier || 0) + (thread.prompt ? 1 : 0),
@@ -504,6 +505,9 @@
     }
     // What the agent said in its latest turn: the answer once it is done, or its prose so far.
     prose(thread) {
+      // Everything the agent has written since your message, as written, so text you are reading
+      // stays put as more arrives and when the turn ends.
+      if (thread.turn_text) return thread.turn_text;
       // An answer to an earlier message is not this turn's; it shows as the previous reply.
       const current = thread.answered !== false;
       if (current && !thread.working && thread.answer?.text) return thread.answer.text;
