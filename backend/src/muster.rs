@@ -244,10 +244,12 @@ static SAVING: Mutex<()> = Mutex::new(());
 /// the agent works, `waiting` once its reply is done but background tasks still run, `review` for
 /// a finished turn not yet looked at (in Muster, or in Herdr, which then reports it idle), and
 /// `quiet` otherwise.
-fn state(status: &str, background: bool, reviewed: bool) -> &'static str {
+fn state(status: &str, background: bool, reviewed: bool, failed: bool) -> &'static str {
     match status {
         "blocked" => "question",
         "working" => "working",
+        // A turn that failed, such as on a usage limit, waits on the person too.
+        _ if failed => "question",
         _ if background => "waiting",
         "done" if !reviewed => "review",
         _ => "quiet",
@@ -374,7 +376,13 @@ async fn summary(
                 .map(|n| format!("seq:{n}"))
         });
     let reviewed = review.is_some() && saved.reviewed.get(id) == review.as_ref();
-    let state = state(status, !background.is_empty(), reviewed);
+    let failure = &thread["failure"];
+    let state = state(
+        status,
+        !background.is_empty(),
+        reviewed,
+        failure.is_object(),
+    );
     let screen = if state == "question" {
         app.herdr.screen(id).await
     } else {
@@ -406,6 +414,10 @@ async fn summary(
         "background": background,
         "question": question.as_ref().map(Menu::json),
         "error": thread["error"],
+        "failure": failure.is_object().then(|| json!({
+            "message": clip(failure["message"].as_str().unwrap_or_default(), 400),
+            "kind": failure["kind"],
+        })),
         "cwd": pane["foreground_cwd"].as_str().or(pane["cwd"].as_str()),
     });
     if full {
@@ -1066,16 +1078,20 @@ Enter to select · Tab/Arrow keys to navigate · Esc to cancel";
 
     #[test]
     fn threads_are_ranked_by_what_needs_the_person() {
-        assert_eq!(state("blocked", false, false), "question");
-        assert_eq!(state("working", true, false), "working");
+        assert_eq!(state("blocked", false, false, false), "question");
+        // A failed turn, such as one stopped by a usage limit, needs the person.
+        assert_eq!(state("done", false, true, true), "question");
+        assert_eq!(state("idle", false, false, true), "question");
+        assert_eq!(state("working", false, false, true), "working");
+        assert_eq!(state("working", true, false, false), "working");
         // A finished reply with background tasks still running is waiting, not working.
-        assert_eq!(state("done", true, false), "waiting");
-        assert_eq!(state("idle", true, true), "waiting");
-        assert_eq!(state("done", false, false), "review");
+        assert_eq!(state("done", true, false, false), "waiting");
+        assert_eq!(state("idle", true, true, false), "waiting");
+        assert_eq!(state("done", false, false, false), "review");
         // Reviewed in Muster, or looked at in Herdr, a finished turn is quiet.
-        assert_eq!(state("done", false, true), "quiet");
-        assert_eq!(state("idle", false, false), "quiet");
-        assert_eq!(state("unknown", false, false), "quiet");
+        assert_eq!(state("done", false, true, false), "quiet");
+        assert_eq!(state("idle", false, false, false), "quiet");
+        assert_eq!(state("unknown", false, false, false), "quiet");
         let order = ["question", "working", "waiting", "review", "quiet"];
         assert!(order.windows(2).all(|w| rank(w[0]) < rank(w[1])));
         assert_eq!(clip("  short  ", 10), "short");

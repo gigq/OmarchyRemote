@@ -333,6 +333,21 @@ struct Transcript {
     /// of the work between pieces in place of the tool calls and their output.
     parts: Vec<Value>,
     work: Work,
+    /// Why the latest turn failed, such as a usage limit, as `{message, kind}`; null otherwise.
+    failure: Value,
+}
+/// The readable part of an agent's error message. Codex sometimes passes the API's JSON error
+/// through as its message.
+fn failure_message(message: &str) -> String {
+    serde_json::from_str::<Value>(message)
+        .ok()
+        .and_then(|v| {
+            v["error"]["message"]
+                .as_str()
+                .or(v["message"].as_str())
+                .map(str::to_owned)
+        })
+        .unwrap_or_else(|| message.trim().to_owned())
 }
 /// The work since the agent last wrote: when it began, and the tool calls, changed files and
 /// thinking since.
@@ -559,6 +574,7 @@ impl Transcript {
                     self.updates.clear();
                     self.paragraphs.0.clear();
                     self.start_parts(&v["timestamp"]);
+                    self.failure = Value::Null;
                     self.active = true;
                     self.candidate.clear();
                 }
@@ -572,12 +588,17 @@ impl Transcript {
                 }
                 "task_complete" => {
                     self.active = false;
+                    if let Some(message) = p["error"]["message"].as_str() {
+                        self.failure =
+                            json!({"message": failure_message(message), "kind": "error"});
+                    }
                     let text = p["last_agent_message"].as_str().unwrap_or(&self.candidate);
                     if !text.trim().is_empty() {
                         self.paragraphs
                             .put(format!("{}:final", self.turn), text.to_owned(), true);
                         self.answer = json!({"key":p["turn_id"],"text":text});
                         self.answered = true;
+                        self.failure = Value::Null;
                     }
                     self.candidate.clear();
                 }
@@ -615,6 +636,7 @@ impl Transcript {
                     self.prompt = text;
                     self.prompts += 1;
                     self.answered = false;
+                    self.failure = Value::Null;
                     self.start_parts(&v["timestamp"]);
                     self.turn = v.get("uuid").cloned().unwrap_or(json!(self.line));
                     self.updates.clear();
@@ -627,6 +649,13 @@ impl Transcript {
                 self.candidate_id.clear();
             }
             if v["type"] != "assistant" {
+                return;
+            }
+            // Claude Code records an API failure (a usage limit, a server error) as a synthetic
+            // reply; it ends the turn and is not the agent's prose.
+            if v["isApiErrorMessage"] == true {
+                self.failure = json!({"message": blocks(&m["content"]), "kind": v["error"]});
+                self.active = false;
                 return;
             }
             self.active = true;
@@ -689,11 +718,12 @@ impl Transcript {
             self.candidate.push_str(&text);
             self.answer = json!({"key":id,"text":self.candidate});
             self.answered = true;
+            self.failure = Value::Null;
             self.active = false;
         }
     }
     fn value(&self) -> Value {
-        json!({"answer":self.answer,"updates":self.updates,"paragraphs":self.paragraphs.values(),"working":self.active,"background":self.background,"prompt":self.prompt,"title":self.title,"updated":self.updated,"prompts":self.prompts,"answered":self.answered,"turn_text":self.paragraphs.text(),"turn_parts":self.turn_parts()})
+        json!({"answer":self.answer,"updates":self.updates,"paragraphs":self.paragraphs.values(),"working":self.active,"background":self.background,"prompt":self.prompt,"title":self.title,"updated":self.updated,"prompts":self.prompts,"answered":self.answered,"turn_text":self.paragraphs.text(),"turn_parts":self.turn_parts(),"failure":self.failure})
     }
     /// A background task starts when a tool result names it: a background command's
     /// `backgroundTaskId`, a Monitor's `taskId`, or a background agent's `agentId`. It ends with
@@ -1595,6 +1625,45 @@ mod tests {
             vec!["/a/b.rs".to_owned(), "/a/c.rs".to_owned()]
         );
         assert!(edited_files("Bash", &json!({"command":"ls"})).is_empty());
+    }
+
+    #[test]
+    fn a_failed_turn_says_why_until_the_next_reply() {
+        let claude = [
+            json!({"type":"user","message":{"role":"user","content":"Keep going"}}),
+            json!({"type":"assistant","isApiErrorMessage":true,"error":"rate_limit","message":{"id":"x","model":"<synthetic>","stop_reason":"stop_sequence","content":[{"type":"text","text":"You've hit your session limit · resets 11:10pm"}]}}),
+        ];
+        let lines: Vec<String> = claude.iter().map(Value::to_string).collect();
+        let value = parse("claude", &lines.join("\n"));
+        assert_eq!(
+            value["failure"]["message"],
+            "You've hit your session limit · resets 11:10pm"
+        );
+        assert_eq!(value["failure"]["kind"], "rate_limit");
+        assert_eq!(value["working"], false);
+        // The failure is not the agent's prose or answer.
+        assert_eq!(value["turn_text"], "");
+        assert_eq!(value["answered"], false);
+        let retried = format!(
+            "{}\n{}",
+            lines.join("\n"),
+            json!({"type":"user","message":{"role":"user","content":"Try again"}})
+        );
+        assert_eq!(parse("claude", &retried)["failure"], Value::Null);
+        let codex = [
+            json!({"type":"event_msg","payload":{"type":"task_started","turn_id":"t"}}),
+            json!({"type":"event_msg","payload":{"type":"task_complete","turn_id":"t","last_agent_message":null,"error":{"message":"{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"The 'gpt-6-astra' model is not supported when using Codex with a ChatGPT account.\"}}"}}}),
+        ];
+        let lines: Vec<String> = codex.iter().map(Value::to_string).collect();
+        let value = parse("codex", &lines.join("\n"));
+        assert_eq!(
+            value["failure"]["message"],
+            "The 'gpt-6-astra' model is not supported when using Codex with a ChatGPT account."
+        );
+        assert_eq!(
+            failure_message("You've hit your usage limit."),
+            "You've hit your usage limit."
+        );
     }
 
     #[test]

@@ -122,6 +122,15 @@
     if (work.files) parts.push(`${plural(work.files, 'file')} changed`);
     return parts.join(' · ');
   }
+  // A failed turn that ran into a usage or rate limit, rather than another error.
+  function limited(failure) {
+    return (
+      failure.kind === 'rate_limit' ||
+      /usage limit|session limit|weekly limit|rate limit|\b429\b|credits/i.test(
+        failure.message || ''
+      )
+    );
+  }
   function waiting(thread) {
     const count = thread.background?.length || 0;
     return count ? `waiting on ${count} background ${count === 1 ? 'task' : 'tasks'}` : '';
@@ -351,11 +360,15 @@
         ? thread.question.kind === 'approval'
           ? 'Approval'
           : 'Question'
-        : thread.error
-          ? 'Unreadable'
-          : thread.status === 'unknown'
-            ? 'Unknown status'
-            : '';
+        : thread.failure
+          ? limited(thread.failure)
+            ? 'Usage limit'
+            : 'Error'
+          : thread.error
+            ? 'Unreadable'
+            : thread.status === 'unknown'
+              ? 'Unknown status'
+              : '';
       if (badge) {
         const b = node('span', 'muster-row-badge', badge);
         b.dataset.kind = badge.toLowerCase().replace(' ', '-');
@@ -369,10 +382,12 @@
       } else if (thread.state === 'question')
         row.append(node('span', 'muster-row-question', 'Waiting on you in Herdr'));
       // Until the agent replies, a thread shows the message it was just sent.
-      const text = thread.error
-        ? 'Open in Herdr to read this conversation.'
-        : thread.latest ||
-          (thread.answered === false && thread.prompt ? 'You: ' + thread.prompt : '');
+      const text = thread.failure
+        ? thread.failure.message
+        : thread.error
+          ? 'Open in Herdr to read this conversation.'
+          : thread.latest ||
+            (thread.answered === false && thread.prompt ? 'You: ' + thread.prompt : '');
       if (text) row.append(node('span', 'muster-row-latest', text));
       const more = waiting(thread);
       if (more) row.append(node('span', 'muster-row-meta', more));
@@ -582,7 +597,7 @@
         parts.push(said);
       } else if (thread.error)
         parts.push(node('p', 'muster-note', 'Muster cannot read this conversation.'));
-      else if (thread.answered === false && !question && !thread.screen)
+      else if (thread.answered === false && !question && !thread.screen && !thread.failure)
         parts.push(
           thread.working || thread.state === 'working'
             ? node('p', 'muster-note muster-working', 'Working on your message…')
@@ -590,6 +605,16 @@
         );
       for (const task of thread.background || [])
         parts.push(node('p', 'muster-task', 'Background · ' + task.description));
+      // Why the turn stopped, such as a usage limit, after what it managed to write.
+      if (thread.failure) {
+        const card = node('section', 'muster-failure');
+        card.setAttribute('aria-label', limited(thread.failure) ? 'Usage limit' : 'Error');
+        card.append(
+          node('strong', '', limited(thread.failure) ? 'Usage limit' : 'The turn failed'),
+          node('p', '', thread.failure.message)
+        );
+        parts.push(card);
+      }
       if (question) parts.push(this.questionCard(question));
       else if (thread.screen) parts.push(this.screenCard(thread.screen));
       const top = b.scrollTop;

@@ -535,3 +535,28 @@ test('the board tells waiting from working, and says what kind of attention', as
   ).toHaveText('1 needs you · 1 to review');
   await page.screenshot({ path: 'artifacts/browser/muster-states.png' });
 });
+
+test('a turn stopped by a usage limit or an error says so', async ({ page }) => {
+  const { app, state } = await setup(page);
+  Object.assign(state.projects[0], { state: 'question' });
+  Object.assign(state.projects[0].threads[0], {
+    state: 'question',
+    status: 'done',
+    background: [],
+    failure: {
+      message: 'You’ve hit your usage limit. Try again at Oct 13th, 10:29 PM.',
+      kind: 'error',
+    },
+  });
+  state.projects[1].threads[1].failure = { message: 'API Error: 500', kind: 'server_error' };
+  const row = app.locator('.muster-row[data-pane="wA:p1"]');
+  await expect(row.locator('.muster-row-badge')).toHaveText('Usage limit');
+  await expect(row.locator('.muster-row-latest')).toHaveText(
+    'You’ve hit your usage limit. Try again at Oct 13th, 10:29 PM.'
+  );
+  await expect(app.locator('.muster-row[data-pane="wB:p2"] .muster-row-badge')).toHaveText('Error');
+  await row.click();
+  const card = app.getByLabel('Usage limit');
+  await expect(card).toContainText('Try again at Oct 13th');
+  await expect(app.locator('.muster-body')).not.toContainText('No reply to this message yet.');
+});
