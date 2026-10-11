@@ -602,6 +602,11 @@
   margin: 2px 0 0;
   overflow-wrap: anywhere;
 }
+.muster-dismiss {
+  margin-top: 8px;
+  padding: 5px 14px;
+  font-size: 12px;
+}
 .muster-question {
   display: flex;
   flex-direction: column;

@@ -379,7 +379,7 @@
       if (thread.question) {
         const q = node('span', 'muster-row-question', thread.question.question || 'Waiting on you');
         row.append(q);
-      } else if (thread.state === 'question')
+      } else if (thread.state === 'question' && !thread.failure)
         row.append(node('span', 'muster-row-question', 'Waiting on you in Herdr'));
       // Until the agent replies, a thread shows the message it was just sent.
       const text = thread.failure
@@ -613,6 +613,11 @@
           node('strong', '', limited(thread.failure) ? 'Usage limit' : 'The turn failed'),
           node('p', '', thread.failure.message)
         );
+        // Fixed elsewhere, in Herdr or a terminal: dismissing takes it out of Needs you.
+        if (!thread.failure.dismissed && thread.failure.key)
+          card.append(
+            button('Dismiss', () => this.dismiss(thread), 'remote-button muster-dismiss')
+          );
         parts.push(card);
       }
       if (question) parts.push(this.questionCard(question));
@@ -789,6 +794,20 @@
         this.threadSignature = null;
         if (pane === this.pane && this.thread) this.renderThread();
         this.load();
+      }
+    }
+    async dismiss(thread) {
+      const pane = thread.pane_id;
+      try {
+        await request(`/panes/${encodeURIComponent(pane)}/dismiss`, {
+          key: thread.failure.key,
+          ...(thread.review_key ? { review_key: thread.review_key } : {}),
+        });
+        this.threadStatus.textContent = '';
+        await this.load();
+        this.refresh();
+      } catch (e) {
+        if (pane === this.pane) this.threadStatus.textContent = e.message;
       }
     }
     async keys(keys) {

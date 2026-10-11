@@ -546,6 +546,8 @@ test('a turn stopped by a usage limit or an error says so', async ({ page }) => 
     failure: {
       message: 'You’ve hit your usage limit. Try again at Oct 13th, 10:29 PM.',
       kind: 'error',
+      key: 'limit-1',
+      dismissed: false,
     },
   });
   state.projects[1].threads[1].failure = { message: 'API Error: 500', kind: 'server_error' };
@@ -559,4 +561,22 @@ test('a turn stopped by a usage limit or an error says so', async ({ page }) => 
   const card = app.getByLabel('Usage limit');
   await expect(card).toContainText('Try again at Oct 13th');
   await expect(app.locator('.muster-body')).not.toContainText('No reply to this message yet.');
+  await expect(app.getByLabel('Screen')).toHaveCount(0);
+  // Dismissed to fix in Herdr, it leaves Needs you; the message stays on the thread.
+  const dismissed = [];
+  await page.route(/\/api\/muster\/panes\/[^/]+\/dismiss$/, r => {
+    dismissed.push(r.request().postDataJSON());
+    Object.assign(state.projects[0], { state: 'quiet' });
+    const t = state.projects[0].threads[0];
+    Object.assign(t, { state: 'quiet', failure: { ...t.failure, dismissed: true } });
+    return r.fulfill({ json: { type: 'ok' } });
+  });
+  await card.getByRole('button', { name: 'Dismiss' }).click();
+  await expect.poll(() => dismissed).toEqual([{ key: 'limit-1' }]);
+  await expect(card.getByRole('button', { name: 'Dismiss' })).toHaveCount(0);
+  await expect(card).toContainText('Try again at Oct 13th');
+  await app.getByRole('button', { name: 'Muster' }).click();
+  await expect(
+    app.getByRole('region', { name: 'Quiet' }).locator('.muster-row[data-pane="wA:p1"]')
+  ).toBeVisible();
 });

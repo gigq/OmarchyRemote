@@ -223,6 +223,9 @@ struct Saved {
     hidden: std::collections::BTreeSet<String>,
     #[serde(default)]
     reviewed: std::collections::BTreeMap<String, String>,
+    /// For each thread, the failed turn the person dismissed, to fix it elsewhere.
+    #[serde(default)]
+    dismissed: std::collections::BTreeMap<String, String>,
 }
 fn saved() -> Saved {
     saved_path()
@@ -377,13 +380,20 @@ async fn summary(
         });
     let reviewed = review.is_some() && saved.reviewed.get(id) == review.as_ref();
     let failure = &thread["failure"];
+    // A failure is told apart by its message and when the log last changed.
+    let failure_key = failure.is_object().then(|| {
+        let key = format!("{}{}", failure["message"], thread["updated"]);
+        format!("{:x}", Sha256::digest(key.as_bytes()))[..16].to_owned()
+    });
+    let dismissed = failure_key.is_some() && saved.dismissed.get(id) == failure_key.as_ref();
     let state = state(
         status,
         !background.is_empty(),
         reviewed,
-        failure.is_object(),
+        failure_key.is_some() && !dismissed,
     );
-    let screen = if state == "question" {
+    // Only a blocked agent has a prompt on screen; a failed turn shows its message instead.
+    let screen = if status == "blocked" {
         app.herdr.screen(id).await
     } else {
         String::new()
@@ -417,6 +427,8 @@ async fn summary(
         "failure": failure.is_object().then(|| json!({
             "message": clip(failure["message"].as_str().unwrap_or_default(), 400),
             "kind": failure["kind"],
+            "key": failure_key,
+            "dismissed": dismissed,
         })),
         "cwd": pane["foreground_cwd"].as_str().or(pane["cwd"].as_str()),
     });
@@ -428,7 +440,7 @@ async fn summary(
         value["turn_text"] = thread["turn_text"].clone();
         value["turn_parts"] = thread["turn_parts"].clone();
         // A wait Muster cannot read as a menu still shows what the agent has on screen.
-        if state == "question" && question.is_none() {
+        if status == "blocked" && question.is_none() {
             let lines: Vec<&str> = screen.trim_end().lines().collect();
             value["screen"] = json!(lines[lines.len().saturating_sub(24)..].join("\n"));
         }
@@ -848,6 +860,39 @@ pub async fn hide(Json(request): Json<Hide>) -> Result<Json<Value>, ApiError> {
     }
     save(&saved).map_err(error)?;
     Ok(Json(json!({"hidden": saved.hidden.len()})))
+}
+
+#[derive(Deserialize)]
+pub struct Dismiss {
+    key: String,
+    #[serde(default)]
+    review_key: Option<String>,
+}
+/// Dismisses a thread's failed turn, such as a usage limit the person will deal with in Herdr,
+/// so it leaves Needs you; its finished reply, if any, counts as reviewed too.
+pub async fn dismiss(
+    Path(id): Path<String>,
+    Json(request): Json<Dismiss>,
+) -> Result<Json<Value>, ApiError> {
+    if id.is_empty()
+        || id.len() > 128
+        || request.key.is_empty()
+        || request.key.len() > 128
+        || request.review_key.as_ref().is_some_and(|k| k.len() > 128)
+    {
+        return Err(invalid("Invalid failure"));
+    }
+    let _lock = SAVING.lock().unwrap();
+    let mut saved = saved();
+    if saved.dismissed.len() > 400 {
+        saved.dismissed.clear();
+    }
+    if let Some(review) = request.review_key {
+        saved.reviewed.insert(id.clone(), review);
+    }
+    saved.dismissed.insert(id, request.key);
+    save(&saved).map_err(error)?;
+    Ok(Json(json!({"type":"ok"})))
 }
 
 #[derive(Deserialize)]
