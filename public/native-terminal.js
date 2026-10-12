@@ -1,6 +1,17 @@
 /* Native overflow scrolling over xterm's parsed buffer. No touchmove cancellation,
    velocity simulation, or per-frame scroll-position animation. */
 (() => {
+  // Whether the last pointer was a mouse or trackpad, which moves before it presses, so the
+  // edge guards can step aside for it; a touch brings them back.
+  let watching = false;
+  function watchPointer() {
+    if (watching) return;
+    watching = true;
+    const note = e =>
+      document.documentElement.classList.toggle('pointer-mouse', e.pointerType === 'mouse');
+    document.addEventListener('pointermove', note, { capture: true, passive: true });
+    document.addEventListener('pointerdown', note, { capture: true, passive: true });
+  }
   const palette = [
     '#26233a',
     '#eb6f92',
@@ -64,6 +75,7 @@
       this.spacer.className = 'native-terminal-spacer';
       this.scroller.append(this.content, this.spacer);
       host.append(this.scroller);
+      watchPointer();
       this.edges = ['left', 'right'].map(side => {
         const edge = document.createElement('div');
         edge.className = 'native-scroll-edge ' + side;

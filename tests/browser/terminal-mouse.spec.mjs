@@ -17,9 +17,11 @@ test('taps and scrolling reach a TUI that tracks the mouse and stay local otherw
   const scroller = page.locator('.remote-terminal .native-terminal-scroll');
   await expect(scroller).toHaveClass(/mouse-tracking/);
   await expect(scroller).toHaveCSS('scrollbar-width', 'none');
-  // The first column sits under the left swipe guard, which passes taps through.
-  const edge = page.locator('.remote-terminal .native-scroll-edge.left');
-  await edge.click({ position: { x: 3, y: 3 } });
+  // The first column sits under the left swipe guard. A finger's tap passes through it; for a
+  // mouse the guard steps aside, so a click there lands on the text.
+  const edge = await page.locator('.remote-terminal .native-scroll-edge.left').boundingBox();
+  const corner = () => page.mouse.click(edge.x + 3, edge.y + 3);
+  await corner();
   await expect.poll(echoed).toMatch(/\^\[\[<0;1;1M\^\[\[<0;1;1m/);
   const cell = await page.evaluate(() => {
     const view = qaTerms[0].nativeView;
@@ -61,7 +63,7 @@ test('taps and scrolling reach a TUI that tracks the mouse and stay local otherw
   await expect.poll(() => page.evaluate(() => qaTerms[0].modes.mouseTrackingMode)).toBe('none');
   await expect(scroller).not.toHaveClass(/mouse-tracking/);
   await expect(scroller).not.toHaveCSS('scrollbar-width', 'none');
-  await edge.click({ position: { x: 3, y: 3 } });
+  await corner();
   await scroller.click({ position: { x: cell.width * 4.5, y: cell.height * 2.5 } });
   await page.mouse.wheel(0, cell.height * 2);
   await page.waitForTimeout(300);

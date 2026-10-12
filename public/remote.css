@@ -231,6 +231,11 @@
 .native-scroll-edge.right {
   right: 0;
 }
+/* The guards are for fingers. To a mouse or trackpad they would only block the first and last
+   characters of each line, where a selection usually starts, and start a workspace swipe. */
+.pointer-mouse .native-scroll-edge {
+  pointer-events: none;
+}
 
 .herdr-input-bar:not(:has(button:not([hidden]), .remote-status:not(:empty))) {
   display: none;
