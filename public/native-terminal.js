@@ -194,6 +194,32 @@
       listen('contextmenu', () => {
         this.moved = true;
       });
+      // Rows are separate boxes, so copied text gets a newline between lines (but not between the
+      // pieces of one wrapped line), without the trailing spaces of the terminal's width.
+      listen('copy', e => {
+        const selection = window.getSelection();
+        if (!this.selecting() || !e.clipboardData) return;
+        const range = selection.getRangeAt(0);
+        const rows = [...this.content.querySelectorAll('.native-terminal-row')]
+          .filter(row => range.intersectsNode(row))
+          .sort((a, b) => a.dataset.line - b.dataset.line);
+        if (rows.length < 2) return;
+        let text = '';
+        rows.forEach((row, i) => {
+          const part = document.createRange();
+          part.selectNodeContents(row);
+          if (row.contains(range.startContainer))
+            part.setStart(range.startContainer, range.startOffset);
+          if (row.contains(range.endContainer)) part.setEnd(range.endContainer, range.endOffset);
+          const next = rows[i + 1];
+          const wrapped = next && next.dataset.source === row.dataset.source;
+          text += wrapped
+            ? part.toString()
+            : part.toString().replace(/\s+$/, '') + (next ? '\n' : '');
+        });
+        e.clipboardData.setData('text/plain', text);
+        e.preventDefault();
+      });
       document.addEventListener(
         'selectionchange',
         () => {
@@ -299,6 +325,24 @@
           // Keep the cell under a cursor that sits past the last character, as at a prompt.
           if (source === cursorSource)
             end = Math.max(end, Math.min(this.term.cols, buffer.cursorX + 1));
+        } else {
+          // Trailing blank cells draw nothing, so the row ends at its last visible one and a
+          // selection stops at the end of the text instead of running on into spaces. A colored
+          // or underlined blank still shows, as in a TUI's status bar.
+          while (end > 0) {
+            const cell = line.getCell(end - 1);
+            const blank =
+              !cell ||
+              (!cell.getChars().trim() &&
+                cell.getWidth() !== 0 &&
+                cell.isBgDefault() &&
+                !cell.isInverse() &&
+                !cell.isUnderline());
+            if (!blank) break;
+            end--;
+          }
+          if (source === cursorSource)
+            end = Math.max(end, Math.min(this.term.cols, buffer.cursorX + 1));
         }
         for (let start = 0; start < Math.max(1, end);) {
           let stop = this.fit ? Math.min(end, start + columns) : end;
@@ -326,7 +370,9 @@
       if (!entry) return null;
       const b = term.buffer.active,
         row = entry.source - b.viewportY,
-        col = Math.min(entry.end - 1, entry.start + Math.floor((clientX - rect.left) / this.width));
+        // A wrapped row ends at its text; an unwrapped one spans every column, drawn or not.
+        last = this.fit ? entry.end - 1 : term.cols - 1,
+        col = Math.min(last, entry.start + Math.floor((clientX - rect.left) / this.width));
       if (row < 0 || row >= term.rows || col < 0 || col >= term.cols) return null;
       return { x: col + 1, y: row + 1 };
     }
@@ -540,6 +586,7 @@
           content.append(row);
           this.rows.set(y, row);
         }
+        row.dataset.source = entry.source;
         row.style.top = `${(y - origin) * this.height}px`;
         row.style.height = row.style.lineHeight = `${this.height}px`;
         const runs = [];

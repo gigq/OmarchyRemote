@@ -56,5 +56,25 @@ for (const [width, height, layout] of [
     // The window did not move: the drag was a selection, not a workspace swipe.
     expect((await row.boundingBox()).x).toBe(box.x);
     expect(await drag(60, 200)).toMatch(/^ith some words/);
+    // Past the end of the text the selection stops there, not in the terminal's blank columns.
+    const view = await p.locator('#remote-terminal-app .native-terminal-scroll').boundingBox();
+    expect(await drag(2, view.x + view.width - 40 - box.x)).toBe(
+      'line 2 with some words to select'
+    );
+    // Several lines copy as lines, without trailing spaces.
+    await p.evaluate(() => getSelection().removeAllRanges());
+    await p.mouse.move(box.x + 2, box.y + box.height / 2);
+    await p.mouse.down();
+    await p.mouse.move(box.x + 30, box.y + box.height * 2.5, { steps: 8 });
+    await p.mouse.up();
+    const copied = await p.evaluate(() => {
+      const data = new DataTransfer();
+      const anchor = getSelection().anchorNode.parentElement;
+      anchor.dispatchEvent(
+        new ClipboardEvent('copy', { clipboardData: data, bubbles: true, cancelable: true })
+      );
+      return data.getData('text/plain');
+    });
+    expect(copied).toBe('line 2 with some words to select\nline 3 with some words to select\nline');
   });
 }
