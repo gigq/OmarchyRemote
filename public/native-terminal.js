@@ -502,6 +502,9 @@
         oldWidth = this.width;
       this.height = parseFloat(screen.style.height) / term.rows || 18;
       this.width = parseFloat(screen.style.width) / term.cols || 7.2;
+      // Rows draw at the size xterm measured its cells in (13 px in desk mode), or a long run of
+      // text falls short of its cells and the cursor drifts away from the end of the line.
+      content.style.setProperty('--native-terminal-font', `${term.options.fontSize}px`);
       dirty ||= oldHeight !== this.height || oldWidth !== this.width;
       const b = term.buffer.active;
       const columns = Math.max(2, Math.floor(scroller.clientWidth / this.width));

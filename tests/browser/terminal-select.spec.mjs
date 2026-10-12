@@ -15,7 +15,8 @@ for (const [width, height, layout] of [
     );
     const text =
       Array.from({ length: 6 }, (_, i) => `line ${i} with some words to select\r\n`).join('') +
-      '$ ';
+      '$ ' +
+      'typed words '.repeat(5);
     await p.routeWebSocket('**/api/terminal/*/ws', ws => {
       ws.send(JSON.stringify({ type: 'screen', cols: 80, rows: 24, data: [...Buffer.from(text)] }));
     });
@@ -76,5 +77,16 @@ for (const [width, height, layout] of [
       return data.getData('text/plain');
     });
     expect(copied).toBe('line 2 with some words to select\nline 3 with some words to select\nline');
+    // The cursor sits right after the typed text, however long the line, at either text size.
+    const gap = await p.evaluate(() => {
+      const row = [...document.querySelectorAll('#remote-terminal-app .native-terminal-row')].find(
+        r => r.textContent.includes('typed words')
+      );
+      const cursor = [...row.querySelectorAll('span')].find(s => s.style.boxShadow);
+      const text = document.createRange();
+      text.selectNodeContents(row.querySelector('span'));
+      return cursor.getBoundingClientRect().left - text.getBoundingClientRect().right;
+    });
+    expect(Math.abs(gap)).toBeLessThan(2);
   });
 }

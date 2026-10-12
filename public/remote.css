@@ -127,11 +127,14 @@
   position: relative;
   min-width: 100%;
 }
+/* A row spans the full width even where its text ends, so a point past the end of a line still
+   belongs to that line when a selection is dragged there. */
 .native-terminal-row {
   position: absolute;
   left: 0;
+  right: 0;
   font:
-    12px 'JetBrains Mono',
+    var(--native-terminal-font, 12px) 'JetBrains Mono',
     monospace;
   white-space: pre;
 }
