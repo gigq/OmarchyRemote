@@ -341,6 +341,50 @@ fn tilde(path: &FsPath) -> String {
     }
 }
 const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
+const CODEX_EFFORTS: [&str; 4] = ["low", "medium", "high", "xhigh"];
+/// The agents a chat can run, as `(id, label, command)`: Claude Code; Claude X, Claude Code
+/// through a local proxy to other accounts (`claudex`, where installed); and Codex. Only those
+/// whose command is on the host are offered.
+const AGENTS: [(&str, &str, &str); 3] = [
+    ("claude", "Claude", "claude"),
+    ("claudex", "Claude X", "claudex"),
+    ("codex", "Codex", "codex"),
+];
+fn installed() -> Vec<(&'static str, &'static str, &'static str)> {
+    AGENTS
+        .into_iter()
+        .filter(|(_, _, command)| apps::resolve_program(command).is_ok())
+        .collect()
+}
+/// A chat's agent; chats saved before there was a choice ran Claude.
+fn agent_of(conversation: &Conversation) -> &str {
+    if conversation.agent.is_empty() {
+        "claude"
+    } else {
+        &conversation.agent
+    }
+}
+/// Claude and Claude X are the same program with the same sessions, so a chat moves between them.
+fn claude_family(agent: &str) -> bool {
+    agent == "claude" || agent == "claudex"
+}
+fn agent_models(agent: &str) -> Vec<(String, String)> {
+    if claude_family(agent) {
+        return models();
+    }
+    // Codex runs its configured model unless the backend offers choices.
+    std::env::var("OMARCHY_CHAT_CODEX_MODELS")
+        .ok()
+        .and_then(|list| serde_json::from_str(&list).ok())
+        .unwrap_or_default()
+}
+fn agent_efforts(agent: &str) -> &'static [&'static str] {
+    if claude_family(agent) {
+        &EFFORTS
+    } else {
+        &CODEX_EFFORTS
+    }
+}
 /// The models offered, as `[alias, label]` pairs; `OMARCHY_CHAT_MODELS` replaces the list.
 fn models() -> Vec<(String, String)> {
     std::env::var("OMARCHY_CHAT_MODELS")
@@ -357,10 +401,10 @@ fn models() -> Vec<(String, String)> {
             .into()
         })
 }
-/// Only offered models and effort levels reach Claude's command line; empty means its default.
-fn valid_settings(model: &str, effort: &str) -> bool {
-    (model.is_empty() || models().iter().any(|(id, _)| id == model))
-        && (effort.is_empty() || EFFORTS.contains(&effort))
+/// Only offered models and effort levels reach an agent's command line; empty means its default.
+fn valid_settings(agent: &str, model: &str, effort: &str) -> bool {
+    (model.is_empty() || agent_models(agent).iter().any(|(id, _)| id == model))
+        && (effort.is_empty() || agent_efforts(agent).contains(&effort))
 }
 /// Claude's own default model and effort, from its user settings.
 /// What a chat left on Default runs with: `OMARCHY_CHAT_DEFAULT_MODEL` and
@@ -394,12 +438,12 @@ fn configured() -> (String, String) {
         read("OMARCHY_CHAT_DEFAULT_EFFORT"),
     );
     (
-        if valid_settings(&model, "") {
+        if valid_settings("claude", &model, "") {
             model
         } else {
             String::new()
         },
-        if valid_settings("", &effort) {
+        if valid_settings("claude", "", &effort) {
             effort
         } else {
             String::new()
@@ -546,10 +590,15 @@ struct Live {
     removed: bool,
     /// The model and effort the running agent was started with.
     started: (String, String),
+    /// The last error Codex reported in this turn, for when the turn fails.
+    failure: Option<String>,
 }
 impl Live {
-    /// Applies one line of Claude's stream-json output; returns the events to broadcast.
+    /// Applies one line of the agent's JSON output; returns the events to broadcast.
     fn apply(&mut self, line: &Value) -> Vec<Value> {
+        if agent_of(&self.conversation) == "codex" {
+            return self.apply_codex(line);
+        }
         let id = self.conversation.id.clone();
         let mut events = Vec::new();
         match line["type"].as_str().unwrap_or_default() {
@@ -620,6 +669,97 @@ impl Live {
         events
     }
 }
+impl Live {
+    /// Applies one event of `codex exec --json`: its session's id, the agent's messages and tool
+    /// calls (commands, edits, searches), and the end of the turn.
+    fn apply_codex(&mut self, line: &Value) -> Vec<Value> {
+        let id = self.conversation.id.clone();
+        let item = &line["item"];
+        let mut entry = None;
+        let mut events = Vec::new();
+        match (
+            line["type"].as_str().unwrap_or_default(),
+            item["type"].as_str(),
+        ) {
+            ("thread.started", _) => {
+                if let Some(thread) = line["thread_id"].as_str()
+                    && self.conversation.session != thread
+                {
+                    self.conversation.session = thread.to_owned();
+                    events.push(json!({"type":"session","id":id}));
+                }
+            }
+            ("item.started", Some("command_execution")) => {
+                entry = Some(Entry::new(
+                    "tool",
+                    "Shell",
+                    &codex_command(item["command"].as_str().unwrap_or_default()),
+                ));
+            }
+            ("item.completed", Some("agent_message")) => {
+                let text = item["text"].as_str().unwrap_or_default().trim();
+                if !text.is_empty() {
+                    entry = Some(Entry::new("assistant", "", text));
+                }
+            }
+            ("item.completed", Some("file_change")) => {
+                let files: Vec<&str> = item["changes"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|c| c["path"].as_str())
+                    .map(|p| p.rsplit('/').next().unwrap_or(p))
+                    .collect();
+                entry = Some(Entry::new("tool", "Edit", &files.join(", ")));
+            }
+            ("item.completed", Some("web_search")) => {
+                entry = Some(Entry::new(
+                    "tool",
+                    "WebSearch",
+                    item["query"].as_str().unwrap_or_default(),
+                ));
+            }
+            ("item.completed", Some("mcp_tool_call")) => {
+                let name = item["tool"].as_str().unwrap_or("tool");
+                entry = Some(Entry::new(
+                    "tool",
+                    name,
+                    item["server"].as_str().unwrap_or_default(),
+                ));
+            }
+            ("error", _) => {
+                self.failure = line["message"].as_str().map(str::to_owned);
+            }
+            ("turn.completed", _) | ("turn.failed", _) => {
+                self.busy = false;
+                let failed = line["type"] == "turn.failed";
+                let message = line["error"]["message"]
+                    .as_str()
+                    .map(str::to_owned)
+                    .or(self.failure.take())
+                    .unwrap_or_else(|| "Codex stopped with an error".into());
+                events.push(json!({"type":"done","id":id,"error":if failed {json!(message)} else {Value::Null}}));
+            }
+            _ => {}
+        }
+        if let Some(entry) = entry {
+            events.push(json!({"type":"entry","id":id,"index":self.conversation.entries.len(),"entry":entry.json()}));
+            self.conversation.entries.push(entry);
+        }
+        if !events.is_empty() {
+            self.conversation.updated = now();
+        }
+        events
+    }
+}
+/// A Codex command as typed: Codex runs each through `bash -lc '…'`.
+fn codex_command(command: &str) -> String {
+    let wrapped = regex::Regex::new(r"^\S*bash -lc '(.*)'$").unwrap();
+    wrapped
+        .captures(command.trim())
+        .map(|c| c[1].replace("'\\''", "'"))
+        .unwrap_or_else(|| command.trim().to_owned())
+}
 fn tool_summary(input: &Value) -> String {
     let text = [
         "description",
@@ -638,7 +778,8 @@ fn tool_summary(input: &Value) -> String {
 }
 
 struct Running {
-    stdin: tokio::sync::Mutex<ChildStdin>,
+    /// Claude takes each message on its input; a Codex run closes it once it has the prompt.
+    stdin: tokio::sync::Mutex<Option<ChildStdin>>,
     child: tokio::sync::Mutex<Child>,
     live: Mutex<Live>,
 }
@@ -721,7 +862,7 @@ impl Chats {
             live.conversation.effort.clone(),
         );
         anyhow::ensure!(
-            valid_settings(&model, &effort),
+            valid_settings(agent_of(&live.conversation), &model, &effort),
             "Unsupported model or effort"
         );
         // `started` keeps the chat's own choice, so Default never looks like a change.
@@ -736,7 +877,11 @@ impl Chats {
         live.started = (model, effort);
         args.push(if resume { "--resume" } else { "--session-id" }.into());
         args.push(live.conversation.session.clone());
-        let mut child = Command::new(apps::resolve_program("claude")?)
+        let command = AGENTS
+            .iter()
+            .find(|(id, _, _)| *id == agent_of(&live.conversation))
+            .map_or("claude", |(_, _, command)| *command);
+        let mut child = Command::new(apps::resolve_program(command)?)
             .args(&args)
             .current_dir(live.path.parent().unwrap_or(root))
             .env_remove("CLAUDECODE")
@@ -752,7 +897,7 @@ impl Chats {
         let stderr = child.stderr.take().unwrap();
         let id = live.conversation.id.clone();
         let running = Arc::new(Running {
-            stdin: tokio::sync::Mutex::new(child.stdin.take().unwrap()),
+            stdin: tokio::sync::Mutex::new(child.stdin.take()),
             child: tokio::sync::Mutex::new(child),
             live: Mutex::new(live),
         });
@@ -760,8 +905,86 @@ impl Chats {
             .lock()
             .unwrap()
             .insert(id.clone(), running.clone());
+        self.read(running.clone(), stdout, stderr);
+        Ok(running)
+    }
+    /// Runs one Codex turn in the chat's folder: `codex exec --json`, resuming the chat's
+    /// session once it has one, with the prompt on its input and pictures attached.
+    fn spawn_codex(
+        &self,
+        mut live: Live,
+        prompt: &str,
+        images: &[PathBuf],
+        root: &FsPath,
+    ) -> anyhow::Result<Arc<Running>> {
+        let mut args: Vec<String> = ["exec", "--json", "--skip-git-repo-check"]
+            .map(String::from)
+            .into();
+        if let Ok(extra) = std::env::var("OMARCHY_CHAT_CODEX_ARGS") {
+            args.extend(serde_json::from_str::<Vec<String>>(&extra)?);
+        }
+        let (model, effort) = (
+            live.conversation.model.clone(),
+            live.conversation.effort.clone(),
+        );
+        anyhow::ensure!(
+            valid_settings("codex", &model, &effort),
+            "Unsupported model or effort"
+        );
+        if !model.is_empty() {
+            args.extend(["--model".into(), model.clone()]);
+        }
+        if !effort.is_empty() {
+            args.extend([
+                "--config".into(),
+                format!("model_reasoning_effort=\"{effort}\""),
+            ]);
+        }
+        for image in images {
+            args.extend(["--image".into(), image.to_string_lossy().into_owned()]);
+        }
+        if !live.conversation.session.is_empty() {
+            args.extend(["resume".into(), live.conversation.session.clone()]);
+        }
+        args.push("-".into());
+        live.started = (model, effort);
+        let mut child = Command::new(apps::resolve_program("codex")?)
+            .args(&args)
+            .current_dir(live.path.parent().unwrap_or(root))
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .process_group(0)
+            .kill_on_drop(true)
+            .spawn()?;
+        let stdout = child.stdout.take().unwrap();
+        let stderr = child.stderr.take().unwrap();
+        let mut stdin = child.stdin.take().unwrap();
+        let id = live.conversation.id.clone();
+        let running = Arc::new(Running {
+            stdin: tokio::sync::Mutex::new(None),
+            child: tokio::sync::Mutex::new(child),
+            live: Mutex::new(live),
+        });
+        self.running.lock().unwrap().insert(id, running.clone());
+        let prompt = prompt.to_owned();
+        tokio::spawn(async move {
+            // Closing the input tells Codex the prompt is complete.
+            let _ = stdin.write_all(prompt.as_bytes()).await;
+        });
+        self.read(running.clone(), stdout, stderr);
+        Ok(running)
+    }
+    /// Follows an agent's output until it exits: each event is applied, saved, and broadcast.
+    fn read(
+        &self,
+        running: Arc<Running>,
+        stdout: tokio::process::ChildStdout,
+        stderr: tokio::process::ChildStderr,
+    ) {
         let chats = self.clone();
-        let reader = running.clone();
+        let reader = running;
+        let id = reader.live.lock().unwrap().conversation.id.clone();
         tokio::spawn(async move {
             let errors = tokio::spawn(async move {
                 let mut lines = BufReader::new(stderr).lines();
@@ -796,7 +1019,6 @@ impl Chats {
             let last = errors.await.unwrap_or_default();
             chats.finish(&id, &reader, &last);
         });
-        Ok(running)
     }
     /// Stops a conversation's agent so it can start again with other settings; returns its state.
     async fn restart(&self, id: &str) -> Option<(Conversation, PathBuf)> {
@@ -870,12 +1092,30 @@ pub async fn status(State(app): State<App>) -> Result<Json<Value>, ApiError> {
             chat
         })
         .collect();
-    let available = apps::resolve_program("claude").is_ok();
+    let agents = installed();
     let (model, effort) = defaults();
+    let offered: Vec<Value> = agents
+        .iter()
+        .map(|(id, label, _)| {
+            let (model, effort) = if claude_family(id) {
+                (model.clone(), effort.clone())
+            } else {
+                Default::default()
+            };
+            json!({
+                "id": id,
+                "label": label,
+                "models": agent_models(id).iter().map(|(id, label)| json!({"id":id,"label":label})).collect::<Vec<_>>(),
+                "efforts": agent_efforts(id),
+                "defaults": {"model": model, "effort": effort},
+            })
+        })
+        .collect();
     Ok(Json(json!({
         "folder": tilde(&root),
-        "available": available,
-        "agent": "claude",
+        "available": !agents.is_empty(),
+        "agent": agents.first().map(|(id, _, _)| *id),
+        "agents": offered,
         "models": models().iter().map(|(id, label)| json!({"id":id,"label":label})).collect::<Vec<_>>(),
         "efforts": EFFORTS,
         "defaults": {"model": model, "effort": effort},
@@ -916,6 +1156,9 @@ pub struct Send {
     model: Option<String>,
     #[serde(default)]
     effort: Option<String>,
+    /// The agent for a new chat, or another of the Claude family for an existing one.
+    #[serde(default)]
+    agent: Option<String>,
     /// Paths returned by `/api/uploads/files`, moved into the chat's folder when sent.
     #[serde(default)]
     attachments: Vec<String>,
@@ -948,36 +1191,78 @@ pub async fn send(
                 Json(json!({"error":e.to_string()})),
             )
         })?;
-    if !valid_settings(
-        request.model.as_deref().unwrap_or_default(),
-        request.effort.as_deref().unwrap_or_default(),
-    ) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error":"Unsupported model or effort"})),
-        ));
-    }
     let chats = app.chats.clone();
     let root = root().map_err(error)?;
     prepare(&root).map_err(error)?;
-    // New settings take effect by starting the agent again; never in the middle of a reply.
+    let agents = installed();
+    let offered = |agent: &str| agents.iter().any(|(id, _, _)| *id == agent);
+    let refuse = |status: StatusCode, message: &str| (status, Json(json!({"error": message})));
+    // The chat's agent so far: from its running agent, or its file.
+    let current = match request.id.as_deref() {
+        None => None,
+        Some(id) => Some(match chats.get(id) {
+            Some(running) => agent_of(&running.live.lock().unwrap().conversation).to_owned(),
+            None => {
+                let path =
+                    find(&root, id).map_err(|e| refuse(StatusCode::NOT_FOUND, &e.to_string()))?;
+                agent_of(&load(&path).map_err(error)?).to_owned()
+            }
+        }),
+    };
+    let agent = request
+        .agent
+        .clone()
+        .or_else(|| current.clone())
+        .or_else(|| agents.first().map(|(id, _, _)| (*id).to_owned()))
+        .unwrap_or_else(|| "claude".into());
+    if let Some(current) = &current
+        && *current != agent
+        && !(claude_family(current) && claude_family(&agent))
+    {
+        return Err(refuse(
+            StatusCode::CONFLICT,
+            "A chat keeps its agent; start a new chat to use another",
+        ));
+    }
+    if !offered(&agent) {
+        return Err(refuse(
+            StatusCode::BAD_REQUEST,
+            "That agent is not installed on this host",
+        ));
+    }
+    if !valid_settings(
+        &agent,
+        request.model.as_deref().unwrap_or_default(),
+        request.effort.as_deref().unwrap_or_default(),
+    ) {
+        return Err(refuse(
+            StatusCode::BAD_REQUEST,
+            "Unsupported model or effort",
+        ));
+    }
+    // New settings, or the other agent of the Claude family, take effect by starting the agent
+    // again; never in the middle of a reply. A Codex reply cannot take another message.
     let mut restarted = None;
     if let Some(running) = request.id.as_deref().and_then(|id| chats.get(id)) {
         let (busy, started) = {
             let live = running.live.lock().unwrap();
             (live.busy, live.started.clone())
         };
+        if busy && agent == "codex" {
+            return Err(refuse(
+                StatusCode::CONFLICT,
+                "Wait for Codex to finish its reply",
+            ));
+        }
         let wanted = (
             request.model.clone().unwrap_or_else(|| started.0.clone()),
             request.effort.clone().unwrap_or_else(|| started.1.clone()),
         );
-        if wanted != started {
+        if wanted != started || current.as_deref() != Some(agent.as_str()) {
             if busy {
-                return Err((
+                return Err(refuse(
                     StatusCode::CONFLICT,
-                    Json(
-                        json!({"error":"Wait for the reply to finish before changing the model or effort"}),
-                    ),
+                    "Wait for the reply to finish before changing the agent, model or effort",
                 ));
             }
             restarted = chats
@@ -986,14 +1271,13 @@ pub async fn send(
         }
     }
     let running = match request.id.as_deref().and_then(|id| chats.get(id)) {
-        Some(running) => running,
+        Some(running) => Some(running),
         None => {
             let (mut conversation, path, resume) = match (&request.id, restarted) {
                 (Some(_), Some((conversation, path))) => (conversation, path, true),
                 (Some(id), None) => {
-                    let path = find(&root, id).map_err(|e| {
-                        (StatusCode::NOT_FOUND, Json(json!({"error":e.to_string()})))
-                    })?;
+                    let path = find(&root, id)
+                        .map_err(|e| refuse(StatusCode::NOT_FOUND, &e.to_string()))?;
                     (load(&path).map_err(error)?, path, true)
                 }
                 (None, _) => {
@@ -1006,9 +1290,14 @@ pub async fn send(
                     let name = format!("{}-{}-{}", &created[..10], slug(&title), &id[..8]);
                     let path = new_dir(&root, &name).map_err(error)?.join(FILE);
                     let conversation = Conversation {
-                        session: id.clone(),
+                        // Codex names its session once it starts.
+                        session: if agent == "codex" {
+                            String::new()
+                        } else {
+                            id.clone()
+                        },
                         id,
-                        agent: "claude".into(),
+                        agent: agent.clone(),
                         model: String::new(),
                         effort: String::new(),
                         title,
@@ -1019,13 +1308,14 @@ pub async fn send(
                     (conversation, path, false)
                 }
             };
+            conversation.agent = agent.clone();
             if let Some(model) = &request.model {
                 conversation.model = model.clone();
             }
             if let Some(effort) = &request.effort {
                 conversation.effort = effort.clone();
             }
-            let live = Live {
+            let mut live = Live {
                 conversation,
                 path,
                 busy: false,
@@ -1036,43 +1326,101 @@ pub async fn send(
                 stopping: false,
                 removed: false,
                 started: Default::default(),
+                failure: None,
             };
-            chats.spawn(live, resume, &root).map_err(error)?
+            if agent == "codex" {
+                // Each Codex turn is its own run, given the message as it starts.
+                let (id, events, attachments) =
+                    add_message(&chats, &mut live, &text, &uploads, &root).map_err(error)?;
+                let folder = live.path.parent().unwrap_or(&root).to_owned();
+                let (prompt, images) = codex_prompt(&text, &folder, &attachments);
+                chats.emit(events);
+                if let Err(e) = chats.spawn_codex(live, &prompt, &images, &root) {
+                    return Err(error(format!("Codex could not start: {e}")));
+                }
+                return Ok(Json(json!({"id":id})));
+            }
+            Some(chats.spawn(live, resume, &root).map_err(error)?)
         }
     };
+    let running = running.expect("a Claude agent is running");
     let (id, events, content) = {
         let mut live = running.live.lock().unwrap();
-        let mut entry = Entry::new("user", "", &text);
+        let (id, events, attachments) =
+            add_message(&chats, &mut live, &text, &uploads, &root).map_err(error)?;
         let folder = live.path.parent().unwrap_or(&root).to_owned();
-        for upload in &uploads {
-            entry
-                .attachments
-                .push(attach(&folder, upload).map_err(error)?);
-        }
-        let content = message_content(&text, &folder, &entry.attachments);
-        let id = live.conversation.id.clone();
-        let mut events = vec![
-            json!({"type":"entry","id":id,"index":live.conversation.entries.len(),"entry":entry.json()}),
-            json!({"type":"busy","id":id}),
-        ];
-        chats.stamp(&mut events);
-        live.conversation.entries.push(entry);
-        live.conversation.updated = now();
-        live.busy = true;
-        live.used = Instant::now();
-        save(&live.conversation, &live.path).map_err(error)?;
-        (id, events, content)
+        (id, events, message_content(&text, &folder, &attachments))
     };
     chats.emit(events);
     let line =
         json!({"type":"user","message":{"role":"user","content":content}}).to_string() + "\n";
     let mut stdin = running.stdin.lock().await;
-    if let Err(e) = stdin.write_all(line.as_bytes()).await {
+    let written = match stdin.as_mut() {
+        Some(stdin) => stdin.write_all(line.as_bytes()).await,
+        None => Err(std::io::Error::other("closed")),
+    };
+    if let Err(e) = written {
         drop(stdin);
         let _ = running.child.lock().await.start_kill();
         return Err(error(format!("The agent is not running: {e}")));
     }
     Ok(Json(json!({"id":id})))
+}
+
+/// Adds the person's message to a chat, with its files moved into the chat's folder, and marks
+/// the chat busy; returns the chat's id, the events to send, and the files' paths in the folder.
+fn add_message(
+    chats: &Chats,
+    live: &mut Live,
+    text: &str,
+    uploads: &[PathBuf],
+    root: &FsPath,
+) -> anyhow::Result<(String, Vec<Value>, Vec<String>)> {
+    let mut entry = Entry::new("user", "", text);
+    let folder = live.path.parent().unwrap_or(root).to_owned();
+    for upload in uploads {
+        entry.attachments.push(attach(&folder, upload)?);
+    }
+    let attachments = entry.attachments.clone();
+    let id = live.conversation.id.clone();
+    let mut events = vec![
+        json!({"type":"entry","id":id,"index":live.conversation.entries.len(),"entry":entry.json()}),
+        json!({"type":"busy","id":id}),
+    ];
+    chats.stamp(&mut events);
+    live.conversation.entries.push(entry);
+    live.conversation.updated = now();
+    live.busy = true;
+    live.failure = None;
+    live.used = Instant::now();
+    save(&live.conversation, &live.path)?;
+    Ok((id, events, attachments))
+}
+/// A Codex turn's prompt, naming the message's files, and the pictures to attach with `-i`.
+fn codex_prompt(text: &str, folder: &FsPath, attachments: &[String]) -> (String, Vec<PathBuf>) {
+    if attachments.is_empty() {
+        return (text.to_owned(), Vec::new());
+    }
+    let images: Vec<PathBuf> = attachments
+        .iter()
+        .map(|path| folder.join(path))
+        .filter(|path| {
+            fs::read(path)
+                .ok()
+                .is_some_and(|bytes| image_media(&bytes).is_some())
+        })
+        .collect();
+    let list: String = attachments
+        .iter()
+        .map(|path| format!("\n- {path}"))
+        .collect();
+    let note = format!("Attached files, in this chat's folder:{list}");
+    let prompt = if text.is_empty() {
+        note
+    } else {
+        format!("{text}\n\n{note}")
+    };
+    (prompt, images)
 }
 
 /// An upload's real path, which must be a file in the uploads folder.
@@ -1189,40 +1537,43 @@ fn message_content(text: &str, folder: &FsPath, attachments: &[String]) -> Value
 }
 
 /// Where a chat's Claude session log is, and whether a reply is in progress.
-fn session_log(app: &App, id: &str) -> anyhow::Result<(PathBuf, bool)> {
-    let (session, path, busy) = match app.chats.get(id) {
+/// A chat's session: its agent, its id, Claude's log for it, and whether a reply is in progress.
+/// Codex finds its own log by the id.
+fn session_log(app: &App, id: &str) -> anyhow::Result<(String, String, Option<PathBuf>, bool)> {
+    let (conversation, path, busy) = match app.chats.get(id) {
         Some(running) => {
             let live = running.live.lock().unwrap();
-            (
-                live.conversation.session.clone(),
-                live.path.clone(),
-                live.busy,
-            )
+            (live.conversation.clone(), live.path.clone(), live.busy)
         }
         None => {
             let path = find(&root()?, id)?;
-            (load(&path)?.session, path, false)
+            (load(&path)?, path, false)
         }
     };
+    let agent = agent_of(&conversation).to_owned();
+    let session = conversation.session;
     let folder = path.parent().unwrap_or(&path);
-    let log = claude_files(&claude_config()?, folder, &session)?.remove(0);
-    Ok((log, busy))
+    let log = if claude_family(&agent) {
+        Some(claude_files(&claude_config()?, folder, &session)?.remove(0))
+    } else {
+        None
+    };
+    Ok((agent, session, log, busy))
 }
 /// The latest reply's prose in the shape Herdr's Voice mode reads: `session`, `answer`, its
 /// `paragraphs` as they arrive, and whether Claude is `working`.
 async fn voice_state(app: &App, id: &str) -> anyhow::Result<Value> {
-    let (log, busy) = session_log(app, id)?;
-    let session = log
-        .file_stem()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .into_owned();
+    let (agent, session, log, busy) = session_log(app, id)?;
+    let lookup = session.clone();
     let mut value = tokio::task::spawn_blocking(move || {
+        let empty = || Ok(json!({"answer":null,"updates":[],"paragraphs":[],"working":false}));
         // A chat whose first reply has not started has no log yet.
-        if log.is_file() {
-            crate::voice::claude_answer(&log)
-        } else {
-            Ok(json!({"answer":null,"updates":[],"paragraphs":[],"working":false}))
+        match log {
+            Some(log) if log.is_file() => crate::voice::claude_answer(&log),
+            _ if agent == "codex" && !lookup.is_empty() => {
+                crate::voice::codex_answer(&lookup).or_else(|_| empty())
+            }
+            _ => empty(),
         }
     })
     .await??;
@@ -1562,11 +1913,112 @@ mod tests {
     }
 
     #[test]
+    fn codex_events_become_entries_and_name_the_session() {
+        let mut live = Live {
+            conversation: Conversation {
+                id: "c".into(),
+                agent: "codex".into(),
+                ..Conversation::default()
+            },
+            path: PathBuf::from("/tmp/chat.md"),
+            busy: true,
+            partial: String::new(),
+            seq: 0,
+            message: String::new(),
+            used: Instant::now(),
+            stopping: false,
+            removed: false,
+            started: Default::default(),
+            failure: None,
+        };
+        let events = live.apply(&json!({"type":"thread.started","thread_id":"01a13635-b662"}));
+        assert_eq!(live.conversation.session, "01a13635-b662");
+        assert_eq!(events[0]["type"], "session");
+        live.apply(
+            &json!({"type":"item.completed","item":{"type":"agent_message","text":"I'll check."}}),
+        );
+        live.apply(&json!({"type":"item.started","item":{"type":"command_execution","command":"/usr/bin/bash -lc 'echo hi'"}}));
+        // A finished command was already shown when it started.
+        live.apply(&json!({"type":"item.completed","item":{"type":"command_execution","command":"/usr/bin/bash -lc 'echo hi'","aggregated_output":"hi"}}));
+        live.apply(&json!({"type":"item.completed","item":{"type":"file_change","changes":[{"path":"/tmp/a/notes.md","kind":"add"}]}}));
+        live.apply(&json!({"type":"item.completed","item":{"type":"reasoning","text":"private"}}));
+        let done = live.apply(&json!({"type":"turn.completed","usage":{}}));
+        let entries: Vec<(&str, &str, &str)> = live
+            .conversation
+            .entries
+            .iter()
+            .map(|e| (e.role.as_str(), e.name.as_str(), e.text.as_str()))
+            .collect();
+        assert_eq!(
+            entries,
+            [
+                ("assistant", "", "I'll check."),
+                ("tool", "Shell", "echo hi"),
+                ("tool", "Edit", "notes.md"),
+            ]
+        );
+        assert!(!live.busy);
+        assert_eq!(done[0], json!({"type":"done","id":"c","error":null}));
+        // A failed turn reports Codex's error.
+        live.busy = true;
+        live.apply(&json!({"type":"error","message":"You've hit your usage limit."}));
+        let failed = live.apply(&json!({"type":"turn.failed"}));
+        assert_eq!(failed[0]["error"], "You've hit your usage limit.");
+        assert_eq!(
+            codex_command("/usr/bin/bash -lc 'cargo build'"),
+            "cargo build"
+        );
+        assert_eq!(codex_command("ls -la"), "ls -la");
+    }
+
+    #[test]
+    fn a_codex_prompt_names_the_files_and_attaches_the_pictures() {
+        let dir = crate::dictation::AudioDir::new().unwrap();
+        let folder = dir.0.join("chat");
+        fs::create_dir_all(folder.join("attachments")).unwrap();
+        fs::write(
+            folder.join("attachments/photo.png"),
+            b"\x89PNG\r\n\x1a\nrest",
+        )
+        .unwrap();
+        fs::write(folder.join("attachments/notes.txt"), "notes").unwrap();
+        assert_eq!(
+            codex_prompt("Hi", &folder, &[]),
+            ("Hi".to_owned(), Vec::new())
+        );
+        let (prompt, images) = codex_prompt(
+            "What is this?",
+            &folder,
+            &[
+                "attachments/photo.png".into(),
+                "attachments/notes.txt".into(),
+            ],
+        );
+        assert_eq!(
+            prompt,
+            "What is this?\n\nAttached files, in this chat's folder:\n- attachments/photo.png\n- attachments/notes.txt"
+        );
+        assert_eq!(images, vec![folder.join("attachments/photo.png")]);
+    }
+
+    #[test]
     fn settings_are_limited_to_offered_models_and_efforts() {
-        assert!(valid_settings("", ""));
-        assert!(valid_settings("opus", "xhigh"));
-        assert!(!valid_settings("--dangerously-skip-permissions", ""));
-        assert!(!valid_settings("opus", "extreme"));
+        assert!(valid_settings("claude", "", ""));
+        assert!(valid_settings("claude", "opus", "xhigh"));
+        assert!(valid_settings("claudex", "opus", "max"));
+        assert!(!valid_settings(
+            "claude",
+            "--dangerously-skip-permissions",
+            ""
+        ));
+        assert!(!valid_settings("claude", "opus", "extreme"));
+        // Codex runs its own configured model and has its own effort levels.
+        assert!(valid_settings("codex", "", "xhigh"));
+        assert!(!valid_settings("codex", "opus", ""));
+        assert!(!valid_settings("codex", "", "max"));
+        assert!(claude_family("claudex") && !claude_family("codex"));
+        // A chat saved before there was a choice of agent ran Claude.
+        assert_eq!(agent_of(&Conversation::default()), "claude");
         // Default uses Chat's configured model, and a chat's own choice wins over it.
         let configured = ("opus".to_owned(), String::new());
         assert_eq!(
@@ -1692,6 +2144,7 @@ mod tests {
             stopping: false,
             removed: false,
             started: Default::default(),
+            failure: None,
         };
         let delta = |text: &str| json!({"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":text}}});
         assert_eq!(live.apply(&delta("Hel"))[0]["seq"], 1);

@@ -1266,6 +1266,10 @@ pub async fn audio(
 pub fn claude_answer(path: &FsPath) -> anyhow::Result<Value> {
     read_answer("claude", path)
 }
+/// A Codex session's log, by its id, and its latest reply prose, for Chat's Voice mode.
+pub fn codex_answer(session: &str) -> anyhow::Result<Value> {
+    read_answer("codex", &find_session(&root("codex"), session)?)
+}
 /// Speaks messages of `value`, a transcript's latest prose, by their ids.
 pub async fn speak(value: &Value, request: SpeechRequest) -> Result<Response, ApiError> {
     let ids = if request.response_ids.is_empty() {

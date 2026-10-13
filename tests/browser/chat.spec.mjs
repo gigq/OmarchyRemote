@@ -48,6 +48,7 @@ async function setup(page, extra = [], before) {
         efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
         defaults: { model: 'claude-fable-5-1', effort: 'high' },
         chats: state.chats,
+        ...state.status,
       },
     })
   );
@@ -134,7 +135,16 @@ test('a new chat streams its reply, shows tools, and can be stopped', async ({ p
   await field.press('Enter');
   await expect
     .poll(() => state.sent)
-    .toEqual([{ id: null, text: 'What is a pelican?', attachments: [], model: '', effort: '' }]);
+    .toEqual([
+      {
+        id: null,
+        text: 'What is a pelican?',
+        attachments: [],
+        agent: 'claude',
+        model: '',
+        effort: '',
+      },
+    ]);
   // Sending hides the keyboard; the message box stand-in takes its place.
   await expect(field).toBeHidden();
   await expect(app.getByRole('button', { name: 'Write a message' })).toBeVisible();
@@ -335,7 +345,9 @@ test('model and effort are chosen per chat and remembered for new chats', async 
   await field.press('Enter');
   await expect
     .poll(() => state.sent)
-    .toEqual([{ id: null, text: 'Hello', attachments: [], model: 'opus', effort: 'xhigh' }]);
+    .toEqual([
+      { id: null, text: 'Hello', attachments: [], agent: 'claude', model: 'opus', effort: 'xhigh' },
+    ]);
   // The next new chat starts with the same choice.
   await app.getByRole('button', { name: 'New chat' }).click();
   await expect(chip).toHaveText('Opus · xhigh');
@@ -355,7 +367,14 @@ test('model and effort are chosen per chat and remembered for new chats', async 
   await field.press('Enter');
   await expect
     .poll(() => state.sent.at(-1))
-    .toEqual({ id: ID, text: 'Again', attachments: [], model: 'fable', effort: 'low' });
+    .toEqual({
+      id: ID,
+      text: 'Again',
+      attachments: [],
+      agent: 'claude',
+      model: 'fable',
+      effort: 'low',
+    });
 });
 
 test("a chat's folder opens in Files", async ({ page }) => {
@@ -460,6 +479,7 @@ test('files attach to a message, send with it, and show in the conversation', as
         id: ID,
         text: '',
         attachments: ['/home/qa/.local/share/omarchy-remote/uploads/u-fridge.png'],
+        agent: 'claude',
         model: '',
         effort: '',
       },
@@ -613,7 +633,9 @@ test('a tap on the microphone talks and sends; holding the big button reads repl
   await floating.click();
   await expect
     .poll(() => state.sent)
-    .toEqual([{ id: ID, text: 'dictated words', attachments: [], model: '', effort: '' }]);
+    .toEqual([
+      { id: ID, text: 'dictated words', attachments: [], agent: 'claude', model: '', effort: '' },
+    ]);
   await expect(app.locator('textarea.native-input')).toHaveValue('');
   await expect(floating).toHaveText('Talk');
   state.replies[ID] = { answer: { id: 'quiet', text: 'Rice works too.' } };
@@ -648,11 +670,107 @@ test('Voice started in a new chat keeps reading it once the host names it', asyn
   await floating.click();
   await expect
     .poll(() => state.sent)
-    .toEqual([{ id: null, text: 'dictated words', attachments: [], model: '', effort: '' }]);
+    .toEqual([
+      { id: null, text: 'dictated words', attachments: [], agent: 'claude', model: '', effort: '' },
+    ]);
   await expect(app.locator('.chat-title')).toHaveText('dictated words');
   await expect(floating).toBeVisible();
   state.replies[NEW] = { paragraphs: [{ id: 'first', text: 'Hello there.' }], working: true };
   await expect
     .poll(() => state.spoken, { timeout: 6000 })
     .toMatchObject([{ id: NEW, response_id: 'first' }]);
+});
+
+test('a chat runs the agent chosen for it, and new chats start with the last one', async ({
+  page,
+}) => {
+  const claudeModels = [
+    { id: 'fable', label: 'Fable' },
+    { id: 'opus', label: 'Opus' },
+  ];
+  const { app, state } = await setup(
+    page,
+    [
+      {
+        id: '3c8ab544-8cc5-430e-8a40-0aec58bc3b10',
+        title: 'Taxi refactor',
+        preview: 'Done.',
+        updated: new Date().toISOString(),
+        busy: false,
+        agent: 'codex',
+      },
+    ],
+    (_, state) => {
+      state.status = {
+        agent: 'claude',
+        agents: [
+          {
+            id: 'claude',
+            label: 'Claude',
+            models: claudeModels,
+            efforts: ['low', 'high', 'max'],
+            defaults: { model: 'claude-opus-5-5', effort: 'high' },
+          },
+          {
+            id: 'claudex',
+            label: 'Claude X',
+            models: claudeModels,
+            efforts: ['low', 'high', 'max'],
+            defaults: { model: 'claude-opus-5-5', effort: 'high' },
+          },
+          {
+            id: 'codex',
+            label: 'Codex',
+            models: [],
+            efforts: ['low', 'medium', 'high', 'xhigh'],
+            defaults: { model: '', effort: '' },
+          },
+        ],
+      };
+    }
+  );
+  // Chats on another agent are tagged in the list.
+  await expect(app.locator('.chat-row-agent')).toHaveText(['Codex']);
+  await app.getByRole('button', { name: 'New chat' }).click();
+  const chip = app.locator('.chat-settings');
+  await expect(chip).toHaveText('Claude · opus-5-5 · high');
+  await chip.click();
+  const agent = app.getByRole('group', { name: 'Agent' });
+  await expect(agent.getByRole('button')).toHaveText(['Claude', 'Claude X', 'Codex']);
+  await page.screenshot({ path: 'artifacts/browser/chat-agents.png' });
+  await agent.getByRole('button', { name: 'Codex' }).click();
+  // Codex offers its own effort levels and runs its configured model.
+  await expect(app.getByRole('group', { name: 'Model' }).getByRole('button')).toHaveText([
+    'Default',
+  ]);
+  await app.getByRole('group', { name: 'Effort' }).getByRole('button', { name: 'xhigh' }).click();
+  await expect(chip).toHaveText('Codex · Default · xhigh');
+  const field = app.locator('textarea.native-input');
+  await expect(field).toHaveAttribute('placeholder', 'Message Codex…');
+  await field.fill('Refactor the taxi');
+  await field.press('Enter');
+  await expect
+    .poll(() => state.sent.at(-1))
+    .toEqual({
+      id: null,
+      text: 'Refactor the taxi',
+      attachments: [],
+      agent: 'codex',
+      model: '',
+      effort: 'xhigh',
+    });
+  // The next new chat starts with Codex too.
+  await app.getByRole('button', { name: 'New chat' }).click();
+  await expect(chip).toHaveText('Codex · Default · xhigh');
+  // An existing Claude chat moves to Claude X, but not to Codex.
+  await app.getByRole('button', { name: 'All chats' }).click();
+  await app.locator('.chat-row').filter({ hasText: 'Dinner ideas' }).click();
+  await expect(chip).toHaveText(/^Claude · /);
+  await chip.click();
+  await expect(agent.getByRole('button', { name: 'Codex' })).toBeDisabled();
+  await agent.getByRole('button', { name: 'Claude X' }).click();
+  await expect(chip).toHaveText(/^Claude X · /);
+  await expect(app.locator('.chat-settings-note')).toHaveText(
+    'Changes apply from your next message. Codex needs a new chat.'
+  );
 });

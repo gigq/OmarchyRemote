@@ -143,7 +143,7 @@
       );
       this.settingsPanel = node('div', 'chat-settings-panel');
       this.settingsPanel.hidden = true;
-      this.options = { models: [], efforts: [], defaults: {} };
+      this.agents = [];
       this.messages = node('div', 'chat-messages');
       this.messages.setAttribute('role', 'log');
       this.messages.setAttribute('aria-live', 'polite');
@@ -349,11 +349,19 @@
         this.chats = data.chats;
         this.folder = data.folder;
         this.available = data.available;
-        this.options = {
-          models: data.models || [],
-          efforts: data.efforts || [],
-          defaults: data.defaults || {},
-        };
+        // The agents installed on the host, each with its models and effort levels.
+        this.agents = data.agents?.length
+          ? data.agents
+          : [
+              {
+                id: 'claude',
+                label: 'Claude',
+                models: data.models || [],
+                efforts: data.efforts || [],
+                defaults: data.defaults || {},
+              },
+            ];
+        this.defaultAgent = data.agent || this.agents[0]?.id || 'claude';
         this.renderSettings();
         this.renderList();
       } catch (e) {
@@ -379,6 +387,10 @@
           const top = node('span', 'chat-row-top');
           top.append(
             node('span', 'chat-row-title', chat.title),
+            // Which agent, where there is a choice and it is not the usual one.
+            ...(this.agents.length > 1 && chat.agent && chat.agent !== 'claude'
+              ? [node('span', 'chat-row-agent', this.agentName(chat))]
+              : []),
             node('time', '', ago(chat.updated))
           );
           row.append(top, node('span', 'chat-row-preview', chat.preview || ''));
@@ -389,7 +401,7 @@
       this.empty.hidden = !!this.chats.length || this.available === false;
       this.listStatus.textContent =
         this.available === false
-          ? `Claude Code is not installed on ${HyprlandApps.host.name}.`
+          ? `Neither Claude Code nor Codex is installed on ${HyprlandApps.host.name}.`
           : this.listError || `Saved in ${this.folder || '~/Chats'}`;
       this.listStatus.classList.toggle('error', !!this.listError);
       this.newButton.disabled = this.available === false;
@@ -487,14 +499,37 @@
       this.threadView.hidden = false;
       this.nativeInput.select(this.chat.id || 'new');
       this.followVoice();
-      this.nativeInput.field.placeholder = 'Message Claude…';
+      this.renderLabels();
       this.following = true;
       this.uploadError = '';
       this.renderTray();
       this.render();
     }
+    // A chat's agent; chats from before there was a choice ran Claude.
+    agentOf(chat = this.chat) {
+      return chat?.agent || 'claude';
+    }
+    agentSpec(chat = this.chat) {
+      const id = this.agentOf(chat);
+      return (
+        this.agents.find(agent => agent.id === id) || {
+          id,
+          label: id === 'codex' ? 'Codex' : id === 'claudex' ? 'Claude X' : 'Claude',
+          models: [],
+          efforts: [],
+          defaults: {},
+        }
+      );
+    }
+    agentName(chat = this.chat) {
+      return this.agentSpec(chat).label;
+    }
     startNew() {
       const settings = storage.read(SETTINGS, {}) || {};
+      // New chats start with the agent last used, while it is still installed.
+      const agent = this.agents.some(a => a.id === settings.agent)
+        ? settings.agent
+        : this.defaultAgent;
       this.chat = {
         id: null,
         title: 'New chat',
@@ -502,9 +537,11 @@
         partial: '',
         seq: 0,
         busy: false,
+        agent,
         model: typeof settings.model === 'string' ? settings.model : '',
         effort: typeof settings.effort === 'string' ? settings.effort : '',
       };
+      this.fitSettings();
       storage.set(OPEN, null);
       this.showThread();
       this.bridge.keyboard();
@@ -560,6 +597,7 @@
         id: chat.id,
         text,
         attachments: files.map(f => f.path),
+        agent: this.agentOf(chat),
         model: chat.model || '',
         effort: chat.effort || '',
       })
@@ -702,36 +740,80 @@
     choose(key, value) {
       if (!this.chat) return;
       this.chat[key] = value;
-      storage.write(SETTINGS, { model: this.chat.model || '', effort: this.chat.effort || '' });
+      if (key === 'agent') this.fitSettings();
+      storage.write(SETTINGS, {
+        agent: this.agentOf(),
+        model: this.chat.model || '',
+        effort: this.chat.effort || '',
+      });
       this.renderSettings();
+      this.renderLabels();
+    }
+    // A model or effort another agent does not offer goes back to its default.
+    fitSettings() {
+      const spec = this.agentSpec();
+      if (this.chat.model && !spec.models.some(m => m.id === this.chat.model)) this.chat.model = '';
+      if (this.chat.effort && !spec.efforts.includes(this.chat.effort)) this.chat.effort = '';
+    }
+    // Text that names the chat's agent.
+    renderLabels() {
+      const name = this.agentName();
+      this.promptField.querySelector('.chat-placeholder').textContent = `Message ${name}…`;
+      this.nativeInput.field.placeholder = `Message ${name}…`;
     }
     renderSettings() {
       const chat = this.chat;
       if (!chat) return;
-      const { models, efforts, defaults } = this.options;
+      const spec = this.agentSpec();
+      const { models, efforts, defaults } = spec;
       const short = model => String(model || '').replace(/^claude-/, '');
       const model = models.find(m => m.id === chat.model)?.label || chat.model;
-      this.settingsButton.textContent = `${model || short(defaults.model) || 'Default'} · ${
-        chat.effort || defaults.effort || 'default'
-      }`;
+      const choice = this.agents.length > 1;
+      this.settingsButton.textContent = [
+        choice ? spec.label : '',
+        model || short(defaults.model) || 'Default',
+        chat.effort || defaults.effort || 'default',
+      ]
+        .filter(Boolean)
+        .join(' · ');
       this.settingsButton.setAttribute(
         'aria-label',
-        'Model and effort: ' + this.settingsButton.textContent
+        (choice ? 'Agent, model and effort: ' : 'Model and effort: ') +
+          this.settingsButton.textContent
       );
       if (this.settingsPanel.hidden) return;
-      const group = (label, key, choices) => {
+      const group = (label, key, choices, current = chat[key] || '') => {
         const row = node('div', 'chat-settings-row');
         row.setAttribute('role', 'group');
         row.setAttribute('aria-label', label);
         row.append(node('span', 'chat-settings-label', label));
-        for (const [value, text] of choices) {
+        for (const [value, text, disabled] of choices) {
           const option = button(text, () => this.choose(key, value), 'chat-option');
-          option.setAttribute('aria-pressed', String((chat[key] || '') === value));
+          option.setAttribute('aria-pressed', String(current === value));
+          option.disabled = !!disabled;
           row.append(option);
         }
         return row;
       };
+      // A chat that has started keeps its agent, except between Claude and Claude X, which share
+      // their conversations.
+      const family = id => (id === 'codex' ? 'codex' : 'claude');
+      const agentRow = choice
+        ? [
+            group(
+              'Agent',
+              'agent',
+              this.agents.map(agent => [
+                agent.id,
+                agent.label,
+                chat.id && family(agent.id) !== family(this.agentOf()),
+              ]),
+              this.agentOf()
+            ),
+          ]
+        : [];
       this.settingsPanel.replaceChildren(
+        ...agentRow,
         group('Model', 'model', [
           ['', defaults.model ? `Default (${short(defaults.model)})` : 'Default'],
           ...models.map(m => [m.id, m.label]),
@@ -743,7 +825,13 @@
         node(
           'p',
           'chat-settings-note',
-          chat.id ? 'Changes apply from your next message.' : 'Applies to this new chat.'
+          chat.id
+            ? this.agentOf() === 'codex'
+              ? 'Changes apply from your next message. A Codex chat stays with Codex.'
+              : this.agents.some(agent => agent.id === 'codex')
+                ? 'Changes apply from your next message. Codex needs a new chat.'
+                : 'Changes apply from your next message.'
+            : 'Applies to this new chat.'
         )
       );
     }
@@ -769,7 +857,11 @@
       const nodes = chat.entries.filter(Boolean).map(entry => this.entry(entry));
       if (!nodes.length)
         nodes.push(
-          node('p', 'chat-empty', `Ask anything. Claude runs on ${HyprlandApps.host.name}.`)
+          node(
+            'p',
+            'chat-empty',
+            `Ask anything. ${this.agentName()} runs on ${HyprlandApps.host.name}.`
+          )
         );
       this.partialNode = node('div', 'chat-message assistant streaming');
       this.partialNode.hidden = true;
@@ -861,7 +953,7 @@
       this.status.textContent = chat?.error
         ? chat.error
         : chat?.busy && !chat.partial
-          ? 'Claude is thinking…'
+          ? `${this.agentName()} is thinking…`
           : '';
       this.scroll();
     }

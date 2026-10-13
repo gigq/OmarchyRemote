@@ -106,6 +106,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.chat-row-agent {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  color: var(--theme-accent);
+  background: color-mix(in srgb, var(--theme-accent) 14%, transparent);
+}
+.chat-option:disabled {
+  opacity: 0.4;
+}
 .chat-row time {
   flex: none;
   font-size: 11px;
