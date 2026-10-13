@@ -1776,13 +1776,18 @@
       this.pressed = false;
       // iOS spends a long press on ending the input's editing session, not on selecting. Leaving
       // the input unfocused afterwards lets the next long press select; a tap brings it back.
+      // iPhone can blur the input only after the finger lifts, so what the press started on
+      // decides, not what has focus when it ends: a long press in an input stays with it.
       this.trackPress = e => {
         if (e.pointerType === 'touch') return;
         const pressed = e.touches ? e.touches.length > 0 : e.type === 'pointerdown';
-        if (pressed && !this.pressed) this.pressStarted = performance.now();
+        if (pressed && !this.pressed) {
+          this.pressStarted = performance.now();
+          this.pressTarget = e.target;
+        }
         this.pressed = pressed;
         if (pressed) return;
-        if (performance.now() - this.pressStarted >= 350 && !editable(document.activeElement))
+        if (performance.now() - this.pressStarted >= 350 && !editable(this.pressTarget))
           this.focusReleased = this.logic.cur();
         this.reconcileFocus();
       };

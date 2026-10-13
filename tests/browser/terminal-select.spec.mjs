@@ -90,3 +90,59 @@ for (const [width, height, layout] of [
     expect(Math.abs(gap)).toBeLessThan(2);
   });
 }
+
+// iOS spends a long press with the keyboard up on ending the input's editing session, and can
+// blur the input only after the finger lifts. The keyboard must stay down then, so the next long
+// press selects, instead of popping back up.
+test('on a phone a long press puts the keyboard away so text can be selected', async ({
+  page: p,
+}) => {
+  await p.setViewportSize({ width: 402, height: 874 });
+  await p.route('**/api/**', r =>
+    r.fulfill({ json: r.request().url().endsWith('/session') ? { id: 'qa-1' } : { ok: true } })
+  );
+  const text = Array.from({ length: 6 }, (_, i) => `line ${i} with some words\r\n`).join('') + '$ ';
+  await p.routeWebSocket('**/api/terminal/*/ws', ws => {
+    ws.send(JSON.stringify({ type: 'screen', cols: 50, rows: 24, data: [...Buffer.from(text)] }));
+  });
+  await p.goto('/native/');
+  await p.getByText('terminal', { exact: true }).first().click();
+  const app = p.locator('#remote-terminal-app');
+  const row = app.locator('.native-terminal-row').filter({ hasText: 'line 2 with' });
+  await expect(row).toHaveCount(1);
+  const input = app.locator('textarea.native-input');
+  await app.locator('.native-terminal-scroll').click();
+  await expect(input).toBeFocused();
+  const touch = (type, target = row) =>
+    target.evaluate((el, type) => {
+      const t = new Touch({ identifier: 1, target: el, clientX: 60, clientY: 8 });
+      el.dispatchEvent(
+        new TouchEvent(type, {
+          touches: type === 'touchstart' ? [t] : [],
+          changedTouches: [t],
+          bubbles: true,
+        })
+      );
+    }, type);
+  // The first long press only ends the editing session, after the finger lifts.
+  await touch('touchstart');
+  await p.waitForTimeout(600);
+  await touch('touchend');
+  await p.evaluate(() => document.activeElement.blur());
+  await p.waitForTimeout(400);
+  await expect(input).not.toBeFocused();
+  // The next long press selects, and the keyboard stays away while it does.
+  await touch('touchstart');
+  await p.waitForTimeout(600);
+  await row.evaluate(el => getSelection().selectAllChildren(el));
+  await touch('touchend');
+  await p.waitForTimeout(400);
+  expect(await p.evaluate(() => getSelection().toString())).toContain('line 2 with some words');
+  await expect(input).not.toBeFocused();
+  // A tap brings the keyboard back.
+  await p.evaluate(() => getSelection().removeAllRanges());
+  await touch('touchstart');
+  await touch('touchend');
+  await row.click();
+  await expect(input).toBeFocused();
+});
