@@ -299,7 +299,12 @@ test('a message goes to a thread that is not waiting, and its prose shows', asyn
   await expect(previous.locator('summary')).toHaveText('Previous reply');
   await expect(previous).not.toHaveAttribute('open');
   await expect(app.locator('.muster-body > .muster-said')).toHaveCount(0);
-  await expect(app.locator('.muster-working')).toHaveText('Working on your message…');
+  // The agent is at work from the moment it is sent, and the time counts up every second.
+  const working = app.locator('.muster-work.ongoing');
+  await expect(working).toHaveText(/^Working \d+s$/);
+  const started = await working.textContent();
+  await page.waitForTimeout(2200);
+  await expect(working).not.toHaveText(started);
   await page.screenshot({ path: 'artifacts/browser/muster-sent.png' });
   // The log catches up, then the agent's reply arrives.
   state.details['wB:p2'] = {
@@ -311,7 +316,7 @@ test('a message goes to a thread that is not waiting, and its prose shows', asyn
   await expect(app.locator('.muster-body > .muster-said')).toHaveText(
     'Updating the changelog now.'
   );
-  await expect(app.locator('.muster-working')).toHaveCount(0);
+  await expect(app.locator('.muster-work.ongoing')).toHaveCount(0);
   await expect(previous).toContainText('README');
   // The board shows the message until there is a reply, not the old answer.
   state.projects[1].threads[1] = {

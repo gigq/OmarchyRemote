@@ -213,6 +213,11 @@
       });
       this.picks = new Set();
       this.ticks = 0;
+      // The work in progress counts up every second, between the thread's refreshes.
+      this.ticker = setInterval(() => {
+        if (this.ongoing?.line.isConnected)
+          this.ongoing.line.textContent = workLine(this.ongoing.work);
+      }, 1000);
     }
     connect() {
       this.refresh();
@@ -505,7 +510,11 @@
       const thread = this.thread;
       const sent = this.sent;
       if (!sent || sent.pane !== thread.pane_id) return thread;
-      if (thread.prompt?.trim() === sent.text || Date.now() - sent.at > 60000) {
+      // The log has the message once it shows it, or a turn begun since it was sent.
+      const caught =
+        thread.prompt?.trim() === sent.text ||
+        (thread.answered === false && Date.parse(thread.updated) >= sent.at - 1000);
+      if (caught || Date.now() - sent.at > 60000) {
         this.sent = null;
         return thread;
       }
@@ -516,7 +525,19 @@
         paragraphs: [],
         updates: [],
         turn_text: '',
-        turn_parts: [],
+        // The agent is at work from the moment the message is sent.
+        turn_parts: [
+          {
+            work: {
+              since: new Date(sent.at).toISOString(),
+              seconds: null,
+              tools: 0,
+              files: 0,
+              thought: false,
+              ongoing: true,
+            },
+          },
+        ],
         working: true,
         state: thread.state === 'question' ? 'question' : 'working',
         earlier: (thread.earlier || 0) + (thread.prompt ? 1 : 0),
@@ -881,6 +902,7 @@
     dispose() {
       this.disposed = true;
       clearTimeout(this.timer);
+      clearInterval(this.ticker);
       this.nativeInput.dispose();
     }
   }
