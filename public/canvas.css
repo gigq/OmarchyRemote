@@ -149,3 +149,32 @@
   color: var(--theme-secondary);
   animation: chat-thinking 1.4s ease-in-out infinite;
 }
+/* Full screen: the page over the whole window, or the whole screen where the browser allows. */
+.canvas-app.canvas-full-screen .chat-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  margin: 0;
+  border-radius: 0;
+  background: var(--theme-background);
+}
+.canvas-exit-full {
+  position: absolute;
+  top: calc(10px + env(safe-area-inset-top));
+  right: calc(10px + env(safe-area-inset-right));
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--theme-surface-raised) 85%, transparent);
+  color: var(--theme-foreground);
+  opacity: 0.7;
+  cursor: pointer;
+}
+.canvas-exit-full:hover,
+.canvas-exit-full:focus-visible {
+  opacity: 1;
+}

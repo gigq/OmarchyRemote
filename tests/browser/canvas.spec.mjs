@@ -380,3 +380,46 @@ test('a page made on a phone offers a version for a wider screen', async ({ page
   await app.locator('.chat-row').click();
   await expect(app.locator('.canvas-redraw')).toHaveText('Redraw for this screen');
 });
+
+for (const viewport of [
+  { width: 402, height: 874 },
+  { width: 1194, height: 834 },
+])
+  test(`a page goes full screen and back at ${viewport.width}px`, async ({ page }) => {
+    const { app } = await setup(page);
+    await page.setViewportSize(viewport);
+    await app.locator('.chat-row').click();
+    const frame = app.locator('iframe.canvas-frame');
+    await expect(frame).toBeVisible();
+    const before = await frame.boundingBox();
+    await app.getByRole('button', { name: 'Full screen' }).click();
+    const exit = app.getByRole('button', { name: 'Exit full screen' });
+    await expect(exit).toBeVisible();
+    // The page covers the whole window, over the header, subtitle, and composer.
+    await expect
+      .poll(async () => {
+        const box = await frame.boundingBox();
+        return [box.x, box.y, box.width, box.height].map(Math.round);
+      })
+      .toEqual([0, 0, viewport.width, viewport.height]);
+    expect((await frame.boundingBox()).height).toBeGreaterThan(before.height);
+    const atCorner = await page.evaluate(
+      ({ x, y }) => !!document.elementFromPoint(x, y)?.closest('.chat-stage'),
+      { x: 20, y: 20 }
+    );
+    expect(atCorner).toBe(true);
+    await page.screenshot({ path: `artifacts/browser/canvas-full-${viewport.width}.png` });
+    // The frame is not reloaded on the way in or out.
+    const loads = await frame.evaluate(f => f.dataset.src);
+    await exit.click();
+    await expect(exit).toBeHidden();
+    await expect
+      .poll(async () => Math.round((await frame.boundingBox()).height))
+      .toBe(Math.round(before.height));
+    expect(await frame.evaluate(f => f.dataset.src)).toBe(loads);
+    // Escape leaves it too.
+    await app.getByRole('button', { name: 'Full screen' }).click();
+    await expect(exit).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(exit).toBeHidden();
+  });

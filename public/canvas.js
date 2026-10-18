@@ -74,8 +74,28 @@
       this.forward = button('', () => this.step(1), 'canvas-step');
       this.forward.innerHTML = chevron('m9 18 6-6-6-6');
       this.forward.setAttribute('aria-label', 'Later page');
+      // Full screen: the page over everything else, with a corner key back.
+      this.fullButton = button('', () => this.fullScreen(true), 'canvas-step');
+      this.fullButton.innerHTML = chevron('M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5');
+      this.fullButton.setAttribute('aria-label', 'Full screen');
+      this.exitFull = button('', () => this.fullScreen(false), 'canvas-exit-full');
+      this.exitFull.innerHTML = chevron('M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5');
+      this.exitFull.setAttribute('aria-label', 'Exit full screen');
+      this.exitFull.hidden = true;
+      this.stage.append(this.exitFull);
+      this.fullChange = () => {
+        if (this.full && document.fullscreenElement !== this.stage) this.fullScreen(false);
+      };
+      document.addEventListener('fullscreenchange', this.fullChange);
+      this.fullEscape = e => {
+        if (e.key !== 'Escape' || !this.full) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        this.fullScreen(false);
+      };
+      document.addEventListener('keydown', this.fullEscape, true);
       this.bar = node('div', 'canvas-bar');
-      this.bar.append(this.back, this.subtitle, this.forward);
+      this.bar.append(this.back, this.subtitle, this.forward, this.fullButton);
       this.threadView.insertBefore(this.bar, this.status);
       // The page answers for the person: its message continues the conversation.
       this.bridgeMessage = e => {
@@ -214,6 +234,7 @@
       this.welcome.hidden = ready;
       this.welcomeText.textContent = `Ask for anything. ${this.agentName()} draws the answer on ${HyprlandApps.host.name}.`;
       this.renderRedraw(ready && !kept);
+      this.fullButton.hidden = !ready;
       if (!ready) return;
       // The live page in the version for this screen, where one was redrawn.
       const here = this.layoutHere();
@@ -357,7 +378,25 @@
     expand(open = this.subtitle.getAttribute('aria-expanded') !== 'true') {
       this.subtitle.setAttribute('aria-expanded', String(open));
     }
+    // Shows the page over the whole window; where the browser allows it, over the whole screen.
+    fullScreen(on) {
+      if (on === !!this.full) return;
+      this.full = on;
+      this.root.classList.toggle('canvas-full-screen', on);
+      this.exitFull.hidden = !on;
+      if (on) {
+        this.stage.requestFullscreen?.().catch(() => {});
+        this.exitFull.focus({ preventScroll: true });
+      } else if (document.fullscreenElement === this.stage) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+    showList() {
+      this.fullScreen(false);
+      super.showList();
+    }
     showThread() {
+      this.fullScreen(false);
       this.expand(false);
       this.at = null;
       this.frame.dataset.src = '';
@@ -387,6 +426,9 @@
       ];
     }
     dispose() {
+      this.fullScreen(false);
+      document.removeEventListener('fullscreenchange', this.fullChange);
+      document.removeEventListener('keydown', this.fullEscape, true);
       window.removeEventListener('resize', this.relayout);
       cancelAnimationFrame(this.readFrame);
       window.removeEventListener('message', this.bridgeMessage);
