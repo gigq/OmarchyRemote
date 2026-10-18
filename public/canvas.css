@@ -32,13 +32,36 @@
   font-size: 12px;
   line-height: 1.6;
 }
+/* The subtitle between back and forward. */
+.canvas-bar {
+  flex: none;
+  display: flex;
+  gap: 6px;
+  margin: 8px 4px 0;
+}
+.canvas-step {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  background: var(--theme-surface-raised);
+  color: var(--theme-foreground);
+  cursor: pointer;
+}
+.canvas-step:disabled {
+  color: var(--theme-border);
+  cursor: default;
+}
 /* Claude's reply: one line, or all of it with the question when tapped. */
 .canvas-subtitle {
-  flex: none;
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin: 8px 4px 0;
+  margin: 0;
   padding: 8px 12px;
   border: 1px solid var(--theme-border);
   border-radius: 12px;
@@ -88,5 +111,13 @@
   color: var(--theme-foreground);
 }
 .canvas-word.current {
+  color: var(--theme-accent);
+}
+/* An earlier page: where it is in the conversation. */
+.canvas-subtitle.earlier {
+  border-color: var(--theme-accent);
+}
+.canvas-position {
+  margin-right: 8px;
   color: var(--theme-accent);
 }

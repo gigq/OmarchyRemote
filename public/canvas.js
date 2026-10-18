@@ -22,6 +22,9 @@
     'cyan',
   ];
 
+  const chevron = d =>
+    `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
+
   class CanvasApp extends ChatApp {
     constructor(root, bridge) {
       super(root, bridge, {
@@ -54,7 +57,18 @@
       this.subtitle = button('', () => this.expand(), 'canvas-subtitle');
       this.subtitle.setAttribute('aria-expanded', 'false');
       this.subtitle.hidden = true;
-      this.threadView.insertBefore(this.subtitle, this.status);
+      // Back and forward step through the pages earlier turns left; sending from one continues
+      // the conversation from there.
+      this.at = null;
+      this.back = button('', () => this.step(-1), 'canvas-step');
+      this.back.innerHTML = chevron('m15 18-6-6 6-6');
+      this.back.setAttribute('aria-label', 'Earlier page');
+      this.forward = button('', () => this.step(1), 'canvas-step');
+      this.forward.innerHTML = chevron('m9 18 6-6-6-6');
+      this.forward.setAttribute('aria-label', 'Later page');
+      this.bar = node('div', 'canvas-bar');
+      this.bar.append(this.back, this.subtitle, this.forward);
+      this.threadView.insertBefore(this.bar, this.status);
       // The page answers for the person: its message continues the conversation.
       this.bridgeMessage = e => {
         if (e.source !== this.frame.contentWindow || !this.chat) return;
@@ -90,9 +104,45 @@
           theme,
           fonts: { interface: 'JetBrains Mono, monospace' },
         },
+        ...(this.at ? { from: this.at } : {}),
       };
     }
+    // The turns that can be shown: each earlier one whose page was kept, then the latest, live.
+    positions() {
+      const count = (this.chat?.entries || []).filter(entry => entry?.role === 'user').length;
+      const kept = (this.chat?.turns || []).map(t => t.turn).filter(turn => turn < count);
+      return count ? [...kept, count] : [];
+    }
+    step(by) {
+      const positions = this.positions();
+      const next = positions[positions.indexOf(this.at ?? positions.at(-1)) + by];
+      if (next === undefined) return;
+      this.at = next === positions.at(-1) ? null : next;
+      this.render();
+    }
+    // Shows where in the conversation the page is, and that sending continues from there.
+    renderPlace() {
+      const positions = this.positions();
+      if (!positions.slice(0, -1).includes(this.at)) this.at = null;
+      const index = positions.indexOf(this.at ?? positions.at(-1));
+      this.back.hidden = this.forward.hidden = positions.length < 2;
+      this.back.disabled = index <= 0;
+      this.forward.disabled = index >= positions.length - 1;
+      this.renderLabels();
+    }
     apply(e) {
+      const own = this.chat && e.id === this.chat.id && e.n > this.chat.n;
+      // A turn's page was kept, or the conversation went back to an earlier one.
+      if (own && (e.type === 'turns' || e.type === 'rewound')) {
+        this.chat.n = e.n;
+        this.chat.turns = e.turns;
+        if (e.type === 'rewound') {
+          this.chat.entries.length = Math.min(this.chat.entries.length, e.entries);
+          this.chat.partial = '';
+        }
+        this.render();
+        return;
+      }
       if (e.type === 'page' && this.chat && e.id === this.chat.id && e.n > this.chat.n) {
         this.chat.n = e.n;
         this.chat.version = e.version;
@@ -105,12 +155,15 @@
     // Loads the page when it first appears or changes, keeping it otherwise.
     showPage() {
       const chat = this.chat;
-      const ready = !!(chat?.view && chat.page);
+      const kept = chat?.turns?.find(t => t.turn === this.at);
+      const ready = !!(chat?.view && (chat.page || kept));
       this.frame.hidden = !ready;
       this.welcome.hidden = ready;
       this.welcomeText.textContent = `Ask for anything. ${this.agentName()} draws the answer on ${HyprlandApps.host.name}.`;
       if (!ready) return;
-      const src = `${chat.view}?v=${chat.version || 0}`;
+      const src = kept
+        ? `${chat.view}@${kept.turn}/?v=${kept.version}`
+        : `${chat.view}?v=${chat.version || 0}`;
       if (this.frame.dataset.src !== src) {
         this.frame.dataset.src = src;
         this.frame.src = src;
@@ -120,6 +173,7 @@
       const chat = this.chat;
       if (!chat) return;
       this.title.textContent = chat.title || 'New canvas';
+      this.renderPlace();
       this.showPage();
       this.renderSubtitle();
       this.renderState();
@@ -127,20 +181,27 @@
     renderPartial() {
       this.renderSubtitle();
     }
-    // The reply to the latest message; while Claude works, what it is doing.
+    // The reply to the message shown (the latest unless stepped back); while Claude works on the
+    // latest, what it is doing.
     renderSubtitle() {
       const chat = this.chat;
       if (!chat) return;
       const entries = chat.entries.filter(Boolean);
-      const last = entries.findLastIndex(entry => entry.role === 'user');
-      const turn = entries.slice(last + 1);
+      const users = entries.flatMap((entry, i) => (entry.role === 'user' ? [i] : []));
+      const earlier = !!this.at;
+      const last = (earlier ? users[this.at - 1] : users.at(-1)) ?? -1;
+      const turn = entries.slice(last + 1, (earlier && users[this.at]) || entries.length);
       const reply = turn.filter(entry => entry.role === 'assistant').at(-1)?.text || '';
       const tool = turn.filter(entry => entry.role === 'tool').at(-1);
-      const text = chat.partial || reply || (chat.busy ? this.doing(tool) : '');
-      this.subtitle.hidden = !text && !entries.length;
-      this.subtitle.classList.toggle('working', !!chat.busy && !chat.partial && !reply);
+      const live = chat.partial || reply || (chat.busy ? this.doing(tool) : '');
+      const text = earlier ? reply : live;
+      this.bar.hidden = this.subtitle.hidden = !text && !entries.length;
+      this.subtitle.classList.toggle('working', !earlier && !!chat.busy && !chat.partial && !reply);
+      this.subtitle.classList.toggle('earlier', earlier);
       const asked = last >= 0 ? entries[last].text : '';
       const said = node('span', 'canvas-said', this.spoken ? '' : text);
+      if (earlier && !this.spoken)
+        said.prepend(node('span', 'canvas-position', `${this.at}/${users.length}`));
       this.words = [];
       if (this.spoken) {
         // Each word, with where it starts in the text, lit once speech reaches it.
@@ -155,7 +216,7 @@
           at += part.length;
         }
         said.classList.add('reading');
-        this.subtitle.hidden = false;
+        this.bar.hidden = this.subtitle.hidden = false;
         this.subtitle.classList.remove('working');
         this.lit = -1;
       }
@@ -214,16 +275,33 @@
     }
     showThread() {
       this.expand(false);
+      this.at = null;
       this.frame.dataset.src = '';
       super.showThread();
     }
     renderLabels() {
       super.renderLabels();
-      const placeholder = `Ask ${this.agentName()} for anything…`;
+      const placeholder = this.at ? 'Continue from here…' : `Ask ${this.agentName()} for anything…`;
       this.promptField.querySelector('.chat-placeholder').textContent = placeholder;
       this.nativeInput.field.placeholder = placeholder;
     }
     scroll() {}
+    get actions() {
+      if (!this.chat || this.threadView.hidden) return [];
+      const step = (code, by, label) => ({
+        code,
+        meta: true,
+        ctrl: true,
+        label,
+        group: 'Canvas',
+        run: () => this.step(by),
+      });
+      return [
+        ...super.actions,
+        step('BracketLeft', -1, 'Earlier page'),
+        step('BracketRight', 1, 'Later page'),
+      ];
+    }
     dispose() {
       cancelAnimationFrame(this.readFrame);
       window.removeEventListener('message', this.bridgeMessage);

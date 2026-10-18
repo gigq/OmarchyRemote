@@ -55,8 +55,12 @@ async function setup(page, before) {
     return r.fulfill({ json: { id: ID } });
   });
   await page.route('**/api/canvas/view/**', r => {
-    state.loads.push(new URL(r.request().url()).search);
-    return r.fulfill({ body: PAGE, contentType: 'text/html' });
+    const url = new URL(r.request().url());
+    state.loads.push(url.search);
+    // A kept page says which turn left it.
+    const turn = url.pathname.match(/\/@(\d+)\//)?.[1];
+    const body = turn ? `<!doctype html><h1>Turn ${turn}</h1>` : PAGE;
+    return r.fulfill({ body, contentType: 'text/html' });
   });
   await page.routeWebSocket('**/api/canvas/ws', ws => {
     state.ws = ws;
@@ -235,4 +239,63 @@ test('in talk mode the reply is read aloud, its words lit as they are spoken', a
   });
   await expect(words).toHaveCount(0);
   await expect(said).toHaveText(text);
+});
+
+test('back and forward step through earlier pages, and sending from one continues from there', async ({
+  page,
+}) => {
+  const { app, state, emit } = await setup(page);
+  // Three turns, the first two with their pages kept.
+  state.session.entries = [
+    entry('user', 'Plan dinner'),
+    entry('assistant', 'Here is a dinner plan.'),
+    entry('user', 'Add dessert'),
+    entry('tool', 'index.html', 'Write'),
+    entry('assistant', 'Added a pie.'),
+    entry('user', 'Make it vegan'),
+    entry('assistant', 'All vegan now.'),
+  ];
+  state.session.turns = [
+    { turn: 1, version: 11 },
+    { turn: 2, version: 12 },
+    { turn: 3, version: 13 },
+  ];
+  await app.locator('.chat-row').click();
+  const frame = page.frameLocator('#remote-canvas-app iframe.canvas-frame');
+  const said = app.locator('.canvas-subtitle .canvas-said');
+  const back = app.getByRole('button', { name: 'Earlier page' });
+  const forward = app.getByRole('button', { name: 'Later page' });
+  const field = app.locator('textarea.native-input');
+  await expect(frame.locator('h1')).toHaveText('Dinner plan');
+  await expect(said).toHaveText('All vegan now.');
+  await expect(forward).toBeDisabled();
+  await back.click();
+  await expect(frame.locator('h1')).toHaveText('Turn 2');
+  await expect(said).toHaveText('2/3Added a pie.');
+  await expect(field).toHaveAttribute('placeholder', 'Continue from here…');
+  await back.click();
+  await expect(frame.locator('h1')).toHaveText('Turn 1');
+  await expect(said).toHaveText('1/3Here is a dinner plan.');
+  await expect(back).toBeDisabled();
+  await page.screenshot({ path: 'artifacts/browser/canvas-earlier.png' });
+  // Forward returns to the live page.
+  await forward.click();
+  await forward.click();
+  await expect(frame.locator('h1')).toHaveText('Dinner plan');
+  await expect(field).toHaveAttribute('placeholder', 'Ask Claude for anything…');
+  // Sending from an earlier page continues from it; the turns after it are gone.
+  await back.click();
+  await expect(said).toHaveText('2/3Added a pie.');
+  await app.getByRole('button', { name: 'Write a message' }).click();
+  await field.fill('Make it gluten free instead');
+  await field.press('Enter');
+  await expect.poll(() => state.sent.at(-1)?.from).toBe(2);
+  emit({ type: 'rewound', id: ID, entries: 5, turns: state.session.turns.slice(0, 2) });
+  emit({ type: 'entry', id: ID, index: 5, entry: entry('user', 'Make it gluten free instead') });
+  emit({ type: 'busy', id: ID });
+  await expect(said).toHaveText('Claude is thinking…');
+  await expect(app.locator('.canvas-position')).toHaveCount(0);
+  // Back now reaches the second turn, kept, not the vegan one that was dropped.
+  await back.click();
+  await expect(said).toHaveText('2/3Added a pie.');
 });

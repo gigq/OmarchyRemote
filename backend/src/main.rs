@@ -1,6 +1,7 @@
 mod ansi;
 mod apps;
 mod browser;
+mod canvas;
 mod chat;
 mod codexbar;
 mod dictation;

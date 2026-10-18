@@ -598,6 +598,12 @@ struct Live {
     failure: Option<String>,
     /// A Canvas session: its page's version is announced as the agent changes files.
     canvas: bool,
+    /// Claude's last message in this turn, where a later fork can continue from.
+    last_message: String,
+    /// A turn ended: its page is to be kept, by its number.
+    ended: Option<(usize, crate::canvas::Point)>,
+    /// Where Claude resumes when it starts: an earlier turn's end, forking its session.
+    fork: Option<crate::canvas::Point>,
 }
 impl Live {
     /// Applies one line of the agent's JSON output; returns the events to broadcast.
@@ -619,6 +625,9 @@ impl Live {
                 }
             }
             "assistant" if line["parent_tool_use_id"].is_null() => {
+                if let Some(uuid) = line["uuid"].as_str() {
+                    self.last_message = uuid.to_owned();
+                }
                 let message = line["message"]["id"]
                     .as_str()
                     .unwrap_or_default()
@@ -667,6 +676,16 @@ impl Live {
                     "page": folder.join("index.html").is_file(),
                 }));
                 if line["type"] == "result" {
+                    let entries = &self.conversation.entries;
+                    let turn = entries.iter().filter(|e| e.role == "user").count();
+                    self.ended = Some((
+                        turn,
+                        crate::canvas::Point {
+                            session: self.conversation.session.clone(),
+                            uuid: self.last_message.clone(),
+                            entries: entries.len(),
+                        },
+                    ));
                     events.extend(self.finish_turn(line));
                 }
             }
@@ -868,6 +887,7 @@ impl Chats {
         value["view"] = json!(self.view(id));
         value["version"] = json!(folder.map_or(0, page_version));
         value["page"] = json!(folder.is_some_and(|f| f.join("index.html").is_file()));
+        value["turns"] = folder.map_or(json!([]), crate::canvas::turns);
     }
     /// The agents this set can run: Canvas needs Claude's streaming protocol, so not Codex.
     fn installed(&self) -> Vec<(&'static str, &'static str, &'static str)> {
@@ -959,8 +979,21 @@ impl Chats {
         }
         let mut live = live;
         live.started = (model, effort);
-        args.push(if resume { "--resume" } else { "--session-id" }.into());
-        args.push(live.conversation.session.clone());
+        if let Some(point) = live.fork.take() {
+            // A new session that continues the old one as it was at the end of that turn.
+            args.extend([
+                "--resume".into(),
+                point.session,
+                "--resume-session-at".into(),
+                point.uuid,
+                "--fork-session".into(),
+                "--session-id".into(),
+                live.conversation.session.clone(),
+            ]);
+        } else {
+            args.push(if resume { "--resume" } else { "--session-id" }.into());
+            args.push(live.conversation.session.clone());
+        }
         let command = AGENTS
             .iter()
             .find(|(id, _, _)| *id == agent_of(&live.conversation))
@@ -1085,7 +1118,7 @@ impl Chats {
                 let Ok(value) = serde_json::from_str::<Value>(&line) else {
                     continue;
                 };
-                let events = {
+                let (events, ended) = {
                     let mut live = reader.live.lock().unwrap();
                     let mut events = live.apply(&value);
                     chats.stamp(&mut events);
@@ -1095,14 +1128,81 @@ impl Chats {
                     {
                         eprintln!("chat: could not save {}: {e}", live.path.display());
                     }
-                    events
+                    let folder = live.path.parent().map(FsPath::to_owned);
+                    let ended = live.ended.take().filter(|_| !live.removed);
+                    (events, ended.zip(folder))
                 };
                 chats.emit(events);
+                if let Some(((turn, point), folder)) = ended {
+                    chats.keep_page(&id, folder, turn, point).await;
+                }
             }
             let _ = reader.child.lock().await.wait().await;
             let last = errors.await.unwrap_or_default();
             chats.finish(&id, &reader, &last);
         });
+    }
+    /// Keeps a Canvas page as a turn left it, and tells the app which turns it can go back to.
+    async fn keep_page(&self, id: &str, folder: PathBuf, turn: usize, point: crate::canvas::Point) {
+        let turns = tokio::task::spawn_blocking(move || {
+            if let Err(e) = crate::canvas::snapshot(&folder, turn, &point) {
+                eprintln!("canvas: could not keep turn {turn}: {e}");
+            }
+            crate::canvas::turns(&folder)
+        })
+        .await
+        .unwrap_or_default();
+        let mut events = vec![json!({"type":"turns","id":id,"turns":turns})];
+        self.stamp(&mut events);
+        self.emit(events);
+    }
+    /// Takes a Canvas session back to the end of an earlier turn, to continue from there: its
+    /// page as it was then, its transcript up to then, and a fork of Claude's session. What came
+    /// after is gone. Returns the conversation, ready to start, and where Claude resumes.
+    async fn rewind(
+        &self,
+        id: &str,
+        turn: usize,
+        root: &FsPath,
+    ) -> anyhow::Result<(Conversation, PathBuf, crate::canvas::Point)> {
+        let (mut conversation, path) = match self.get(id) {
+            Some(running) => {
+                anyhow::ensure!(
+                    !running.live.lock().unwrap().busy,
+                    "Wait for the reply to finish before continuing from an earlier page"
+                );
+                self.restart(id)
+                    .await
+                    .ok_or_else(|| anyhow::anyhow!("The canvas changed; try again"))?
+            }
+            None => {
+                let path = find(root, id)?;
+                (load(&path)?, path)
+            }
+        };
+        let folder = path.parent().unwrap_or(root).to_owned();
+        let (point, turns) = tokio::task::spawn_blocking(move || {
+            let point = crate::canvas::restore(&folder, turn)?;
+            anyhow::Ok((point, crate::canvas::turns(&folder)))
+        })
+        .await??;
+        conversation.entries.truncate(point.entries);
+        conversation.session = uuid::Uuid::new_v4().to_string();
+        conversation.updated = now();
+        save(&conversation, &path)?;
+        let folder = path.parent().unwrap_or(root);
+        let mut events = vec![
+            json!({"type":"rewound","id":id,"entries":conversation.entries.len(),"turns":turns}),
+            json!({
+                "type": "page",
+                "id": id,
+                "version": page_version(folder),
+                "page": folder.join("index.html").is_file(),
+            }),
+        ];
+        self.stamp(&mut events);
+        self.emit(events);
+        Ok((conversation, path, point))
     }
     /// Stops a conversation's agent so it can start again with other settings; returns its state.
     async fn restart(&self, id: &str) -> Option<(Conversation, PathBuf)> {
@@ -1313,6 +1413,9 @@ pub struct Send {
     /// Paths returned by `/api/uploads/files`, moved into the chat's folder when sent.
     #[serde(default)]
     attachments: Vec<String>,
+    /// For Canvas: the earlier turn to continue from, forgetting the turns after it.
+    #[serde(default)]
+    from: Option<usize>,
 }
 pub async fn send(
     State(chats): State<Chats>,
@@ -1391,9 +1494,20 @@ pub async fn send(
             "Unsupported model or effort",
         ));
     }
+    // Continuing from an earlier page starts Claude again, from that turn.
+    let mut fork = None;
+    let mut restarted = None;
+    if let (Some(id), Some(turn), Kind::Canvas) = (request.id.as_deref(), request.from, chats.kind)
+    {
+        let (conversation, path, point) = chats
+            .rewind(id, turn, &root)
+            .await
+            .map_err(|e| refuse(StatusCode::CONFLICT, &e.to_string()))?;
+        restarted = Some((conversation, path));
+        fork = Some(point);
+    }
     // New settings, or the other agent of the Claude family, take effect by starting the agent
     // again; never in the middle of a reply. A Codex reply cannot take another message.
-    let mut restarted = None;
     if let Some(running) = request.id.as_deref().and_then(|id| chats.get(id)) {
         let (busy, started) = {
             let live = running.live.lock().unwrap();
@@ -1479,6 +1593,9 @@ pub async fn send(
                 started: Default::default(),
                 failure: None,
                 canvas: chats.kind == Kind::Canvas,
+                last_message: String::new(),
+                ended: None,
+                fork,
             };
             if agent == "codex" {
                 // Each Codex turn is its own run, given the message as it starts.
@@ -1837,7 +1954,15 @@ pub async fn view(
         Some(running) => running.live.lock().unwrap().path.clone(),
         None => find(&chats.root().map_err(error)?, &id).map_err(|_| missing())?,
     };
-    let folder = transcript.parent().ok_or_else(missing)?.to_owned();
+    let mut folder = transcript.parent().ok_or_else(missing)?.to_owned();
+    // `@3/…` is the page as turn 3 left it.
+    let mut relative = relative;
+    if let Some((first, rest)) = relative.split_once('/')
+        && let Some(turn) = first.strip_prefix('@').and_then(|t| t.parse::<u32>().ok())
+    {
+        folder = crate::canvas::page(&folder, turn);
+        relative = rest.to_owned();
+    }
     let bytes = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<u8>> {
         let file = folder.join(&relative).canonicalize()?;
         anyhow::ensure!(file.starts_with(folder.canonicalize()?) && file.is_file());
@@ -2188,6 +2313,9 @@ mod tests {
             started: Default::default(),
             failure: None,
             canvas: false,
+            last_message: String::new(),
+            ended: None,
+            fork: None,
         };
         let events = live.apply(&json!({"type":"thread.started","thread_id":"01a13635-b662"}));
         assert_eq!(live.conversation.session, "01a13635-b662");
@@ -2303,6 +2431,47 @@ mod tests {
         std::thread::sleep(Duration::from_millis(20));
         fs::write(folder.join("index.html"), "<h1>Hi</h1>").unwrap();
         assert!(page_version(&folder) > first);
+    }
+
+    #[test]
+    fn a_canvas_turn_ends_where_a_fork_can_continue() {
+        let mut live = Live {
+            conversation: Conversation {
+                id: "c".into(),
+                session: "s1".into(),
+                entries: vec![Entry::new("user", "", "Plan dinner")],
+                ..Conversation::default()
+            },
+            path: PathBuf::from("/tmp/canvas/chat.md"),
+            busy: true,
+            partial: String::new(),
+            seq: 0,
+            message: String::new(),
+            used: Instant::now(),
+            stopping: false,
+            removed: false,
+            started: Default::default(),
+            failure: None,
+            canvas: true,
+            last_message: String::new(),
+            ended: None,
+            fork: None,
+        };
+        live.apply(&json!({"type":"assistant","uuid":"u1","parent_tool_use_id":null,"message":{"id":"m1","content":[{"type":"text","text":"Here it is."}]}}));
+        // A subagent's messages are not where the conversation stands.
+        live.apply(&json!({"type":"assistant","uuid":"sub","parent_tool_use_id":"t","message":{"id":"m2","content":[]}}));
+        assert!(live.ended.is_none());
+        live.apply(&json!({"type":"result","subtype":"success","result":"Here it is."}));
+        let (turn, point) = live.ended.take().unwrap();
+        assert_eq!(turn, 1);
+        assert_eq!(
+            point,
+            crate::canvas::Point {
+                session: "s1".into(),
+                uuid: "u1".into(),
+                entries: 2
+            }
+        );
     }
 
     #[test]
@@ -2450,6 +2619,9 @@ mod tests {
             started: Default::default(),
             failure: None,
             canvas: false,
+            last_message: String::new(),
+            ended: None,
+            fork: None,
         };
         let delta = |text: &str| json!({"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":text}}});
         assert_eq!(live.apply(&delta("Hel"))[0]["seq"], 1);
