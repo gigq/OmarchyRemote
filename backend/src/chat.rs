@@ -1287,19 +1287,19 @@ Keep your text reply to one or two short sentences in plain speech, with no Mark
 const DESIGNS: [(&str, &str); 4] = [
     (
         "quick",
-        "Design level: quick. The person wants a fast answer. Make a simple, clean page with the answer up front and only the detail that matters, in a plain layout. Skip extra research, images, and interactivity unless the question needs them, and finish in as few steps as you can.",
+        "Design level: quick. Good design that mostly follows the built-in theme, well laid out but no custom elements or complicated UI.",
     ),
     (
         "medium",
-        "Design level: medium. Make a well-organized, good-looking page: the answer up front, then the supporting detail in clear sections, with a table, chart, or diagram where it explains better than text. Look up what you need to be accurate, and keep the page focused on the question.",
+        "Design level: medium. Make a well-organized, good-looking page with some custom elements and images where it makes sense.",
     ),
     (
         "detailed",
-        "Design level: detailed. Go well beyond the basics in both content and presentation. Gather more information and context, and show it with charts, diagrams, images, and interactive pieces where they help. Give the page a considered, distinctive look, with typography, color, layout, and hierarchy chosen for this subject. Check that everything loads and works.",
+        "Design level: detailed. Go well beyond the basics in both content and presentation.",
     ),
     (
         "max",
-        "Design level: maximum. Maximum information, maximum style in the UI. Gather everything relevant: current and live data, statistics, history, images, logos, and photos from the web. Build a rich, immersive page someone would want to show off: several views or tabs, visualizations, art direction and typography that suit the subject, and motion and interaction where they add something. When the subject is live, keep the page live. Take the time it needs, and check that every part loads and works.",
+        "Design level: maximum. Maximum information, maximum style in the UI.",
     ),
 ];
 /// The words for a design level; an empty or unknown level is medium.
