@@ -104,6 +104,14 @@
     description: 'every agent at a glance',
     native: true,
   });
+  define('canvas', {
+    name: 'canvas',
+    color: 'var(--theme-green)',
+    glyph: 'cv',
+    icon: '\uf1fc',
+    description: 'claude draws the answer',
+    native: true,
+  });
   define('chat', {
     name: 'chat',
     color: 'var(--theme-magenta)',
@@ -220,6 +228,7 @@
     'herdr',
     'muster',
     'chat',
+    'canvas',
     'btop',
     'services',
     'lazydocker',

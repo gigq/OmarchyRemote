@@ -121,6 +121,7 @@ const SERVICES: &[(&str, &str, &[&str])] = &[
         &["workspaces", "agents", "panes", "input"],
     ),
     ("chat", "Chat", &["conversations", "stream", "stop"]),
+    ("canvas", "Canvas", &["sessions", "pages", "stream", "stop"]),
     (
         "muster",
         "Muster",

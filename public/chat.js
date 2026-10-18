@@ -3,16 +3,12 @@
 (() => {
   const { node, button, storage } = window.HyprlandUtil;
   const headers = { 'X-Hyprland-Client': '1', 'Content-Type': 'application/json' };
-  const OPEN = 'omarchy-chat-open';
-  // The model and effort chosen last; new chats start with them.
-  const SETTINGS = 'omarchy-chat-settings';
-  // Files uploaded for each chat's next message, kept like its draft.
-  const ATTACHMENTS = 'omarchy-chat-attachments-v1';
+
   const MAX_ATTACHMENTS = 20;
 
-  async function request(path, body) {
+  async function call(base, path, body) {
     const response = await fetch(
-      '/api/chat' + path,
+      base + path,
       body === undefined ? { headers } : { method: 'POST', headers, body: JSON.stringify(body) }
     );
     const data = await response.json().catch(() => ({}));
@@ -66,8 +62,26 @@
     return new Date(time).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   }
 
+  // What differs between Chat and apps built on it, such as Canvas.
+  const CHAT = {
+    base: '/api/chat',
+    prefix: 'omarchy-chat',
+    title: 'Chats',
+    emptyTitle: 'No chats yet',
+    emptyText: 'Ask Claude anything. No project needed.',
+    start: 'Start a chat',
+  };
   class ChatApp {
-    constructor(root, bridge) {
+    constructor(root, bridge, options = {}) {
+      this.options = { ...CHAT, ...options };
+      const { base, prefix } = this.options;
+      this.base = base;
+      this.keys = {
+        open: prefix + '-open',
+        settings: prefix + '-settings',
+        attachments: prefix + '-attachments-v1',
+        drafts: prefix + '-drafts-v1',
+      };
       this.root = root;
       this.bridge = bridge;
       root.classList.add('chat-app');
@@ -76,7 +90,7 @@
 
       this.listView = node('section', 'chat-list-view');
       const listBar = node('div', 'chat-bar');
-      this.heading = node('h2', 'chat-heading', 'Chats');
+      this.heading = node('h2', 'chat-heading', this.options.title);
       this.selectButton = button('Select', () => this.select(true), 'chat-text-button');
       this.cancelSelect = button('Cancel', () => this.select(false), 'chat-text-button');
       this.cancelSelect.hidden = true;
@@ -108,9 +122,9 @@
       this.empty = node('div', 'chat-list-empty');
       this.empty.append(
         node('span', 'chat-list-empty-icon', '\uf086'),
-        node('p', 'chat-list-empty-title', 'No chats yet'),
-        node('p', 'chat-list-empty-text', 'Ask Claude anything. No project needed.'),
-        button('Start a chat', () => this.startNew(), 'remote-button chat-start')
+        node('p', 'chat-list-empty-title', this.options.emptyTitle),
+        node('p', 'chat-list-empty-text', this.options.emptyText),
+        button(this.options.start, () => this.startNew(), 'remote-button chat-start')
       );
       this.empty.hidden = true;
       this.listStatus = node('p', 'remote-status chat-folder');
@@ -177,7 +191,7 @@
       this.attachButton.append(icon('attach'));
       this.promptRow.append(this.attachButton, this.promptField, this.filePicker);
       // Uploaded files wait here until the message is sent.
-      this.pending = new Map(Object.entries(storage.read(ATTACHMENTS, {}) || {}));
+      this.pending = new Map(Object.entries(storage.read(this.keys.attachments, {}) || {}));
       this.previews = new Map();
       this.uploads = [];
       this.uploadAbort = new AbortController();
@@ -206,7 +220,7 @@
         compactControls: true,
         // Sending hides the keyboard so the reply has the whole screen.
         dismissOnSend: true,
-        draftStore: 'omarchy-chat-drafts-v1',
+        draftStore: this.keys.drafts,
       });
       this.nativeInput.field.addEventListener('paste', e => {
         const files = [...(e.clipboardData?.items || [])]
@@ -233,8 +247,8 @@
             latest: async (voice, id) =>
               id === 'new'
                 ? { session: 'new', answer: null, updates: [], paragraphs: [] }
-                : (await voice.request(`/api/chat/${encodeURIComponent(id)}/response`)).json(),
-            speech: id => `/api/chat/${encodeURIComponent(id)}/speech`,
+                : (await voice.request(`${this.base}/${encodeURIComponent(id)}/response`)).json(),
+            speech: id => `${this.base}/${encodeURIComponent(id)}/speech`,
             // A recording sends like a typed message, with any files waiting to go.
             send: async (voice, id) => {
               const sent =
@@ -273,10 +287,17 @@
       });
       this.resized.observe(this.messages);
     }
+    request(path, body) {
+      return call(this.base, path, body);
+    }
+    // What an app built on Chat adds to each message it sends.
+    sendExtras() {
+      return {};
+    }
     connect() {
       this.socket();
       this.refresh();
-      const open = storage.get(OPEN);
+      const open = storage.get(this.keys.open);
       if (open) this.open(open);
     }
     resume() {
@@ -287,7 +308,7 @@
     socket() {
       clearTimeout(this.retry);
       const ws = new WebSocket(
-        (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/api/chat/ws'
+        (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + this.base + '/ws'
       );
       this.ws = ws;
       ws.onmessage = e => this.event(JSON.parse(e.data));
@@ -345,7 +366,7 @@
     }
     async refresh() {
       try {
-        const data = await request('');
+        const data = await this.request('');
         this.chats = data.chats;
         this.folder = data.folder;
         this.available = data.available;
@@ -428,7 +449,7 @@
     renderActions() {
       const count = this.selected.size;
       const chats = count === 1 ? 'chat' : 'chats';
-      this.heading.textContent = this.selecting ? `${count} selected` : 'Chats';
+      this.heading.textContent = this.selecting ? `${count} selected` : this.options.title;
       this.cancelSelect.hidden = !this.selecting;
       this.newButton.hidden = !!this.selecting;
       this.actionBar.hidden = !this.selecting;
@@ -455,7 +476,7 @@
       this.working = true;
       this.renderActions();
       try {
-        const result = await request('/' + action, { ids });
+        const result = await this.request('/' + action, { ids });
         this.select(false);
         this.listError = result.failed.length
           ? `Could not ${action} ${result.failed.length}: ${result.failed[0].error}`
@@ -470,7 +491,7 @@
     }
     showList() {
       this.chat = null;
-      storage.set(OPEN, null);
+      storage.set(this.keys.open, null);
       this.nativeInput.dismiss();
       this.threadView.hidden = true;
       this.listView.hidden = false;
@@ -525,7 +546,7 @@
       return this.agentSpec(chat).label;
     }
     startNew() {
-      const settings = storage.read(SETTINGS, {}) || {};
+      const settings = storage.read(this.keys.settings, {}) || {};
       // New chats start with the agent last used, while it is still installed.
       const agent = this.agents.some(a => a.id === settings.agent)
         ? settings.agent
@@ -542,7 +563,7 @@
         effort: typeof settings.effort === 'string' ? settings.effort : '',
       };
       this.fitSettings();
-      storage.set(OPEN, null);
+      storage.set(this.keys.open, null);
       this.showThread();
       this.bridge.keyboard();
     }
@@ -550,10 +571,10 @@
       const opening = (this.opening = id);
       this.buffer ||= [];
       try {
-        const chat = await request('/' + encodeURIComponent(id));
+        const chat = await this.request('/' + encodeURIComponent(id));
         if (this.opening !== opening) return;
         this.chat = { ...chat, error: null };
-        storage.set(OPEN, id);
+        storage.set(this.keys.open, id);
         this.showThread();
         // The loaded state includes events up to its number; apply only later ones.
         const buffered = this.buffer;
@@ -562,7 +583,7 @@
       } catch (e) {
         if (this.opening !== opening) return;
         this.buffer = null;
-        storage.set(OPEN, null);
+        storage.set(this.keys.open, null);
         if (this.chat?.id === id) this.status.textContent = e.message;
       }
     }
@@ -593,13 +614,14 @@
         chat.busy = true;
         this.render();
       }
-      return request('/send', {
+      return this.request('/send', {
         id: chat.id,
         text,
         attachments: files.map(f => f.path),
         agent: this.agentOf(chat),
         model: chat.model || '',
         effort: chat.effort || '',
+        ...this.sendExtras(),
       })
         .then(({ id }) => {
           // A new chat learns its id here; its state so far comes from the host.
@@ -631,7 +653,7 @@
     setPending(draft, files) {
       if (files.length) this.pending.set(draft, files);
       else this.pending.delete(draft);
-      storage.write(ATTACHMENTS, Object.fromEntries(this.pending));
+      storage.write(this.keys.attachments, Object.fromEntries(this.pending));
       this.renderTray();
     }
     async upload(files) {
@@ -741,7 +763,7 @@
       if (!this.chat) return;
       this.chat[key] = value;
       if (key === 'agent') this.fitSettings();
-      storage.write(SETTINGS, {
+      storage.write(this.keys.settings, {
         agent: this.agentOf(),
         model: this.chat.model || '',
         effort: this.chat.effort || '',
@@ -843,7 +865,7 @@
       if (!this.chat?.id) return;
       this.stopButton.disabled = true;
       try {
-        await request(`/${encodeURIComponent(this.chat.id)}/stop`, {});
+        await this.request(`/${encodeURIComponent(this.chat.id)}/stop`, {});
       } catch (e) {
         this.status.textContent = e.message;
       } finally {
@@ -920,7 +942,7 @@
       const key = id + '/' + name;
       if (!this.images.has(key)) {
         const url = fetch(
-          `/api/chat/${encodeURIComponent(id)}/attachments/${encodeURIComponent(name)}`,
+          `${this.base}/${encodeURIComponent(id)}/attachments/${encodeURIComponent(name)}`,
           {
             headers: { 'X-Hyprland-Client': '1' },
           }
@@ -996,6 +1018,7 @@
       this.nativeInput.dispose();
     }
   }
+  window.HyprlandChatApp = ChatApp;
   window.HyprlandApps?.provide('chat', {
     create: (root, bridge) => new ChatApp(root, bridge),
   });

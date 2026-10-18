@@ -2,7 +2,7 @@
 //! folder in `~/Chats` holding `chat.md`, the app's own readable record (easy to back up with git),
 //! and the agent runs in that folder, so files it makes stay with the conversation and the folder
 //! can later become a project. Claude's session log is only used to resume.
-use crate::{ApiError, App, apps, error};
+use crate::{ApiError, apps, error};
 use axum::{
     Json,
     extract::{
@@ -14,6 +14,7 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     fs,
@@ -463,14 +464,17 @@ fn effective(model: &str, effort: &str, configured: &(String, String)) -> (Strin
 }
 /// `~/Chats`, or `OMARCHY_CHAT_DIR` inside the home directory.
 fn root() -> anyhow::Result<PathBuf> {
+    folder_in_home("OMARCHY_CHAT_DIR", "Chats")
+}
+fn folder_in_home(variable: &str, default: &str) -> anyhow::Result<PathBuf> {
     let home = apps::home()?;
-    let root = match std::env::var_os("OMARCHY_CHAT_DIR") {
+    let root = match std::env::var_os(variable) {
         Some(dir) => PathBuf::from(dir),
-        None => home.join("Chats"),
+        None => home.join(default),
     };
     anyhow::ensure!(
         root.is_absolute() && root.starts_with(&home) && root != home,
-        "OMARCHY_CHAT_DIR must be a folder inside the home directory"
+        "{variable} must be a folder inside the home directory"
     );
     Ok(root)
 }
@@ -592,6 +596,8 @@ struct Live {
     started: (String, String),
     /// The last error Codex reported in this turn, for when the turn fails.
     failure: Option<String>,
+    /// A Canvas session: its page's version is announced as the agent changes files.
+    canvas: bool,
 }
 impl Live {
     /// Applies one line of the agent's JSON output; returns the events to broadcast.
@@ -651,7 +657,32 @@ impl Live {
                     self.conversation.entries.push(entry);
                 }
             }
-            "result" => {
+            // A tool finished, perhaps writing the page; and a turn ended.
+            "user" | "result" if self.canvas => {
+                let folder = self.path.parent().unwrap_or(&self.path);
+                events.push(json!({
+                    "type": "page",
+                    "id": id,
+                    "version": page_version(folder),
+                    "page": folder.join("index.html").is_file(),
+                }));
+                if line["type"] == "result" {
+                    events.extend(self.finish_turn(line));
+                }
+            }
+            "result" => events.extend(self.finish_turn(line)),
+            _ => {}
+        }
+        if events.iter().any(|e| e["type"] != "delta") {
+            self.conversation.updated = now();
+        }
+        events
+    }
+    fn finish_turn(&mut self, line: &Value) -> Vec<Value> {
+        let id = self.conversation.id.clone();
+        let mut events = Vec::new();
+        {
+            {
                 self.busy = false;
                 self.partial.clear();
                 let failed = line["is_error"] == true || line["subtype"] != "success";
@@ -661,10 +692,6 @@ impl Live {
                     .unwrap_or("The agent stopped with an error");
                 events.push(json!({"type":"done","id":id,"error":if failed {json!(message)} else {Value::Null}}));
             }
-            _ => {}
-        }
-        if events.iter().any(|e| e["type"] != "delta") {
-            self.conversation.updated = now();
         }
         events
     }
@@ -784,16 +811,28 @@ struct Running {
     live: Mutex<Live>,
 }
 
+/// What a set of conversations is for: Chat's conversations in `~/Chats`, or Canvas sessions in
+/// `~/Canvas`, where the agent shows its answers as a page it writes.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Kind {
+    Chat,
+    Canvas,
+}
 #[derive(Clone)]
 pub struct Chats {
+    kind: Kind,
+    /// Signs the addresses of Canvas pages, which a frame loads without the app's request header.
+    secret: Arc<String>,
     running: Arc<Mutex<HashMap<String, Arc<Running>>>>,
     events: broadcast::Sender<Value>,
     /// Numbers every event. A chat read reports the number its state includes, so a client
     /// applies only the events after it.
     counter: Arc<AtomicU64>,
 }
-pub fn start() -> Chats {
+pub fn start(kind: Kind) -> Chats {
     let chats = Chats {
+        kind,
+        secret: Arc::new(format!("{}{}", uuid::Uuid::new_v4(), uuid::Uuid::new_v4())),
         running: Arc::new(Mutex::new(HashMap::new())),
         events: broadcast::channel(1024).0,
         counter: Arc::new(AtomicU64::new(0)),
@@ -821,6 +860,37 @@ pub fn start() -> Chats {
     chats
 }
 impl Chats {
+    /// A Canvas session's page: its address, its version, and whether it has been written yet.
+    fn describe_page(&self, value: &mut Value, id: &str, folder: Option<&FsPath>) {
+        if self.kind != Kind::Canvas {
+            return;
+        }
+        value["view"] = json!(self.view(id));
+        value["version"] = json!(folder.map_or(0, page_version));
+        value["page"] = json!(folder.is_some_and(|f| f.join("index.html").is_file()));
+    }
+    /// The agents this set can run: Canvas needs Claude's streaming protocol, so not Codex.
+    fn installed(&self) -> Vec<(&'static str, &'static str, &'static str)> {
+        installed()
+            .into_iter()
+            .filter(|(id, _, _)| self.kind == Kind::Chat || claude_family(id))
+            .collect()
+    }
+    /// The address a Canvas session's page is served at, signed for that session.
+    fn view(&self, id: &str) -> String {
+        let token = format!(
+            "{:x}",
+            Sha256::digest(format!("{}:{id}", self.secret).as_bytes())
+        );
+        format!("/api/canvas/view/{id}/{}/", &token[..32])
+    }
+    /// The folder this set keeps its conversations in.
+    fn root(&self) -> anyhow::Result<PathBuf> {
+        match self.kind {
+            Kind::Chat => root(),
+            Kind::Canvas => folder_in_home("OMARCHY_CANVAS_DIR", "Canvas"),
+        }
+    }
     /// Numbers events while the conversation they change is still locked.
     fn stamp(&self, events: &mut [Value]) {
         for event in events {
@@ -845,17 +915,31 @@ impl Chats {
             "stream-json",
             "--verbose",
             "--include-partial-messages",
-            // Nobody answers approval prompts yet: anything that would ask is denied, except
-            // web search and fetching pages, which a chat needs and which change nothing here.
-            "--permission-prompts",
-            "none",
-            "--allowedTools",
-            "WebSearch,WebFetch",
         ]
         .map(String::from)
         .into();
-        if let Ok(extra) = std::env::var("OMARCHY_CHAT_CLAUDE_ARGS") {
-            args.extend(serde_json::from_str::<Vec<String>>(&extra)?);
+        if self.kind == Kind::Canvas {
+            // Canvas builds pages with every tool, unasked, and is told how its page is shown.
+            args.extend(["--permission-mode".into(), "bypassPermissions".into()]);
+            args.extend(["--append-system-prompt".into(), CANVAS_BRIEF.into()]);
+            if let Ok(extra) = std::env::var("OMARCHY_CANVAS_CLAUDE_ARGS") {
+                args.extend(serde_json::from_str::<Vec<String>>(&extra)?);
+            }
+        } else {
+            // Nobody answers approval prompts yet: anything that would ask is denied, except
+            // web search and fetching pages, which a chat needs and which change nothing here.
+            args.extend(
+                [
+                    "--permission-prompts",
+                    "none",
+                    "--allowedTools",
+                    "WebSearch,WebFetch",
+                ]
+                .map(String::from),
+            );
+            if let Ok(extra) = std::env::var("OMARCHY_CHAT_CLAUDE_ARGS") {
+                args.extend(serde_json::from_str::<Vec<String>>(&extra)?);
+            }
         }
         let (model, effort) = (
             live.conversation.model.clone(),
@@ -1080,10 +1164,70 @@ impl Chats {
     }
 }
 
-pub async fn status(State(app): State<App>) -> Result<Json<Value>, ApiError> {
-    let root = root().map_err(error)?;
+/// What Claude is told in a Canvas session, on top of its own system prompt.
+const CANVAS_BRIEF: &str = "You are Canvas: the person talks or types to you, and you answer by building the page they see.
+
+The page is index.html in your working directory, shown full-screen in a sandboxed frame in the Omarchy Remote app on the person's phone, iPad, or computer. Scripts, forms, popups, and dialogs work there; same-origin storage (localStorage, cookies, IndexedDB) does not. Write the page with your file tools: the app reloads it as soon as a file changes. Put any other files it needs (CSS, scripts, images, data) beside it and link them with relative paths. Each turn, rewrite or edit index.html so it shows the best answer to the latest message, keeping earlier content only where it still helps.
+
+Design whatever the moment calls for: a chart, a table, a timeline, a map, a comparison, a calculator, a step-by-step guide, a game, a document, an illustration. Nothing is off limits: load libraries, fonts, and images from anywhere on the web (for example Chart.js, D3, Three.js, Leaflet). Each message begins with a <canvas-context> block giving the screen's size and device and the app's current theme as CSS colors and fonts; use it so the page feels at home, or depart from it when the content is better served another way. Fit the given screen and make everything work by touch.
+
+The page can answer for the person: parent.postMessage({ type: 'canvas', text: 'Show the vegetarian version' }, '*') arrives as their next message. Use it for buttons, choices, and forms that should continue the conversation.
+
+Keep your text reply to one or two short sentences in plain speech, with no Markdown: it is shown as a subtitle and may be read aloud. Put the detail on the page. Work quickly: get a useful page up early, then refine it; search and fetch the web for anything current.";
+/// When a Canvas session's page last changed: the newest file in its folder, other than its
+/// transcript, in milliseconds.
+fn page_version(folder: &FsPath) -> u64 {
+    fn newest(dir: &FsPath, depth: u8) -> u64 {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return 0;
+        };
+        entries
+            .flatten()
+            .filter(|e| {
+                let name = e.file_name();
+                let name = name.to_string_lossy();
+                !name.starts_with('.') && name != FILE
+            })
+            .map(|e| match e.file_type() {
+                Ok(t) if t.is_dir() && depth > 0 => newest(&e.path(), depth - 1),
+                Ok(t) if t.is_file() => e
+                    .metadata()
+                    .and_then(|m| m.modified())
+                    .ok()
+                    .and_then(|m| m.duration_since(UNIX_EPOCH).ok())
+                    .map_or(0, |d| d.as_millis() as u64),
+                _ => 0,
+            })
+            .max()
+            .unwrap_or(0)
+    }
+    newest(folder, 3)
+}
+/// The routes of a set of conversations, mounted at `/api/chat` for Chat and `/api/canvas` for
+/// Canvas.
+pub fn router<S: Clone + std::marker::Send + Sync + 'static>(chats: Chats) -> axum::Router<S> {
+    use axum::routing::{get, post};
+    axum::Router::new()
+        .route("/", get(status))
+        .route("/send", post(send))
+        .route("/archive", post(archive))
+        .route("/delete", post(delete))
+        .route("/ws", get(upgrade))
+        .route("/{id}", get(read))
+        .route("/{id}/stop", post(stop))
+        .route("/{id}/attachments/{name}", get(attachment))
+        .route("/{id}/response", get(response))
+        .route("/{id}/speech", post(speech))
+        // A Canvas page and its files, for the frame that shows it.
+        .route("/view/{id}/{token}/", get(view))
+        .route("/view/{id}/{token}/{*path}", get(view))
+        .with_state(chats)
+}
+pub async fn status(State(chats): State<Chats>) -> Result<Json<Value>, ApiError> {
+    let root = chats.root().map_err(error)?;
     prepare(&root).map_err(error)?;
-    let running = app.chats.running.lock().unwrap();
+    let agents = chats.installed();
+    let running = chats.running.lock().unwrap();
     let chats: Vec<Value> = list(&root)
         .into_iter()
         .map(|mut chat| {
@@ -1092,7 +1236,6 @@ pub async fn status(State(app): State<App>) -> Result<Json<Value>, ApiError> {
             chat
         })
         .collect();
-    let agents = installed();
     let (model, effort) = defaults();
     let offered: Vec<Value> = agents
         .iter()
@@ -1123,27 +1266,32 @@ pub async fn status(State(app): State<App>) -> Result<Json<Value>, ApiError> {
     })))
 }
 
-pub async fn read(State(app): State<App>, Path(id): Path<String>) -> Result<Json<Value>, ApiError> {
-    if let Some(running) = app.chats.get(&id) {
+pub async fn read(
+    State(chats): State<Chats>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    if let Some(running) = chats.get(&id) {
         let live = running.live.lock().unwrap();
         let mut value = live.conversation.json();
         value["busy"] = json!(live.busy);
         value["folder"] = json!(live.path.parent().map(|d| d.to_string_lossy()));
+        chats.describe_page(&mut value, &id, live.path.parent());
         value["partial"] = json!(live.partial);
         value["seq"] = json!(live.seq);
-        value["n"] = json!(app.chats.counter.load(Ordering::SeqCst));
+        value["n"] = json!(chats.counter.load(Ordering::SeqCst));
         return Ok(Json(value));
     }
-    let root = root().map_err(error)?;
+    let root = chats.root().map_err(error)?;
     prepare(&root).map_err(error)?;
     let path = find(&root, &id)
         .map_err(|e| (StatusCode::NOT_FOUND, Json(json!({"error":e.to_string()}))))?;
     let mut value = load(&path).map_err(error)?.json();
     value["folder"] = json!(path.parent().map(|d| d.to_string_lossy()));
+    chats.describe_page(&mut value, &id, path.parent());
     value["busy"] = json!(false);
     value["partial"] = json!("");
     value["seq"] = json!(0);
-    value["n"] = json!(app.chats.counter.load(Ordering::SeqCst));
+    value["n"] = json!(chats.counter.load(Ordering::SeqCst));
     Ok(Json(value))
 }
 
@@ -1159,12 +1307,15 @@ pub struct Send {
     /// The agent for a new chat, or another of the Claude family for an existing one.
     #[serde(default)]
     agent: Option<String>,
+    /// For Canvas: the screen and theme the page is shown with, given to the agent each message.
+    #[serde(default)]
+    context: Option<Value>,
     /// Paths returned by `/api/uploads/files`, moved into the chat's folder when sent.
     #[serde(default)]
     attachments: Vec<String>,
 }
 pub async fn send(
-    State(app): State<App>,
+    State(chats): State<Chats>,
     Json(request): Json<Send>,
 ) -> Result<Json<Value>, ApiError> {
     let text = request.text.trim().to_owned();
@@ -1191,10 +1342,10 @@ pub async fn send(
                 Json(json!({"error":e.to_string()})),
             )
         })?;
-    let chats = app.chats.clone();
-    let root = root().map_err(error)?;
+    let chats = chats.clone();
+    let root = chats.root().map_err(error)?;
     prepare(&root).map_err(error)?;
-    let agents = installed();
+    let agents = chats.installed();
     let offered = |agent: &str| agents.iter().any(|(id, _, _)| *id == agent);
     let refuse = |status: StatusCode, message: &str| (status, Json(json!({"error": message})));
     // The chat's agent so far: from its running agent, or its file.
@@ -1327,6 +1478,7 @@ pub async fn send(
                 removed: false,
                 started: Default::default(),
                 failure: None,
+                canvas: chats.kind == Kind::Canvas,
             };
             if agent == "codex" {
                 // Each Codex turn is its own run, given the message as it starts.
@@ -1349,7 +1501,12 @@ pub async fn send(
         let (id, events, attachments) =
             add_message(&chats, &mut live, &text, &uploads, &root).map_err(error)?;
         let folder = live.path.parent().unwrap_or(&root).to_owned();
-        (id, events, message_content(&text, &folder, &attachments))
+        let content = message_content(&text, &folder, &attachments);
+        let content = match (&request.context, chats.kind) {
+            (Some(context), Kind::Canvas) => with_context(content, context),
+            _ => content,
+        };
+        (id, events, content)
     };
     chats.emit(events);
     let line =
@@ -1367,6 +1524,22 @@ pub async fn send(
     Ok(Json(json!({"id":id})))
 }
 
+/// A Canvas message as the agent receives it: the screen and theme first, then the message.
+fn with_context(content: Value, context: &Value) -> Value {
+    let mut described = serde_json::to_string_pretty(context).unwrap_or_default();
+    if described.len() > 6000 {
+        described = clip(&described, 6000);
+    }
+    let block = format!("<canvas-context>\n{described}\n</canvas-context>");
+    match content {
+        Value::String(text) => json!(format!("{block}\n\n{text}")),
+        Value::Array(mut blocks) => {
+            blocks.insert(0, json!({"type":"text","text":block}));
+            json!(blocks)
+        }
+        other => other,
+    }
+}
 /// Adds the person's message to a chat, with its files moved into the chat's folder, and marks
 /// the chat busy; returns the chat's id, the events to send, and the files' paths in the folder.
 fn add_message(
@@ -1539,14 +1712,14 @@ fn message_content(text: &str, folder: &FsPath, attachments: &[String]) -> Value
 /// Where a chat's Claude session log is, and whether a reply is in progress.
 /// A chat's session: its agent, its id, Claude's log for it, and whether a reply is in progress.
 /// Codex finds its own log by the id.
-fn session_log(app: &App, id: &str) -> anyhow::Result<(String, String, Option<PathBuf>, bool)> {
-    let (conversation, path, busy) = match app.chats.get(id) {
+fn session_log(chats: &Chats, id: &str) -> anyhow::Result<(String, String, Option<PathBuf>, bool)> {
+    let (conversation, path, busy) = match chats.get(id) {
         Some(running) => {
             let live = running.live.lock().unwrap();
             (live.conversation.clone(), live.path.clone(), live.busy)
         }
         None => {
-            let path = find(&root()?, id)?;
+            let path = find(&chats.root()?, id)?;
             (load(&path)?, path, false)
         }
     };
@@ -1562,8 +1735,8 @@ fn session_log(app: &App, id: &str) -> anyhow::Result<(String, String, Option<Pa
 }
 /// The latest reply's prose in the shape Herdr's Voice mode reads: `session`, `answer`, its
 /// `paragraphs` as they arrive, and whether Claude is `working`.
-async fn voice_state(app: &App, id: &str) -> anyhow::Result<Value> {
-    let (agent, session, log, busy) = session_log(app, id)?;
+async fn voice_state(chats: &Chats, id: &str) -> anyhow::Result<Value> {
+    let (agent, session, log, busy) = session_log(chats, id)?;
     let lookup = session.clone();
     let mut value = tokio::task::spawn_blocking(move || {
         let empty = || Ok(json!({"answer":null,"updates":[],"paragraphs":[],"working":false}));
@@ -1585,23 +1758,107 @@ async fn voice_state(app: &App, id: &str) -> anyhow::Result<Value> {
     Ok(value)
 }
 pub async fn response(
-    State(app): State<App>,
+    State(chats): State<Chats>,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    Ok(Json(voice_state(&app, &id).await.map_err(error)?))
+    Ok(Json(voice_state(&chats, &id).await.map_err(error)?))
 }
 pub async fn speech(
-    State(app): State<App>,
+    State(chats): State<Chats>,
     Path(id): Path<String>,
     Json(request): Json<crate::voice::SpeechRequest>,
 ) -> Result<Response, ApiError> {
-    let value = voice_state(&app, &id).await.map_err(error)?;
+    let value = voice_state(&chats, &id).await.map_err(error)?;
     crate::voice::speak(&value, request).await
+}
+
+/// The type a Canvas page's file is served as, by its extension.
+fn content_type(path: &str) -> &'static str {
+    let extension = path
+        .rsplit_once('.')
+        .map_or("", |(_, e)| e)
+        .to_ascii_lowercase();
+    match extension.as_str() {
+        "html" | "htm" => "text/html; charset=utf-8",
+        "css" => "text/css; charset=utf-8",
+        "js" | "mjs" => "text/javascript; charset=utf-8",
+        "json" | "map" => "application/json",
+        "txt" | "md" => "text/plain; charset=utf-8",
+        "csv" => "text/csv; charset=utf-8",
+        "svg" => "image/svg+xml",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "avif" => "image/avif",
+        "ico" => "image/x-icon",
+        "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        "ogg" => "audio/ogg",
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "woff2" => "font/woff2",
+        "woff" => "font/woff",
+        "ttf" => "font/ttf",
+        "otf" => "font/otf",
+        "glb" => "model/gltf-binary",
+        "gltf" => "model/gltf+json",
+        "wasm" => "application/wasm",
+        _ => "application/octet-stream",
+    }
+}
+/// A Canvas page or one of its files, for the frame that shows it. The address is signed for the
+/// session, as a frame cannot send the app's request header; only files in the session's folder
+/// are served, and never its transcript or hidden files.
+pub async fn view(
+    State(chats): State<Chats>,
+    Path(params): Path<HashMap<String, String>>,
+) -> Result<Response, ApiError> {
+    let missing = || (StatusCode::NOT_FOUND, Json(json!({"error":"Not found"})));
+    let id = params.get("id").cloned().unwrap_or_default();
+    let token = params.get("token").cloned().unwrap_or_default();
+    if chats.kind != Kind::Canvas || chats.view(&id) != format!("/api/canvas/view/{id}/{token}/") {
+        return Err(missing());
+    }
+    let path = params.get("path").cloned().unwrap_or_default();
+    let relative = if path.is_empty() || path.ends_with('/') {
+        format!("{path}index.html")
+    } else {
+        path
+    };
+    if relative == FILE
+        || relative
+            .split('/')
+            .any(|part| part.is_empty() || part.starts_with('.') || part.contains('\\'))
+    {
+        return Err(missing());
+    }
+    let transcript = match chats.get(&id) {
+        Some(running) => running.live.lock().unwrap().path.clone(),
+        None => find(&chats.root().map_err(error)?, &id).map_err(|_| missing())?,
+    };
+    let folder = transcript.parent().ok_or_else(missing)?.to_owned();
+    let bytes = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<u8>> {
+        let file = folder.join(&relative).canonicalize()?;
+        anyhow::ensure!(file.starts_with(folder.canonicalize()?) && file.is_file());
+        Ok(fs::read(file)?)
+    })
+    .await
+    .map_err(error)?
+    .map_err(|_| missing())?;
+    let kind = content_type(params.get("path").map_or("index.html", |p| {
+        if p.is_empty() || p.ends_with('/') {
+            "index.html"
+        } else {
+            p
+        }
+    }));
+    Ok(([(axum::http::header::CONTENT_TYPE, kind)], bytes).into_response())
 }
 
 /// A chat's attachment, for the app to show: `name` must be a file in its `attachments` folder.
 pub async fn attachment(
-    State(app): State<App>,
+    State(chats): State<Chats>,
     Path((id, name)): Path<(String, String)>,
 ) -> Result<Response, ApiError> {
     let missing = || {
@@ -1613,10 +1870,10 @@ pub async fn attachment(
     if name.is_empty() || name.contains(['/', '\\']) || name.starts_with('.') {
         return Err(missing());
     }
-    let path = match app.chats.get(&id) {
+    let path = match chats.get(&id) {
         Some(running) => running.live.lock().unwrap().path.clone(),
         None => {
-            let root = root().map_err(error)?;
+            let root = chats.root().map_err(error)?;
             find(&root, &id).map_err(|_| missing())?
         }
     };
@@ -1639,8 +1896,8 @@ pub async fn attachment(
 
 /// Stops the agent mid-reply. Its session keeps everything up to the last complete message, and
 /// the streamed text so far is kept in the conversation.
-pub async fn stop(State(app): State<App>, Path(id): Path<String>) -> Json<Value> {
-    if let Some(running) = app.chats.get(&id) {
+pub async fn stop(State(chats): State<Chats>, Path(id): Path<String>) -> Json<Value> {
+    if let Some(running) = chats.get(&id) {
         running.live.lock().unwrap().stopping = true;
         let _ = running.child.lock().await.start_kill();
     }
@@ -1793,25 +2050,25 @@ pub struct Batch {
     ids: Vec<String>,
 }
 pub async fn archive(
-    State(app): State<App>,
+    State(chats): State<Chats>,
     Json(batch): Json<Batch>,
 ) -> Result<Json<Value>, ApiError> {
-    manage(&app, batch.ids, false).await
+    manage(&chats, batch.ids, false).await
 }
 pub async fn delete(
-    State(app): State<App>,
+    State(chats): State<Chats>,
     Json(batch): Json<Batch>,
 ) -> Result<Json<Value>, ApiError> {
-    manage(&app, batch.ids, true).await
+    manage(&chats, batch.ids, true).await
 }
-async fn manage(app: &App, ids: Vec<String>, delete: bool) -> Result<Json<Value>, ApiError> {
+async fn manage(chats: &Chats, ids: Vec<String>, delete: bool) -> Result<Json<Value>, ApiError> {
     if ids.is_empty() || ids.len() > 1000 {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(json!({"error":"Choose between 1 and 1000 chats"})),
         ));
     }
-    let root = root().map_err(error)?;
+    let root = chats.root().map_err(error)?;
     prepare(&root).map_err(error)?;
     let (mut done, mut failed) = (Vec::new(), Vec::new());
     for id in ids {
@@ -1822,7 +2079,7 @@ async fn manage(app: &App, ids: Vec<String>, delete: bool) -> Result<Json<Value>
                 continue;
             }
         };
-        app.chats.retire(&id).await;
+        chats.retire(&id).await;
         let result = if delete {
             claude_config().and_then(|config| delete_dir(&config, &root, &path, &id))
         } else {
@@ -1834,14 +2091,14 @@ async fn manage(app: &App, ids: Vec<String>, delete: bool) -> Result<Json<Value>
         }
     }
     let mut events = vec![json!({"type":"removed","ids":done})];
-    app.chats.stamp(&mut events);
-    app.chats.emit(events);
+    chats.stamp(&mut events);
+    chats.emit(events);
     Ok(Json(json!({"done":done,"failed":failed})))
 }
 
-pub async fn upgrade(State(app): State<App>, ws: WebSocketUpgrade) -> Response {
+pub async fn upgrade(State(chats): State<Chats>, ws: WebSocketUpgrade) -> Response {
     ws.max_message_size(4096)
-        .on_upgrade(move |socket| events(socket, app.chats))
+        .on_upgrade(move |socket| events(socket, chats))
 }
 async fn events(mut socket: WebSocket, chats: Chats) {
     let mut receiver = chats.events.subscribe();
@@ -1930,6 +2187,7 @@ mod tests {
             removed: false,
             started: Default::default(),
             failure: None,
+            canvas: false,
         };
         let events = live.apply(&json!({"type":"thread.started","thread_id":"01a13635-b662"}));
         assert_eq!(live.conversation.session, "01a13635-b662");
@@ -1999,6 +2257,52 @@ mod tests {
             "What is this?\n\nAttached files, in this chat's folder:\n- attachments/photo.png\n- attachments/notes.txt"
         );
         assert_eq!(images, vec![folder.join("attachments/photo.png")]);
+    }
+
+    #[test]
+    fn canvas_pages_are_versioned_typed_and_given_their_context() {
+        assert_eq!(content_type("index.html"), "text/html; charset=utf-8");
+        assert_eq!(
+            content_type("lib/chart.MJS"),
+            "text/javascript; charset=utf-8"
+        );
+        assert_eq!(content_type("photo.webp"), "image/webp");
+        assert_eq!(content_type("data"), "application/octet-stream");
+        let context = json!({"screen":{"width":402,"height":874},"device":"phone"});
+        let plain = with_context(json!("Plan my week"), &context);
+        assert!(plain.as_str().unwrap().starts_with("<canvas-context>\n{"));
+        assert!(
+            plain
+                .as_str()
+                .unwrap()
+                .ends_with("</canvas-context>\n\nPlan my week")
+        );
+        let blocks = with_context(
+            json!([{"type":"image"},{"type":"text","text":"What is this?"}]),
+            &context,
+        );
+        assert_eq!(blocks[0]["type"], "text");
+        assert!(
+            blocks[0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("\"device\": \"phone\"")
+        );
+        assert_eq!(blocks[2]["text"], "What is this?");
+        // A page's version follows its files, not the transcript or hidden files.
+        let dir = crate::dictation::AudioDir::new().unwrap();
+        let folder = dir.0.join("session");
+        fs::create_dir_all(folder.join("assets")).unwrap();
+        assert_eq!(page_version(&folder), 0);
+        fs::write(folder.join(FILE), "transcript").unwrap();
+        fs::write(folder.join(".notes"), "hidden").unwrap();
+        assert_eq!(page_version(&folder), 0);
+        fs::write(folder.join("assets/app.js"), "go()").unwrap();
+        let first = page_version(&folder);
+        assert!(first > 0);
+        std::thread::sleep(Duration::from_millis(20));
+        fs::write(folder.join("index.html"), "<h1>Hi</h1>").unwrap();
+        assert!(page_version(&folder) > first);
     }
 
     #[test]
@@ -2145,6 +2449,7 @@ mod tests {
             removed: false,
             started: Default::default(),
             failure: None,
+            canvas: false,
         };
         let delta = |text: &str| json!({"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":text}}});
         assert_eq!(live.apply(&delta("Hel"))[0]["seq"], 1);

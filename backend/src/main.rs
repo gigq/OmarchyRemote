@@ -46,6 +46,7 @@ struct App {
     widgets: widgets::Widgets,
     preferences: preferences::Shared,
     chats: chat::Chats,
+    canvas: chat::Chats,
 }
 type ApiError = (StatusCode, Json<Value>);
 fn error(e: impl std::fmt::Display) -> ApiError {
@@ -66,14 +67,19 @@ async fn authorize(
     }
     let origin = headers.get("origin").and_then(|v| v.to_str().ok());
     let websocket = headers.get("upgrade").is_some();
-    if !authorized_browser(
-        &app.origins,
-        origin,
-        websocket,
-        headers
-            .get("x-hyprland-client")
-            .and_then(|v| v.to_str().ok()),
-    ) {
+    // A Canvas page's frame cannot send the client header; its address is signed instead.
+    let canvas_page = request.method() == axum::http::Method::GET
+        && request.uri().path().starts_with("/api/canvas/view/");
+    if !canvas_page
+        && !authorized_browser(
+            &app.origins,
+            origin,
+            websocket,
+            headers
+                .get("x-hyprland-client")
+                .and_then(|v| v.to_str().ok()),
+        )
+    {
         return StatusCode::FORBIDDEN.into_response();
     }
     let mut response = next.run(request).await;
@@ -540,7 +546,8 @@ async fn main() -> anyhow::Result<()> {
         preferences: Arc::new(Mutex::new(preferences::Store::open(
             &apps::data_dir()?.join("settings.sqlite3"),
         )?)),
-        chats: chat::start(),
+        chats: chat::start(chat::Kind::Chat),
+        canvas: chat::start(chat::Kind::Canvas),
     };
     let router = Router::new()
         .route("/api/capabilities", get(capabilities))
@@ -593,16 +600,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/terminal/session", post(session))
         .route("/api/terminal/{id}/ws", get(terminal_upgrade))
         .route("/api/terminal/{id}/close", post(terminal_close))
-        .route("/api/chat", get(chat::status))
-        .route("/api/chat/send", post(chat::send))
-        .route("/api/chat/archive", post(chat::archive))
-        .route("/api/chat/delete", post(chat::delete))
-        .route("/api/chat/ws", get(chat::upgrade))
-        .route("/api/chat/{id}", get(chat::read))
-        .route("/api/chat/{id}/stop", post(chat::stop))
-        .route("/api/chat/{id}/attachments/{name}", get(chat::attachment))
-        .route("/api/chat/{id}/response", get(chat::response))
-        .route("/api/chat/{id}/speech", post(chat::speech))
+        .nest("/api/chat", chat::router(app.chats.clone()))
+        .nest("/api/canvas", chat::router(app.canvas.clone()))
         .route("/api/muster", get(muster::board))
         .route("/api/muster/hidden", post(muster::hide))
         .route("/api/muster/reviewed", post(muster::reviewed))
