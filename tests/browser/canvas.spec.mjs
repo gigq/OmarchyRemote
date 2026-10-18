@@ -299,3 +299,31 @@ test('back and forward step through earlier pages, and sending from one continue
   await back.click();
   await expect(said).toHaveText('2/3Added a pie.');
 });
+
+test('a canvas has a design level, sent with each message and kept for new canvases', async ({
+  page,
+}) => {
+  const { app, state } = await setup(page);
+  await app.locator('.chat-row').click();
+  const chip = app.locator('.chat-settings');
+  // No level yet is medium.
+  await expect(chip).toHaveText('medium UI · Default · default');
+  await chip.click();
+  const design = app.getByRole('group', { name: 'Design' });
+  await expect(design.getByRole('button')).toHaveText(['quick', 'medium', 'detailed', 'max']);
+  await expect(design.getByRole('button', { name: 'medium' })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  );
+  await design.getByRole('button', { name: 'max' }).click();
+  await expect(chip).toHaveText('max UI · Default · default');
+  await page.screenshot({ path: 'artifacts/browser/canvas-design.png' });
+  await app.getByRole('button', { name: 'Write a message' }).click();
+  const field = app.locator('textarea.native-input');
+  await field.fill('Show me the Leafs season');
+  await field.press('Enter');
+  await expect.poll(() => state.sent.at(-1)?.design).toBe('max');
+  // A new canvas starts with the level used last.
+  await app.locator('.chat-thread-view .chat-new').click();
+  await expect(chip).toHaveText('max UI · Default · default');
+});

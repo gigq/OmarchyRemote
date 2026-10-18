@@ -89,6 +89,8 @@ struct Conversation {
     /// Model alias and effort level for this chat; empty uses Claude's own setting.
     model: String,
     effort: String,
+    /// For Canvas: how much design work a page gets (one of `DESIGNS`); empty is medium.
+    design: String,
     title: String,
     created: String,
     updated: String,
@@ -108,7 +110,7 @@ impl Conversation {
         clip(&text.split_whitespace().collect::<Vec<_>>().join(" "), 160)
     }
     fn summary(&self) -> Value {
-        json!({"id":self.id,"agent":self.agent,"model":self.model,"effort":self.effort,"title":self.title,"created":self.created,"updated":self.updated,"preview":self.preview()})
+        json!({"id":self.id,"agent":self.agent,"model":self.model,"effort":self.effort,"design":self.design,"title":self.title,"created":self.created,"updated":self.updated,"preview":self.preview()})
     }
     fn json(&self) -> Value {
         let mut value = self.summary();
@@ -138,6 +140,10 @@ impl Conversation {
             ("preview", &self.preview()),
         ] {
             out.push_str(&format!("{key}: {}\n", json!(value)));
+        }
+        // Only a canvas has a design level, so chats are written as before.
+        if !self.design.is_empty() {
+            out.push_str(&format!("design: {}\n", json!(self.design)));
         }
         out.push_str("---\n");
         for entry in &self.entries {
@@ -190,6 +196,7 @@ impl Conversation {
             session: field("session"),
             model: field("model"),
             effort: field("effort"),
+            design: field("design"),
             title: field("title"),
             created: field("created"),
             updated: field("updated"),
@@ -1274,7 +1281,35 @@ Design whatever the moment calls for: a chart, a table, a timeline, a map, a com
 
 The page can answer for the person: parent.postMessage({ type: 'canvas', text: 'Show the vegetarian version' }, '*') arrives as their next message. Use it for buttons, choices, and forms that should continue the conversation.
 
-Keep your text reply to one or two short sentences in plain speech, with no Markdown: it is shown as a subtitle and may be read aloud. Put the detail on the page. Work quickly: get a useful page up early, then refine it; search and fetch the web for anything current.";
+Keep your text reply to one or two short sentences in plain speech, with no Markdown: it is shown as a subtitle and may be read aloud. Put the detail on the page. Each message's <canvas-context> also gives a design level, from quick to maximum: how much information to gather and how much design work the page gets. Follow it; it says how far to go, not how the page should look. Get a useful page up early, then build on it as far as the level asks; search and fetch the web for anything current.";
+/// How much design work a Canvas page gets, chosen per canvas; each level's words go to Claude
+/// with every message. They set how far to go, never a look.
+const DESIGNS: [(&str, &str); 4] = [
+    (
+        "quick",
+        "Design level: quick. The person wants a fast answer. Make a simple, clean page with the answer up front and only the detail that matters, in a plain layout. Skip extra research, images, and interactivity unless the question needs them, and finish in as few steps as you can.",
+    ),
+    (
+        "medium",
+        "Design level: medium. Make a well-organized, good-looking page: the answer up front, then the supporting detail in clear sections, with a table, chart, or diagram where it explains better than text. Look up what you need to be accurate, and keep the page focused on the question.",
+    ),
+    (
+        "detailed",
+        "Design level: detailed. Go well beyond the basics in both content and presentation. Gather more information and context, and show it with charts, diagrams, images, and interactive pieces where they help. Give the page a considered, distinctive look, with typography, color, layout, and hierarchy chosen for this subject. Check that everything loads and works.",
+    ),
+    (
+        "max",
+        "Design level: maximum. Maximum information, maximum style in the UI. Gather everything relevant: current and live data, statistics, history, images, logos, and photos from the web. Build a rich, immersive page someone would want to show off: several views or tabs, visualizations, art direction and typography that suit the subject, and motion and interaction where they add something. When the subject is live, keep the page live. Take the time it needs, and check that every part loads and works.",
+    ),
+];
+/// The words for a design level; an empty or unknown level is medium.
+fn design_brief(level: &str) -> &'static str {
+    DESIGNS
+        .iter()
+        .find(|(id, _)| *id == level)
+        .unwrap_or(&DESIGNS[1])
+        .1
+}
 /// When a Canvas session's page last changed: the newest file in its folder, other than its
 /// transcript, in milliseconds.
 fn page_version(folder: &FsPath) -> u64 {
@@ -1418,6 +1453,9 @@ pub struct Send {
     /// For Canvas: the earlier turn to continue from, forgetting the turns after it.
     #[serde(default)]
     from: Option<usize>,
+    /// For Canvas: the design level, one of `DESIGNS` (empty is medium); kept with the canvas.
+    #[serde(default)]
+    design: Option<String>,
 }
 pub async fn send(
     State(chats): State<Chats>,
@@ -1496,6 +1534,15 @@ pub async fn send(
             "Unsupported model or effort",
         ));
     }
+    let design = match (&request.design, chats.kind) {
+        (Some(level), Kind::Canvas) => {
+            if !level.is_empty() && !DESIGNS.iter().any(|(id, _)| id == level) {
+                return Err(refuse(StatusCode::BAD_REQUEST, "Unknown design level"));
+            }
+            Some(level.clone())
+        }
+        _ => None,
+    };
     // Continuing from an earlier page starts Claude again, from that turn.
     let mut fork = None;
     let mut restarted = None;
@@ -1567,6 +1614,7 @@ pub async fn send(
                         agent: agent.clone(),
                         model: String::new(),
                         effort: String::new(),
+                        design: String::new(),
                         title,
                         updated: created.clone(),
                         created,
@@ -1617,12 +1665,17 @@ pub async fn send(
     let running = running.expect("a Claude agent is running");
     let (id, events, content) = {
         let mut live = running.live.lock().unwrap();
+        if let Some(design) = design {
+            live.conversation.design = design;
+        }
         let (id, events, attachments) =
             add_message(&chats, &mut live, &text, &uploads, &root).map_err(error)?;
         let folder = live.path.parent().unwrap_or(&root).to_owned();
         let content = message_content(&text, &folder, &attachments);
         let content = match (&request.context, chats.kind) {
-            (Some(context), Kind::Canvas) => with_context(content, context),
+            (Some(context), Kind::Canvas) => {
+                with_context(content, context, &live.conversation.design)
+            }
             _ => content,
         };
         (id, events, content)
@@ -1644,12 +1697,13 @@ pub async fn send(
 }
 
 /// A Canvas message as the agent receives it: the screen and theme first, then the message.
-fn with_context(content: Value, context: &Value) -> Value {
+fn with_context(content: Value, context: &Value, design: &str) -> Value {
     let mut described = serde_json::to_string_pretty(context).unwrap_or_default();
     if described.len() > 6000 {
         described = clip(&described, 6000);
     }
-    let block = format!("<canvas-context>\n{described}\n</canvas-context>");
+    let brief = design_brief(design);
+    let block = format!("<canvas-context>\n{described}\n\n{brief}\n</canvas-context>");
     match content {
         Value::String(text) => json!(format!("{block}\n\n{text}")),
         Value::Array(mut blocks) => {
@@ -2318,6 +2372,7 @@ mod tests {
             session: "1b8ab544-8cc5-430e-8a40-0aec58bc3b10".into(),
             model: "opus".into(),
             effort: "high".into(),
+            design: String::new(),
             title: "Plan \"dinner\": ideas".into(),
             created: "2026-10-03T10:00:00Z".into(),
             updated: "2026-10-03T10:01:00Z".into(),
@@ -2455,7 +2510,7 @@ mod tests {
         assert_eq!(content_type("photo.webp"), "image/webp");
         assert_eq!(content_type("data"), "application/octet-stream");
         let context = json!({"screen":{"width":402,"height":874},"device":"phone"});
-        let plain = with_context(json!("Plan my week"), &context);
+        let plain = with_context(json!("Plan my week"), &context, "");
         assert!(plain.as_str().unwrap().starts_with("<canvas-context>\n{"));
         assert!(
             plain
@@ -2466,6 +2521,7 @@ mod tests {
         let blocks = with_context(
             json!([{"type":"image"},{"type":"text","text":"What is this?"}]),
             &context,
+            "max",
         );
         assert_eq!(blocks[0]["type"], "text");
         assert!(
@@ -2475,6 +2531,18 @@ mod tests {
                 .contains("\"device\": \"phone\"")
         );
         assert_eq!(blocks[2]["text"], "What is this?");
+        // The design level's words come with the context; no level is medium.
+        assert!(plain.as_str().unwrap().contains("Design level: medium."));
+        let text = blocks[0]["text"].as_str().unwrap();
+        assert!(text.contains("Maximum information, maximum style in the UI."));
+        assert!(text.ends_with("</canvas-context>"));
+        assert_eq!(design_brief("unknown"), design_brief("medium"));
+        // A canvas keeps its level in its front matter; a chat's file does not gain one.
+        let mut conversation = sample();
+        assert!(!conversation.to_markdown().contains("design:"));
+        conversation.design = "detailed".into();
+        let read = Conversation::parse(&conversation.to_markdown()).unwrap();
+        assert_eq!(read.design, "detailed");
         // A page's version follows its files, not the transcript or hidden files.
         let dir = crate::dictation::AudioDir::new().unwrap();
         let folder = dir.0.join("session");

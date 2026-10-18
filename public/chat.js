@@ -295,6 +295,11 @@
     sendExtras() {
       return {};
     }
+    // Settings an app built on Chat adds to the chip, each { key, label, choices: [[value, text]],
+    // fallback, chip(value) }; they are remembered for new chats like the model and effort.
+    extraSettings() {
+      return [];
+    }
     connect() {
       this.socket();
       this.refresh();
@@ -598,6 +603,8 @@
         model: typeof settings.model === 'string' ? settings.model : '',
         effort: typeof settings.effort === 'string' ? settings.effort : '',
       };
+      for (const { key } of this.extraSettings())
+        this.chat[key] = typeof settings[key] === 'string' ? settings[key] : '';
       this.fitSettings();
       storage.set(this.keys.open, null);
       this.showThread();
@@ -803,6 +810,7 @@
         agent: this.agentOf(),
         model: this.chat.model || '',
         effort: this.chat.effort || '',
+        ...Object.fromEntries(this.extraSettings().map(({ key }) => [key, this.chat[key] || ''])),
       });
       this.renderSettings();
       this.renderLabels();
@@ -827,7 +835,10 @@
       const short = model => String(model || '').replace(/^claude-/, '');
       const model = models.find(m => m.id === chat.model)?.label || chat.model;
       const choice = this.agents.length > 1;
+      const extras = this.extraSettings();
+      // An app's own settings come first, so a narrow chip still shows them.
       this.settingsButton.textContent = [
+        ...extras.map(extra => extra.chip(chat[extra.key] || extra.fallback)),
         choice ? spec.label : '',
         model || short(defaults.model) || 'Default',
         chat.effort || defaults.effort || 'default',
@@ -880,6 +891,9 @@
           ['', defaults.effort ? `Default (${defaults.effort})` : 'Default'],
           ...efforts.map(e => [e, e]),
         ]),
+        ...extras.map(extra =>
+          group(extra.label, extra.key, extra.choices, chat[extra.key] || extra.fallback)
+        ),
         node(
           'p',
           'chat-settings-note',

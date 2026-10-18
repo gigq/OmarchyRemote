@@ -105,7 +105,21 @@
           fonts: { interface: 'JetBrains Mono, monospace' },
         },
         ...(this.at ? { from: this.at } : {}),
+        design: this.chat?.design || '',
       };
+    }
+    // How much design work a page gets: the words for each level are the host's, given to Claude
+    // with every message.
+    extraSettings() {
+      return [
+        {
+          key: 'design',
+          label: 'Design',
+          fallback: 'medium',
+          chip: level => `${level} UI`,
+          choices: ['quick', 'medium', 'detailed', 'max'].map(level => [level, level]),
+        },
+      ];
     }
     // The turns that can be shown: each earlier one whose page was kept, then the latest, live.
     positions() {
