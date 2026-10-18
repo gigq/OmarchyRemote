@@ -320,6 +320,37 @@ async fn terminal_socket(mut socket: WebSocket, terminal: Arc<Terminal>) {
 async fn snapshot(State(app): State<App>) -> Result<Json<Value>, ApiError> {
     Ok(Json(app.herdr.snapshot().await.map_err(error)?))
 }
+#[derive(Deserialize)]
+struct PaneName {
+    label: String,
+}
+/* Renaming a pane names its tab, which is how Herdr, Muster, and the app show it. */
+async fn rename_pane(
+    State(app): State<App>,
+    Path(id): Path<String>,
+    Json(request): Json<PaneName>,
+) -> Result<Json<Value>, ApiError> {
+    let label = request
+        .label
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if label.is_empty() || label.chars().count() > 120 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error":"A name is 1 to 120 characters"})),
+        ));
+    }
+    app.herdr.rename_tab(&id, &label).await.map_err(error)?;
+    Ok(Json(json!({"renamed":true})))
+}
+async fn close_pane(
+    State(app): State<App>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    app.herdr.close_pane(&id).await.map_err(error)?;
+    Ok(Json(json!({"closed":true})))
+}
 async fn pane(State(app): State<App>, Path(id): Path<String>) -> Result<Json<Value>, ApiError> {
     Ok(Json(app.herdr.read(&id).await.map_err(error)?))
 }
@@ -621,6 +652,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/herdr/workspaces/{id}/tabs", post(new_tab))
         .route("/api/herdr/panes/{id}", get(pane))
         .route("/api/herdr/panes/{id}/input", post(pane_input))
+        .route("/api/herdr/panes/{id}/rename", post(rename_pane))
+        .route("/api/herdr/panes/{id}/close", post(close_pane))
         .route("/api/herdr/ws", get(herdr_upgrade))
         .layer(DefaultBodyLimit::max(32768))
         .layer(middleware::from_fn_with_state(app.clone(), authorize))

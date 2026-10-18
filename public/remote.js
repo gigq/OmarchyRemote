@@ -15,7 +15,7 @@
     white: '#e0def4',
     brightBlack: '#6e6a86',
   };
-  const { node, button, mount, storage } = window.HyprlandUtil;
+  const { node, button, mount, storage, contextMenu, askText } = window.HyprlandUtil;
   const api = async (path, body) => {
     const response = await fetch('/api/' + path, {
       method: body === undefined ? 'GET' : 'POST',
@@ -1291,6 +1291,7 @@
           const status = node('span', 'herdr-state', state);
           status.dataset.state = state;
           row.append(icon, info, status);
+          contextMenu(row, () => this.paneMenu(pane));
           group.append(row);
         }
         this.list.append(group);
@@ -1298,6 +1299,40 @@
       if (!this.list.children.length)
         this.list.append(node('p', 'remote-empty', 'No matching panes.'));
       this.list.scrollTop = scroll;
+    }
+    // A right-click or long press on a pane: rename its tab, or close it.
+    paneMenu(pane) {
+      const label = this.paneLabel(pane);
+      const path = action => `herdr/panes/${encodeURIComponent(pane.pane_id)}/${action}`;
+      const run = async (action, body) => {
+        try {
+          await api(path(action), body);
+        } catch (e) {
+          this.status.textContent = e.message;
+        }
+      };
+      return {
+        title: label,
+        items: [
+          {
+            label: 'Rename',
+            run: async () => {
+              const name = await askText('Rename', {
+                value: label,
+                label: 'Name',
+                action: 'Rename',
+              });
+              if (name && name !== label) run('rename', { label: name });
+            },
+          },
+          {
+            label: 'Close',
+            danger: true,
+            confirm: `Close “${label}”? Whatever runs in it ends.`,
+            run: () => run('close', {}),
+          },
+        ],
+      };
     }
     stateDot(pane) {
       const dot = node('i', 'state-dot');

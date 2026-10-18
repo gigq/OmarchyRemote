@@ -3,7 +3,7 @@
 // to its task, the agent's latest prose, and a composer; projects you are not working on can be
 // hidden from the board without changing Herdr.
 (() => {
-  const { node, button, storage } = window.HyprlandUtil;
+  const { node, button, storage, contextMenu, askText } = window.HyprlandUtil;
   const headers = { 'X-Hyprland-Client': '1', 'Content-Type': 'application/json' };
   const OPEN = 'omarchy-muster-open';
   const STATES = {
@@ -396,7 +396,47 @@
       if (text) row.append(node('span', 'muster-row-latest', text));
       const more = waiting(thread);
       if (more) row.append(node('span', 'muster-row-meta', more));
+      contextMenu(row, () => this.threadMenu(thread));
       return row;
+    }
+    // A right-click or long press on a thread: rename its Herdr tab, or close its pane.
+    threadMenu(thread) {
+      const name = thread.title || thread.prompt || threadName(thread);
+      const herdr = async (action, body) => {
+        try {
+          const response = await fetch(
+            `/api/herdr/panes/${encodeURIComponent(thread.pane_id)}/${action}`,
+            { method: 'POST', headers, body: JSON.stringify(body) }
+          );
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw Error(data.error || 'The host did not respond.');
+        } catch (e) {
+          this.status.textContent = e.message;
+        }
+        this.refresh();
+      };
+      return {
+        title: name,
+        items: [
+          {
+            label: 'Rename',
+            run: async () => {
+              const label = await askText('Rename', {
+                value: thread.tab || '',
+                label: 'Tab name',
+                action: 'Rename',
+              });
+              if (label && label !== thread.tab) herdr('rename', { label });
+            },
+          },
+          {
+            label: 'Close',
+            danger: true,
+            confirm: `Close “${name}”? Whatever runs in its Herdr pane ends.`,
+            run: () => herdr('close', {}),
+          },
+        ],
+      };
     }
     hiddenRow(project) {
       const row = node('div', 'muster-hidden-row');

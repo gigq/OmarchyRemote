@@ -147,6 +147,21 @@ impl Herdr {
             .await?;
         Ok(created["root_pane"].clone())
     }
+    /// Renames the tab a pane is in: the app shows a pane by its tab's label.
+    pub async fn rename_tab(&self, pane: &str, label: &str) -> Result<()> {
+        let found = self.call("pane.get", json!({"pane_id":pane})).await?;
+        let Some(tab) = found["pane"]["tab_id"].as_str() else {
+            bail!("Herdr: that pane has no tab");
+        };
+        self.call("tab.rename", json!({"tab_id":tab,"label":label}))
+            .await?;
+        Ok(())
+    }
+    /// Closes a pane, ending whatever runs in it; its tab closes with its last pane.
+    pub async fn close_pane(&self, pane: &str) -> Result<()> {
+        self.call("pane.close", json!({"pane_id":pane})).await?;
+        Ok(())
+    }
     pub async fn create_tab(&self, workspace: &str, cwd: &Path) -> Result<Value> {
         let created = self
             .call(

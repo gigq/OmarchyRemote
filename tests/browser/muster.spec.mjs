@@ -234,6 +234,38 @@ test('projects hide from the board and come back', async ({ page }) => {
   );
 });
 
+test('a right-click on a thread renames its tab or closes it', async ({ page }) => {
+  const { app, state } = await setup(page, { width: 1280, height: 800 });
+  state.herdr = [];
+  // Muster renames and closes through Herdr's routes; none reach the host's real panes.
+  await page.route(/\/api\/herdr\/panes\/[^/]+\/(rename|close)$/, r => {
+    const [pane, action] = r.request().url().split('/').slice(-2);
+    state.herdr.push({ pane: decodeURIComponent(pane), action, ...r.request().postDataJSON() });
+    return r.fulfill({ json: { [action === 'close' ? 'closed' : 'renamed']: true } });
+  });
+  const row = app.locator('.muster-row', { hasText: 'Docs pass' });
+  await row.click({ button: 'right' });
+  const menu = page.getByRole('menu');
+  await expect(menu.getByRole('menuitem')).toHaveText(['Rename', 'Close']);
+  await menu.getByRole('menuitem', { name: 'Rename' }).click();
+  const field = page.getByRole('dialog', { name: 'Rename' }).getByRole('textbox');
+  await expect(field).toHaveValue('2');
+  await field.fill('Docs');
+  await field.press('Enter');
+  await expect
+    .poll(() => state.herdr)
+    .toEqual([{ pane: 'wB:p2', action: 'rename', label: 'Docs' }]);
+  await row.click({ button: 'right' });
+  await menu.getByRole('menuitem', { name: 'Close' }).click();
+  await expect(
+    page.getByText('Close “Docs pass”? Whatever runs in its Herdr pane ends.')
+  ).toBeVisible();
+  await page.getByRole('menuitem', { name: 'Close' }).click();
+  await expect.poll(() => state.herdr.at(-1)).toEqual({ pane: 'wB:p2', action: 'close' });
+  // The thread itself never opened.
+  await expect(app.locator('.muster-board')).toBeVisible();
+});
+
 test('a question is answered from Muster, one step at a time', async ({ page }) => {
   const { app, state } = await setup(page);
   await app.locator('.muster-row[data-pane="wB:p1"]').click();

@@ -183,3 +183,62 @@ test('last tab from another project is separated and swaps when used', async ({ 
     tabs.getByRole('button', { name: 'Return to Project A · Alpha', exact: true })
   ).toBeVisible();
 });
+
+test('a long press or right-click on a pane renames its tab or closes it', async ({ page: p }) => {
+  await p.setViewportSize({ width: 402, height: 874 });
+  await p.route('**/api/**', r => r.abort());
+  const calls = [];
+  await p.route(/\/api\/herdr\/panes\/[^/]+\/(rename|close)$/, r => {
+    const [pane, action] = r.request().url().split('/').slice(-2);
+    calls.push({ pane: decodeURIComponent(pane), action, ...r.request().postDataJSON() });
+    return r.fulfill({ json: { [action === 'close' ? 'closed' : 'renamed']: true } });
+  });
+  const snapshot = {
+    workspaces: [{ workspace_id: 'qa', label: 'Menu QA' }],
+    tabs: [{ tab_id: 'qa:t1', label: 'Herd one' }],
+    panes: [
+      {
+        pane_id: 'qa:p1',
+        tab_id: 'qa:t1',
+        workspace_id: 'qa',
+        agent: 'claude',
+        terminal_title_stripped: 'Agent one',
+      },
+    ],
+  };
+  await p.routeWebSocket('**/api/herdr/ws', ws => {
+    ws.send(JSON.stringify({ type: 'snapshot', snapshot }));
+  });
+  await p.goto('/native/');
+  await p.keyboard.press('Meta+Shift+A');
+  const row = p.locator('.herdr-pane').filter({ hasText: 'Herd one' });
+  await expect(row).toBeVisible();
+  // A long press on touch opens the menu without opening the pane.
+  const box = await row.boundingBox();
+  const at = { clientX: box.x + 40, clientY: box.y + 20, pointerType: 'touch', isPrimary: true };
+  await row.dispatchEvent('pointerdown', at);
+  await p.waitForTimeout(650);
+  await row.dispatchEvent('pointerup', at);
+  await row.dispatchEvent('click');
+  const menu = p.getByRole('menu');
+  await expect(menu.getByRole('menuitem')).toHaveText(['Rename', 'Close']);
+  await expect(p.locator('.herdr-detail')).toBeHidden();
+  await menu.getByRole('menuitem', { name: 'Rename' }).click();
+  const field = p.getByRole('dialog', { name: 'Rename' }).getByRole('textbox');
+  await expect(field).toHaveValue('Herd one');
+  await field.fill('Release notes');
+  await field.press('Enter');
+  await expect
+    .poll(() => calls)
+    .toEqual([{ pane: 'qa:p1', action: 'rename', label: 'Release notes' }]);
+  // Closing asks first.
+  await row.click({ button: 'right' });
+  await menu.getByRole('menuitem', { name: 'Close' }).click();
+  await expect(p.getByText('Close “Herd one”? Whatever runs in it ends.')).toBeVisible();
+  await p.getByRole('menuitem', { name: 'Cancel' }).click();
+  expect(calls).toHaveLength(1);
+  await row.click({ button: 'right' });
+  await menu.getByRole('menuitem', { name: 'Close' }).click();
+  await p.getByRole('menuitem', { name: 'Close' }).click();
+  await expect.poll(() => calls.at(-1)).toEqual({ pane: 'qa:p1', action: 'close' });
+});

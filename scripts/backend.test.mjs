@@ -233,6 +233,39 @@ test('a new Herdr tab joins an existing workspace in a chosen home folder', asyn
   }
 });
 
+test('a Herdr pane is renamed by its tab and closed with its tab', async () => {
+  const { mkdtemp, rm } = await import('node:fs/promises');
+  const folder = await mkdtemp(process.env.HOME + '/omarchy-herdr-close-test-');
+  let workspace;
+  try {
+    workspace = (await api('herdr/workspaces', { cwd: folder })).pane.workspace_id;
+    const { pane } = await api(`herdr/workspaces/${encodeURIComponent(workspace)}/tabs`, {
+      cwd: folder,
+    });
+    const path = action => `herdr/panes/${encodeURIComponent(pane.pane_id)}/${action}`;
+    assert.deepEqual(await api(path('rename'), { label: '  Release\n notes ' }), {
+      renamed: true,
+    });
+    let snapshot = await api('herdr/snapshot');
+    assert.equal(snapshot.tabs.find(t => t.tab_id === pane.tab_id)?.label, 'Release notes');
+    const blank = await fetch(`${base}/api/${path('rename')}`, {
+      method: 'POST',
+      headers: { 'X-Hyprland-Client': '1', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: '  ' }),
+    });
+    assert.equal(blank.status, 400);
+    assert.deepEqual(await api(path('close'), {}), { closed: true });
+    snapshot = await api('herdr/snapshot');
+    assert.ok(!snapshot.panes.some(p => p.pane_id === pane.pane_id));
+    assert.ok(!snapshot.tabs.some(t => t.tab_id === pane.tab_id));
+    // The workspace's first tab is untouched.
+    assert.equal(snapshot.tabs.filter(t => t.workspace_id === workspace).length, 1);
+  } finally {
+    if (workspace) await herdr('workspace.close', { workspace_id: workspace });
+    await rm(folder, { recursive: true, force: true });
+  }
+});
+
 test('a pane change that keeps the text the same length still reaches the phone', async () => {
   const created = await herdr('workspace.create', {
     label: 'Omarchy automated test',
