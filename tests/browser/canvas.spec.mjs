@@ -9,7 +9,7 @@ const PAGE = `<!doctype html><html><body style="background:#123">
 <button onclick="parent.postMessage({ type: 'canvas', text: 'Show the vegetarian version' }, '*')">Vegetarian</button>
 </body></html>`;
 
-async function setup(page) {
+async function setup(page, before) {
   await page.setViewportSize({ width: 402, height: 874 });
   const state = {
     session: {
@@ -61,6 +61,7 @@ async function setup(page) {
   await page.routeWebSocket('**/api/canvas/ws', ws => {
     state.ws = ws;
   });
+  await before?.(page, state);
   await page.goto('/native/');
   await page.getByText('canvas', { exact: true }).first().click();
   const app = page.locator('#remote-canvas-app');
@@ -133,4 +134,105 @@ test('a new canvas waits for its first page and asks for anything', async ({ pag
   await field.press('Enter');
   await expect.poll(() => state.sent.at(-1)?.text).toBe('Show me the solar system');
   expect(state.sent.at(-1).context).toBeTruthy();
+});
+
+// A microphone that records at once, a host that transcribes it, and an audio element the test
+// moves through its four seconds.
+async function voice(page, state) {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {
+      value: async () => ({ getTracks: () => [{ stop() {} }] }),
+    });
+    window.MediaRecorder = class {
+      static isTypeSupported() {
+        return true;
+      }
+      constructor() {
+        this.state = 'inactive';
+        this.mimeType = 'audio/mp4';
+      }
+      start() {
+        this.state = 'recording';
+      }
+      stop() {
+        this.state = 'inactive';
+        queueMicrotask(() => {
+          this.ondataavailable({ data: new Blob(['audio']) });
+          this.onstop();
+        });
+      }
+    };
+    window.Audio = class {
+      constructor() {
+        this.paused = true;
+        this.source = '';
+        this.duration = 4;
+        this.currentTime = 0;
+      }
+      set src(value) {
+        this.source = value;
+        this.currentSrc = value;
+      }
+      get src() {
+        return this.source;
+      }
+      play() {
+        this.paused = false;
+        if (this.source.startsWith('blob:')) window.speech = this;
+        return Promise.resolve();
+      }
+      pause() {
+        this.paused = true;
+      }
+      removeAttribute() {
+        this.src = '';
+      }
+    };
+  });
+  await page.route('**/api/dictation', r =>
+    r.fulfill({
+      json:
+        r.request().method() === 'GET'
+          ? { available: true, provider: 'Voxtype' }
+          : { text: 'Make it vegetarian' },
+    })
+  );
+  await page.route('**/api/voice', r => r.fulfill({ json: { available: true } }));
+  state.reply = { answer: { id: 'old', text: 'Here is a dinner plan.' } };
+  await page.route(/\/api\/canvas\/[0-9a-f-]{36}\/response$/, r =>
+    r.fulfill({ json: { session: ID, working: false, paragraphs: [], ...state.reply } })
+  );
+  await page.route(/\/api\/canvas\/[0-9a-f-]{36}\/speech$/, r =>
+    r.fulfill({ contentType: 'audio/wav', body: 'fixture audio' })
+  );
+}
+
+test('in talk mode the reply is read aloud, its words lit as they are spoken', async ({ page }) => {
+  const { app, state, emit } = await setup(page, voice);
+  await app.locator('.chat-row').click();
+  const said = app.locator('.canvas-subtitle .canvas-said');
+  await expect(said).toHaveText('Here is a dinner plan.');
+  // Holding the microphone turns on Voice with replies read aloud.
+  await app.locator('.dictation-button').click({ delay: 650 });
+  await expect(app.locator('.herdr-voice-speaker')).toBeVisible();
+  const text = 'Swapped in a lentil stew with roasted carrots.';
+  emit({ type: 'entry', id: ID, index: 2, entry: entry('user', 'Make it vegetarian') });
+  emit({ type: 'entry', id: ID, index: 3, entry: entry('assistant', text) });
+  state.reply = { answer: { id: 'new', text }, paragraphs: [{ id: 'new', text }] };
+  const words = said.locator('.canvas-word');
+  await expect(words).toHaveCount(8, { timeout: 6000 });
+  await expect(said).toHaveText(text);
+  await expect(said.locator('.spoken')).toHaveCount(1);
+  // Halfway through the audio, about half the words are lit and the one being said stands out.
+  await page.evaluate(() => (window.speech.currentTime = 2));
+  await expect(said.locator('.current')).toHaveText('stew');
+  await expect(said.locator('.spoken')).toHaveCount(5);
+  await page.screenshot({ path: 'artifacts/browser/canvas-reading.png' });
+  // When it ends, the subtitle is the plain reply again.
+  await page.evaluate(() => {
+    window.speech.ended = true;
+    window.speech.onended();
+  });
+  await expect(words).toHaveCount(0);
+  await expect(said).toHaveText(text);
 });

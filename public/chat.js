@@ -243,6 +243,7 @@
         {
           group: 'Chat',
           changed: () => this.voiceChanged(),
+          speaking: state => this.speaking(state),
           endpoints: {
             latest: async (voice, id) =>
               id === 'new'
@@ -508,6 +509,8 @@
       if (named) this.dictation.voice.retarget(target);
       else this.dictation.voice.changeThread();
     }
+    // What Voice reads aloud and how far along it is, or null; Chat's own messages show it.
+    speaking() {}
     voiceChanged() {
       const voice = this.dictation?.voice;
       if (!voice) return;

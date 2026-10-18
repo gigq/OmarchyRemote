@@ -140,10 +140,57 @@
       this.subtitle.hidden = !text && !entries.length;
       this.subtitle.classList.toggle('working', !!chat.busy && !chat.partial && !reply);
       const asked = last >= 0 ? entries[last].text : '';
-      this.subtitle.replaceChildren(
-        ...(asked ? [node('span', 'canvas-asked', asked)] : []),
-        node('span', 'canvas-said', text)
-      );
+      const said = node('span', 'canvas-said', this.spoken ? '' : text);
+      this.words = [];
+      if (this.spoken) {
+        // Each word, with where it starts in the text, lit once speech reaches it.
+        let at = 0;
+        const length = this.spoken.text.length || 1;
+        for (const part of this.spoken.text.split(/(\s+)/)) {
+          if (part && !/^\s+$/.test(part)) {
+            const word = node('span', 'canvas-word', part);
+            this.words.push({ word, at: at / length });
+            said.append(word);
+          } else if (part) said.append(part);
+          at += part.length;
+        }
+        said.classList.add('reading');
+        this.subtitle.hidden = false;
+        this.subtitle.classList.remove('working');
+        this.lit = -1;
+      }
+      this.subtitle.replaceChildren(...(asked ? [node('span', 'canvas-asked', asked)] : []), said);
+      this.said = said;
+    }
+    // In talk mode the subtitle is what is read aloud, its words lit as they are spoken.
+    speaking(state) {
+      if (!this.subtitle || (state?.text ?? '') === (this.spoken?.text ?? '')) return;
+      cancelAnimationFrame(this.readFrame);
+      this.spoken = state;
+      this.renderSubtitle();
+      if (state) this.follow();
+    }
+    follow() {
+      const progress = this.spoken?.progress?.() || 0;
+      const lit = this.words.findLastIndex(({ at }) => at <= progress);
+      if (lit !== this.lit && this.said?.isConnected) {
+        this.words.forEach(({ word }, i) => {
+          word.classList.toggle('spoken', i <= lit);
+          word.classList.toggle('current', i === lit);
+        });
+        this.lit = lit;
+        // Keep the word being spoken in view, a line from the top.
+        const word = this.words[lit]?.word;
+        if (word) {
+          const line = parseFloat(getComputedStyle(this.said).lineHeight) || 18;
+          const top =
+            word.getBoundingClientRect().top -
+            this.said.getBoundingClientRect().top +
+            this.said.scrollTop;
+          this.said.scrollTop = Math.max(0, top - line);
+        }
+      }
+      this.readFrame = requestAnimationFrame(() => this.follow());
     }
     // One line for what Claude is doing until it replies: thinking, using the web, or drawing.
     doing(tool) {
@@ -178,6 +225,7 @@
     }
     scroll() {}
     dispose() {
+      cancelAnimationFrame(this.readFrame);
       window.removeEventListener('message', this.bridgeMessage);
       super.dispose();
     }

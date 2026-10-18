@@ -49,9 +49,21 @@
       };
       this.sources.add(source);
       this.nextTime = Math.max(this.nextTime, this.context.currentTime + 0.06);
+      this.startTime ??= this.nextTime;
       source.start(this.nextTime);
       this.nextTime += buffer.duration;
       this.started();
+    }
+    // How far playback is, 0 to 1. Until the stream ends its length is what has arrived or
+    // `estimate` seconds, whichever is longer.
+    progress(estimate) {
+      if (this.startTime === undefined) return 0;
+      const played = this.context.currentTime - this.startTime;
+      const length = this.nextTime - this.startTime;
+      return Math.min(
+        1,
+        Math.max(0, played / (this.complete ? length : Math.max(length, estimate)))
+      );
     }
     async play(response) {
       this.reader = response.body.getReader();
@@ -139,12 +151,14 @@
       this.player.onended = () => {
         if (!this.isAnswerAudio() || !this.player.ended) return;
         this.stop.hidden = true;
+        this.reading('');
         this.status(this.enabled ? 'Ready to talk' : '', false);
       };
       this.player.onerror = () => {
         // Warm-up and cleared/replaced sources can report late media events.
         if (!this.isAnswerAudio() || !this.player.error || this.player.error.code === 1) return;
         this.stop.hidden = true;
+        this.reading('');
         this.status('Audio playback failed. Try Read.');
       };
     }
@@ -177,6 +191,17 @@
     latest(pane) {
       return this.dictation.endpoints.latest(this, pane);
     }
+    // Tells the host view the text being read aloud and a function giving how far along it is,
+    // from 0 to 1, or null once it stops.
+    reading(text, progress) {
+      this.dictation.speaking?.(text ? { text, progress } : null);
+    }
+    // Reading through the answer element, as far as its audio has played.
+    readingAnswer() {
+      this.reading(this.speechText, () =>
+        this.player.duration > 0 ? this.player.currentTime / this.player.duration : 0
+      );
+    }
     stopPlayback() {
       ++this.playGeneration;
       this.playAbort?.abort();
@@ -185,6 +210,7 @@
       this.speaking = false;
       this.player.pause();
       this.needsPlay = false;
+      this.reading('');
       this.replay.textContent = 'Read';
       this.stop.hidden = true;
       if (this.audioURL) URL.revokeObjectURL(this.audioURL);
@@ -365,7 +391,8 @@
                 this.pane,
                 next.id,
                 batch.map(message => message.id),
-                true
+                true,
+                batch.map(message => message.text || '').join('\n\n')
               );
               // A failed batch goes back in the queue, retried after a growing delay so a
               // broken speech provider is not run every second. Stop still skips it.
@@ -466,6 +493,7 @@
           this.stop.hidden = false;
           this.replay.textContent = 'Read';
           this.needsPlay = false;
+          this.readingAnswer();
           this.status('Speaking', false);
         } catch {
           if (epoch !== this.epoch || generation !== this.playGeneration) return;
@@ -489,15 +517,16 @@
         )
           return;
         if (!value.answer?.id) throw Error('No completed response yet.');
-        await this.speak(pane, value.answer.id);
+        await this.speak(pane, value.answer.id, [value.answer.id], false, value.answer.text);
       } catch (e) {
         if (epoch === this.epoch) this.status(e.message);
       }
     }
     // Resolves false when speech failed, true when it played or awaits Play answer, and
     // undefined when Stop or a newer request superseded it.
-    async speak(pane, id, ids = [id], automatic = false) {
+    async speak(pane, id, ids = [id], automatic = false, text = '') {
       this.stopPlayback();
+      this.speechText = text;
       const epoch = this.epoch;
       const generation = this.playGeneration;
       this.speaking = true;
@@ -522,13 +551,19 @@
           if (this.audioContext?.state !== 'running') {
             throw Error('Audio is paused. Tap Read to resume.');
           }
-          const stream = new SpeechStream(this.audioContext, signal, () =>
-            this.status('Speaking', false)
-          );
+          // Speech runs at about 15 characters a second until the stream gives its length.
+          const estimate = text.length / 15;
+          const stream = new SpeechStream(this.audioContext, signal, () => {
+            if (!this.speechStarted) this.reading(text, () => stream.progress(estimate));
+            this.speechStarted = true;
+            this.status('Speaking', false);
+          });
+          this.speechStarted = false;
           this.streamPlayer = stream;
           await stream.play(response);
           if (epoch !== this.epoch || generation !== this.playGeneration) return;
           this.streamPlayer = null;
+          this.reading('');
           this.stop.hidden = true;
           this.status(this.enabled ? 'Ready to talk' : '', false);
           return true;
@@ -545,6 +580,7 @@
         try {
           await this.player.play();
           if (epoch !== this.epoch || generation !== this.playGeneration) return;
+          this.readingAnswer();
           this.status('Speaking', false);
           return true;
         } catch (e) {
@@ -565,6 +601,7 @@
           this.playAbort.abort();
           this.streamPlayer?.stop();
           this.streamPlayer = null;
+          this.reading('');
           this.status(e.message + (automatic ? ' Retrying shortly.' : ' Use Read to retry.'));
           this.stop.hidden = true;
           return false;
@@ -590,6 +627,8 @@
       this.group = options.group || 'Herdr';
       // Called when Voice's controls or status change, so the host view can show them.
       this.changed = options.changed;
+      // Called with what Voice reads aloud and its progress, or null when it stops.
+      this.speaking = options.speaking;
       this.state = 'idle';
       this.generation = 0;
       this.button = button('', () => this.toggle(), 'keycap herdr-attach dictation-button');

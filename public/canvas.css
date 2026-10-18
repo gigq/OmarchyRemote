@@ -75,3 +75,18 @@
   color: var(--theme-secondary);
   animation: chat-thinking 1.4s ease-in-out infinite;
 }
+/* Read aloud: a few lines that follow the word being spoken. */
+.canvas-subtitle[aria-expanded='false'] .canvas-said.reading {
+  display: block;
+  max-height: 4.5em;
+}
+.canvas-word {
+  color: var(--theme-secondary);
+  transition: color 0.15s;
+}
+.canvas-word.spoken {
+  color: var(--theme-foreground);
+}
+.canvas-word.current {
+  color: var(--theme-accent);
+}
