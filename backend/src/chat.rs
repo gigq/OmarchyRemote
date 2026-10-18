@@ -1281,7 +1281,7 @@ Design whatever the moment calls for: a chart, a table, a timeline, a map, a com
 
 The page can answer for the person: parent.postMessage({ type: 'canvas', text: 'Show the vegetarian version' }, '*') arrives as their next message. Use it for buttons, choices, and forms that should continue the conversation.
 
-Keep your text reply to one or two short sentences in plain speech, with no Markdown: it is shown as a subtitle and may be read aloud. Put the detail on the page. Each message's <canvas-context> also gives a design level, from quick to maximum: how much information to gather and how much design work the page gets. Follow it; it says how far to go, not how the page should look. Get a useful page up early, then build on it as far as the level asks; search and fetch the web for anything current.";
+Keep your text reply to one or two short sentences in plain speech, with no Markdown: it is shown as a subtitle and may be read aloud. Put the detail on the page. Each message's <canvas-context> ends with a design level: how much time to spend on the page's UI. How much to research comes from what the person asks. Get a useful page up early; search and fetch the web for anything current.";
 /// How much design work a Canvas page gets, chosen per canvas; each level's words go to Claude
 /// with every message. They set how far to go, never a look.
 const DESIGNS: [(&str, &str); 4] = [
