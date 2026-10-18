@@ -83,6 +83,27 @@ pub fn turns(folder: &Path) -> Value {
         .map(|(turn, version)| json!({"turn":turn,"version":version}))
         .collect()
 }
+/// Notes a Claude session the canvas has left behind by forking, so archiving or deleting the
+/// canvas takes its log along.
+pub fn left(folder: &Path, session: &str) -> anyhow::Result<()> {
+    use std::io::Write;
+    let dir = history(folder);
+    fs::create_dir_all(&dir)?;
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("sessions"))?;
+    writeln!(file, "{session}")?;
+    Ok(())
+}
+/// The sessions a canvas has left behind.
+pub fn sessions(folder: &Path) -> Vec<String> {
+    fs::read_to_string(history(folder).join("sessions"))
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_owned)
+        .collect()
+}
 /// The folder a kept page is served from.
 pub fn page(folder: &Path, turn: u32) -> PathBuf {
     history(folder).join(turn.to_string())
@@ -169,6 +190,9 @@ mod tests {
         assert!(folder.join("attachments/photo.jpg").exists());
         assert_eq!(turns(&folder).as_array().unwrap().len(), 1);
         assert!(restore(&folder, 2).is_err());
+        left(&folder, "a").unwrap();
+        left(&folder, "b").unwrap();
+        assert_eq!(sessions(&folder), ["a", "b"]);
         fs::remove_dir_all(folder).unwrap();
     }
 }

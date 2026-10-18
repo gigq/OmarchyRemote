@@ -1187,6 +1187,7 @@ impl Chats {
         })
         .await??;
         conversation.entries.truncate(point.entries);
+        crate::canvas::left(path.parent().unwrap_or(root), &conversation.session)?;
         conversation.session = uuid::Uuid::new_v4().to_string();
         conversation.updated = now();
         save(&conversation, &path)?;
@@ -2148,8 +2149,11 @@ fn archive_dir(config: &FsPath, root: &FsPath, path: &FsPath) -> anyhow::Result<
         target = archives.join(format!("{name}-{copy}"));
         copy += 1;
     }
+    let sessions = sessions(&dir, session);
     fs::rename(&dir, &target)?;
-    move_session(config, &dir, &target, &session);
+    for session in sessions {
+        move_session(config, &dir, &target, &session);
+    }
     Ok(target)
 }
 fn claude_config() -> anyhow::Result<PathBuf> {
@@ -2164,10 +2168,22 @@ fn delete_dir(config: &FsPath, root: &FsPath, path: &FsPath, id: &str) -> anyhow
     let session = load(path)
         .map(|c| c.session)
         .unwrap_or_else(|_| id.to_owned());
-    for file in claude_files(config, &dir, &session)? {
-        remove(&file)?;
+    for session in sessions(&dir, session) {
+        for file in claude_files(config, &dir, &session)? {
+            remove(&file)?;
+        }
     }
     remove(&dir)
+}
+/// A conversation's Claude sessions: its own, then any a canvas left behind by forking.
+fn sessions(dir: &FsPath, session: String) -> Vec<String> {
+    let mut sessions = vec![session];
+    for left in crate::canvas::sessions(dir) {
+        if uuid::Uuid::parse_str(&left).is_ok() && !sessions.contains(&left) {
+            sessions.push(left);
+        }
+    }
+    sessions
 }
 
 #[derive(Deserialize)]
@@ -2772,8 +2788,14 @@ mod tests {
         write(&outside.join("keep"), "keep");
         fs::create_dir_all(files[3].parent().unwrap()).unwrap();
         std::os::unix::fs::symlink(&outside, &files[3]).unwrap();
+        // A session a canvas left behind by forking goes too.
+        let earlier = "2d8ab544-8cc5-430e-8a40-0aec58bc3b10";
+        crate::canvas::left(&folder, earlier).unwrap();
+        let left = project(&config, &folder, earlier);
+        write(&left, "earlier log");
         delete_dir(&config, &root, &path, &conversation.id).unwrap();
         assert!(!folder.exists());
+        assert!(!left.exists());
         for file in &files {
             assert!(fs::symlink_metadata(file).is_err(), "{}", file.display());
         }
