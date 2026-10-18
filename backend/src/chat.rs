@@ -1316,6 +1316,7 @@ pub fn router<S: Clone + std::marker::Send + Sync + 'static>(chats: Chats) -> ax
         .route("/ws", get(upgrade))
         .route("/{id}", get(read))
         .route("/{id}/stop", post(stop))
+        .route("/{id}/rename", post(rename))
         .route("/{id}/attachments/{name}", get(attachment))
         .route("/{id}/response", get(response))
         .route("/{id}/speech", post(speech))
@@ -2022,6 +2023,47 @@ pub async fn attachment(
 
 /// Stops the agent mid-reply. Its session keeps everything up to the last complete message, and
 /// the streamed text so far is kept in the conversation.
+#[derive(Deserialize)]
+pub struct Rename {
+    title: String,
+}
+/// A title as typed, on one line with single spaces, if it is 1 to 200 characters.
+fn new_title(text: &str) -> Option<String> {
+    let title = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    (!title.is_empty() && title.chars().count() <= 200).then_some(title)
+}
+/// Renames a conversation; its folder keeps the name it was made with.
+pub async fn rename(
+    State(chats): State<Chats>,
+    Path(id): Path<String>,
+    Json(request): Json<Rename>,
+) -> Result<Json<Value>, ApiError> {
+    let Some(title) = new_title(&request.title) else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error":"A title is 1 to 200 characters"})),
+        ));
+    };
+    let mut events = vec![json!({"type":"renamed","id":id,"title":title})];
+    if let Some(running) = chats.get(&id) {
+        let mut live = running.live.lock().unwrap();
+        live.conversation.title = title;
+        if !live.removed {
+            save(&live.conversation, &live.path).map_err(error)?;
+        }
+        chats.stamp(&mut events);
+    } else {
+        let root = chats.root().map_err(error)?;
+        let path = find(&root, &id)
+            .map_err(|e| (StatusCode::NOT_FOUND, Json(json!({"error":e.to_string()}))))?;
+        let mut conversation = load(&path).map_err(error)?;
+        conversation.title = title;
+        save(&conversation, &path).map_err(error)?;
+        chats.stamp(&mut events);
+    }
+    chats.emit(events);
+    Ok(Json(json!({"renamed":true})))
+}
 pub async fn stop(State(chats): State<Chats>, Path(id): Path<String>) -> Json<Value> {
     if let Some(running) = chats.get(&id) {
         running.live.lock().unwrap().stopping = true;
@@ -2488,6 +2530,27 @@ mod tests {
                 entries: 2
             }
         );
+    }
+
+    #[test]
+    fn a_new_title_is_one_line_of_1_to_200_characters() {
+        assert_eq!(
+            new_title("  Weeknight\n dinners ").as_deref(),
+            Some("Weeknight dinners")
+        );
+        assert_eq!(new_title(" \n "), None);
+        assert_eq!(
+            new_title(&"é".repeat(200)).map(|t| t.chars().count()),
+            Some(200)
+        );
+        assert_eq!(new_title(&"a".repeat(201)), None);
+        // Saved and read back, the title is what was set.
+        let mut conversation = sample();
+        conversation.title = new_title("Trip: \"Lisbon\"").unwrap();
+        let dir = crate::dictation::AudioDir::new().unwrap();
+        let path = dir.0.join(FILE);
+        save(&conversation, &path).unwrap();
+        assert_eq!(load(&path).unwrap().title, "Trip: \"Lisbon\"");
     }
 
     #[test]

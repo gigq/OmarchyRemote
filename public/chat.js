@@ -1,7 +1,7 @@
 // Chat: conversations with a local agent (Claude Code) that need no project. The host keeps each
 // conversation as a Markdown file in ~/Chats; this view lists them and streams replies.
 (() => {
-  const { node, button, storage } = window.HyprlandUtil;
+  const { node, button, storage, contextMenu, askText } = window.HyprlandUtil;
   const headers = { 'X-Hyprland-Client': '1', 'Content-Type': 'application/json' };
 
   const MAX_ATTACHMENTS = 20;
@@ -350,6 +350,9 @@
         this.chat.seq = e.seq;
         this.chat.partial += e.text;
         this.renderPartial();
+      } else if (e.type === 'renamed') {
+        this.chat.title = e.title;
+        this.render();
       } else if (e.type === 'busy') {
         this.chat.busy = true;
         this.chat.error = null;
@@ -417,6 +420,21 @@
           );
           row.append(top, node('span', 'chat-row-preview', chat.preview || ''));
           if (chat.busy) row.classList.add('busy');
+          // A right-click or a long press offers the chat's own actions.
+          if (!selecting)
+            contextMenu(row, () => ({
+              title: chat.title,
+              items: [
+                { label: 'Rename', run: () => this.rename(chat) },
+                { label: 'Archive', run: () => this.manage('archive', [chat.id]) },
+                {
+                  label: 'Delete',
+                  danger: true,
+                  confirm: `Delete “${chat.title}” permanently?`,
+                  run: () => this.manage('delete', [chat.id]),
+                },
+              ],
+            }));
           return row;
         })
       );
@@ -471,8 +489,7 @@
     remove() {
       return this.manage('delete');
     }
-    async manage(action) {
-      const ids = [...this.selected];
+    async manage(action, ids = [...this.selected]) {
       if (!ids.length) return;
       this.working = true;
       this.renderActions();
@@ -489,6 +506,22 @@
         this.renderActions();
         this.refresh();
       }
+    }
+    async rename(chat) {
+      const title = await askText('Rename', {
+        value: chat.title,
+        label: 'Title',
+        action: 'Rename',
+      });
+      if (!title || title === chat.title) return;
+      try {
+        await this.request(`/${encodeURIComponent(chat.id)}/rename`, { title });
+        this.listError = '';
+      } catch (e) {
+        this.listError = e.message;
+        this.renderList();
+      }
+      this.refresh();
     }
     showList() {
       this.chat = null;

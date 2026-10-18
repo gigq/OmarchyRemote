@@ -295,6 +295,70 @@ test('several chats can be selected and archived', async ({ page }) => {
   await expect(app.locator('.chat-row-title')).toHaveText('Trip plan');
 });
 
+test('a right-click or a long press on a chat offers rename, archive, and delete', async ({
+  page,
+}) => {
+  const { app, state } = await setup(page, more);
+  state.renamed = [];
+  await page.route(/\/api\/chat\/[0-9a-f-]{36}\/rename$/, r => {
+    const id = r.request().url().split('/').at(-2);
+    const { title } = r.request().postDataJSON();
+    state.renamed.push({ id, title });
+    state.chats = state.chats.map(c => (c.id === id ? { ...c, title } : c));
+    return r.fulfill({ json: { renamed: true } });
+  });
+  const menu = page.getByRole('menu');
+  await app.locator('.chat-row', { hasText: 'Dinner ideas' }).click({ button: 'right' });
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitem')).toHaveText(['Rename', 'Archive', 'Delete']);
+  // Escape closes it, and nothing opened.
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await app.locator('.chat-row', { hasText: 'Dinner ideas' }).click({ button: 'right' });
+  await menu.getByRole('menuitem', { name: 'Rename' }).click();
+  const field = page.getByRole('dialog', { name: 'Rename' }).getByRole('textbox');
+  await expect(field).toHaveValue('Dinner ideas');
+  await field.fill('Weeknight dinners');
+  await page.screenshot({ path: 'artifacts/browser/chat-rename.png' });
+  await field.press('Enter');
+  await expect.poll(() => state.renamed).toEqual([{ id: ID, title: 'Weeknight dinners' }]);
+  await expect(app.locator('.chat-row-title').first()).toHaveText('Weeknight dinners');
+  // A long press on touch opens the same menu, and its release does not open the chat.
+  const row = app.locator('.chat-row', { hasText: more[1].title });
+  const box = await row.boundingBox();
+  const at = { clientX: box.x + 40, clientY: box.y + 20, pointerType: 'touch', isPrimary: true };
+  await row.dispatchEvent('pointerdown', at);
+  await page.waitForTimeout(650);
+  await row.dispatchEvent('pointerup', at);
+  await row.dispatchEvent('click');
+  await expect(menu).toBeVisible();
+  await expect(app.locator('.chat-row')).toHaveCount(3);
+  await page.screenshot({ path: 'artifacts/browser/chat-menu.png' });
+  // Deleting asks in the menu first.
+  await menu.getByRole('menuitem', { name: 'Delete' }).click();
+  await expect(page.getByText(`Delete “${more[1].title}” permanently?`)).toBeVisible();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await expect.poll(() => state.managed).toEqual([{ action: 'delete', ids: [more[1].id] }]);
+  await expect(app.locator('.chat-row')).toHaveCount(2);
+  // Archive acts at once.
+  await app.locator('.chat-row', { hasText: more[0].title }).click({ button: 'right' });
+  await menu.getByRole('menuitem', { name: 'Archive' }).click();
+  await expect.poll(() => state.managed.at(-1)).toEqual({ action: 'archive', ids: [more[0].id] });
+  // On a wide screen the menu opens where the click was, and arrows move through it.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const first = app.locator('.chat-row').first();
+  await expect(first).toBeVisible();
+  const spot = await first.boundingBox();
+  await page.mouse.click(spot.x + 30, spot.y + 10, { button: 'right' });
+  const placed = await menu.boundingBox();
+  expect(Math.abs(placed.x - (spot.x + 30))).toBeLessThan(2);
+  expect(Math.abs(placed.y - (spot.y + 10))).toBeLessThan(2);
+  await page.keyboard.press('ArrowDown');
+  await expect(menu.getByRole('menuitem', { name: 'Rename' })).toBeFocused();
+  await page.mouse.click(5, 5);
+  await expect(menu).toBeHidden();
+});
+
 test('deleting asks first, and a chat that fails stays with the reason', async ({ page }) => {
   const { app, state } = await setup(page, more);
   state.failId = more[0].id;
