@@ -3,7 +3,9 @@
 //! back through earlier pages and continue the conversation from any of them.
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::{
+    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
     time::UNIX_EPOCH,
@@ -20,6 +22,93 @@ pub struct Point {
     pub session: String,
     pub uuid: String,
     pub entries: usize,
+    /// The screen the page was made for then.
+    #[serde(default)]
+    pub layout: String,
+}
+
+/* Layouts: `index.html` is made for the screen of the message that last changed it, a phone or
+a wider one, and `index.<layout>.html` is a version redrawn for the other. A redrawn version
+records the `index.html` it was made from, so a later change to the page leaves it out of date.
+Both are kept in `.layouts.json`. */
+pub const LAYOUTS: [&str; 2] = ["phone", "wide"];
+#[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Layouts {
+    #[serde(default)]
+    pub made_for: String,
+    /// Each redrawn layout, by the hash of the `index.html` it was made from.
+    #[serde(default)]
+    pub variants: BTreeMap<String, String>,
+}
+/// The layout for a device the app reports: a phone, or a tablet or computer.
+pub fn layout_of(device: &str) -> &'static str {
+    if device == "phone" { "phone" } else { "wide" }
+}
+pub fn layouts(folder: &Path) -> Layouts {
+    fs::read(folder.join(".layouts.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default()
+}
+fn save_layouts(folder: &Path, layouts: &Layouts) -> anyhow::Result<()> {
+    let temporary = folder.join(".layouts.json.tmp");
+    fs::write(&temporary, serde_json::to_vec(layouts)?)?;
+    fs::rename(temporary, folder.join(".layouts.json"))?;
+    Ok(())
+}
+/// The page's `index.html`, by its contents.
+pub fn page_hash(folder: &Path) -> Option<String> {
+    let bytes = fs::read(folder.join("index.html")).ok()?;
+    Some(format!("{:x}", Sha256::digest(&bytes)))
+}
+/// When `index.html` last changed, in milliseconds; 0 when there is none.
+pub fn page_time(folder: &Path) -> u64 {
+    fs::metadata(folder.join("index.html"))
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|m| m.duration_since(UNIX_EPOCH).ok())
+        .map_or(0, |d| d.as_millis() as u64)
+}
+/// The redrawn layouts made from the page as it is now.
+pub fn fresh(folder: &Path) -> Vec<String> {
+    let layouts = layouts(folder);
+    let Some(hash) = page_hash(folder) else {
+        return Vec::new();
+    };
+    layouts
+        .variants
+        .into_iter()
+        .filter(|(layout, from)| {
+            *from == hash && folder.join(format!("index.{layout}.html")).is_file()
+        })
+        .map(|(layout, _)| layout)
+        .collect()
+}
+/// Notes the screen the page is made for; returns it.
+pub fn set_made_for(folder: &Path, layout: &str) -> String {
+    let mut layouts = layouts(folder);
+    if !layout.is_empty() && layouts.made_for != layout {
+        layouts.made_for = layout.to_owned();
+        if let Err(e) = save_layouts(folder, &layouts) {
+            eprintln!("canvas: could not note the layout: {e}");
+        }
+    }
+    layouts.made_for
+}
+/// A turn ended: if it changed `index.html` (last changed at `before`), the page is now made for
+/// the screen of its message. Returns the screen the page is made for.
+pub fn record_layout(folder: &Path, layout: &str, before: u64) -> String {
+    if page_time(folder) != before {
+        set_made_for(folder, layout)
+    } else {
+        layouts(folder).made_for
+    }
+}
+/// A version redrawn for `layout` from the `index.html` whose hash is `from`.
+pub fn add_variant(folder: &Path, layout: &str, from: &str) -> anyhow::Result<()> {
+    let mut layouts = layouts(folder);
+    layouts.variants.insert(layout.to_owned(), from.to_owned());
+    save_layouts(folder, &layouts)
 }
 
 /// Whether a folder entry is part of the page: not the transcript, its attachments, or hidden.
@@ -128,6 +217,7 @@ pub fn restore(folder: &Path, turn: usize) -> anyhow::Result<Point> {
     }
     let mut unlimited = u64::MAX;
     copy(&kept, folder, true, 6, &mut unlimited)?;
+    set_made_for(folder, &point.layout);
     for entry in fs::read_dir(&dir)?.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
         let later = name
@@ -147,6 +237,31 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_redrawn_layout_lasts_until_the_page_changes() {
+        let folder = std::env::temp_dir().join(format!("canvas-layouts-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&folder).unwrap();
+        assert_eq!(layout_of("phone"), "phone");
+        assert_eq!(layout_of("tablet"), "wide");
+        assert_eq!(layout_of("computer"), "wide");
+        // A turn that writes the page makes it for its message's screen.
+        let before = page_time(&folder);
+        fs::write(folder.join("index.html"), "<h1>Wide</h1>").unwrap();
+        assert_eq!(record_layout(&folder, "wide", before), "wide");
+        // A turn that leaves the page alone keeps it as it was made.
+        let before = page_time(&folder);
+        assert_eq!(record_layout(&folder, "phone", before), "wide");
+        assert!(fresh(&folder).is_empty());
+        let from = page_hash(&folder).unwrap();
+        fs::write(folder.join("index.phone.html"), "<h1>Phone</h1>").unwrap();
+        add_variant(&folder, "phone", &from).unwrap();
+        assert_eq!(fresh(&folder), ["phone"]);
+        // The page changes: the phone version is out of date.
+        fs::write(folder.join("index.html"), "<h1>Wider</h1>").unwrap();
+        assert!(fresh(&folder).is_empty());
+        fs::remove_dir_all(folder).unwrap();
+    }
+
+    #[test]
     fn pages_are_kept_by_turn_and_restored_forgetting_later_turns() {
         let folder = std::env::temp_dir().join(format!("canvas-history-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(folder.join("attachments")).unwrap();
@@ -157,6 +272,7 @@ mod tests {
             session: "s".into(),
             uuid: format!("u{n}"),
             entries: n * 2,
+            layout: if n == 1 { "wide" } else { "phone" }.into(),
         };
         snapshot(&folder, 1, &point(1)).unwrap();
         fs::write(folder.join("index.html"), "second").unwrap();
@@ -178,6 +294,8 @@ mod tests {
             .collect();
         assert_eq!(kept, [1, 2]);
         assert_eq!(restore(&folder, 1).unwrap(), point(1));
+        // Going back also goes back to the screen that page was made for.
+        assert_eq!(layouts(&folder).made_for, "wide");
         assert_eq!(
             fs::read_to_string(folder.join("index.html")).unwrap(),
             "first"

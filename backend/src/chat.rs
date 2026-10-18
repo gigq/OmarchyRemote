@@ -607,10 +607,15 @@ struct Live {
     canvas: bool,
     /// Claude's last message in this turn, where a later fork can continue from.
     last_message: String,
-    /// A turn ended: its page is to be kept, by its number.
-    ended: Option<(usize, crate::canvas::Point)>,
+    /// A turn ended: its page is to be kept, by its number, with when the page last changed
+    /// before the turn.
+    ended: Option<(usize, crate::canvas::Point, u64)>,
     /// Where Claude resumes when it starts: an earlier turn's end, forking its session.
     fork: Option<crate::canvas::Point>,
+    /// The screen this turn's message came from, and when the page last changed before it: a
+    /// turn that changes the page makes it for that screen.
+    turn_layout: String,
+    page_before: u64,
 }
 impl Live {
     /// Applies one line of the agent's JSON output; returns the events to broadcast.
@@ -676,12 +681,7 @@ impl Live {
             // A tool finished, perhaps writing the page; and a turn ended.
             "user" | "result" if self.canvas => {
                 let folder = self.path.parent().unwrap_or(&self.path);
-                events.push(json!({
-                    "type": "page",
-                    "id": id,
-                    "version": page_version(folder),
-                    "page": folder.join("index.html").is_file(),
-                }));
+                events.push(page_event(&id, folder));
                 if line["type"] == "result" {
                     let entries = &self.conversation.entries;
                     let turn = entries.iter().filter(|e| e.role == "user").count();
@@ -691,7 +691,9 @@ impl Live {
                             session: self.conversation.session.clone(),
                             uuid: self.last_message.clone(),
                             entries: entries.len(),
+                            layout: self.turn_layout.clone(),
                         },
+                        self.page_before,
                     ));
                     events.extend(self.finish_turn(line));
                 }
@@ -844,6 +846,8 @@ pub enum Kind {
     Chat,
     Canvas,
 }
+/// A page being redrawn: for which layout, and the job, which stopping aborts.
+type Redrawing = (String, Option<tokio::task::AbortHandle>);
 #[derive(Clone)]
 pub struct Chats {
     kind: Kind,
@@ -854,6 +858,8 @@ pub struct Chats {
     /// Numbers every event. A chat read reports the number its state includes, so a client
     /// applies only the events after it.
     counter: Arc<AtomicU64>,
+    /// Canvas pages being redrawn for another screen: the layout, and the job doing it.
+    redrawing: Arc<Mutex<HashMap<String, Redrawing>>>,
 }
 pub fn start(kind: Kind) -> Chats {
     let chats = Chats {
@@ -862,6 +868,7 @@ pub fn start(kind: Kind) -> Chats {
         running: Arc::new(Mutex::new(HashMap::new())),
         events: broadcast::channel(1024).0,
         counter: Arc::new(AtomicU64::new(0)),
+        redrawing: Arc::new(Mutex::new(HashMap::new())),
     };
     let reaper = chats.clone();
     tokio::spawn(async move {
@@ -887,7 +894,7 @@ pub fn start(kind: Kind) -> Chats {
 }
 impl Chats {
     /// A Canvas session's page: its address, its version, and whether it has been written yet.
-    fn describe_page(&self, value: &mut Value, id: &str, folder: Option<&FsPath>) {
+    fn describe_page(&self, value: &mut Value, id: &str, folder: Option<&FsPath>, session: &str) {
         if self.kind != Kind::Canvas {
             return;
         }
@@ -895,6 +902,23 @@ impl Chats {
         value["version"] = json!(folder.map_or(0, page_version));
         value["page"] = json!(folder.is_some_and(|f| f.join("index.html").is_file()));
         value["turns"] = folder.map_or(json!([]), crate::canvas::turns);
+        value["redrawing"] = json!(self.redrawing.lock().unwrap().get(id).map(|(l, _)| l));
+        if let Some(folder) = folder {
+            let page = page_event(id, folder);
+            let mut layout = page["layout"].as_str().unwrap_or_default().to_owned();
+            // A canvas from before layouts were noted takes its last message's screen.
+            if layout.is_empty() && value["page"] == true {
+                let log = claude_config()
+                    .and_then(|config| claude_files(&config, folder, session))
+                    .ok()
+                    .and_then(|files| files.into_iter().next());
+                if let Some(found) = log.as_deref().and_then(infer_layout) {
+                    layout = crate::canvas::set_made_for(folder, found);
+                }
+            }
+            value["layout"] = json!(layout);
+            value["variants"] = page["variants"].clone();
+        }
     }
     /// The agents this set can run: Canvas needs Claude's streaming protocol, so not Codex.
     fn installed(&self) -> Vec<(&'static str, &'static str, &'static str)> {
@@ -932,19 +956,10 @@ impl Chats {
     fn get(&self, id: &str) -> Option<Arc<Running>> {
         self.running.lock().unwrap().get(id).cloned()
     }
-    /// Starts the agent for a conversation: a new session, or a resumed one.
-    fn spawn(&self, live: Live, resume: bool, root: &FsPath) -> anyhow::Result<Arc<Running>> {
-        let mut args: Vec<String> = [
-            "-p",
-            "--input-format",
-            "stream-json",
-            "--output-format",
-            "stream-json",
-            "--verbose",
-            "--include-partial-messages",
-        ]
-        .map(String::from)
-        .into();
+    /// What every run of a conversation's Claude is given: its permissions and instructions, then
+    /// its model and effort.
+    fn agent_args(&self, conversation: &Conversation) -> anyhow::Result<Vec<String>> {
+        let mut args: Vec<String> = Vec::new();
         if self.kind == Kind::Canvas {
             // Canvas builds pages with every tool, unasked, and is told how its page is shown.
             args.extend(["--permission-mode".into(), "bypassPermissions".into()]);
@@ -968,15 +983,11 @@ impl Chats {
                 args.extend(serde_json::from_str::<Vec<String>>(&extra)?);
             }
         }
-        let (model, effort) = (
-            live.conversation.model.clone(),
-            live.conversation.effort.clone(),
-        );
+        let (model, effort) = (conversation.model.clone(), conversation.effort.clone());
         anyhow::ensure!(
-            valid_settings(agent_of(&live.conversation), &model, &effort),
+            valid_settings(agent_of(conversation), &model, &effort),
             "Unsupported model or effort"
         );
-        // `started` keeps the chat's own choice, so Default never looks like a change.
         let (flag_model, flag_effort) = effective(&model, &effort, &configured());
         if !flag_model.is_empty() {
             args.extend(["--model".into(), flag_model]);
@@ -984,6 +995,27 @@ impl Chats {
         if !flag_effort.is_empty() {
             args.extend(["--effort".into(), flag_effort]);
         }
+        Ok(args)
+    }
+    /// Starts the agent for a conversation: a new session, or a resumed one.
+    fn spawn(&self, live: Live, resume: bool, root: &FsPath) -> anyhow::Result<Arc<Running>> {
+        let mut args: Vec<String> = [
+            "-p",
+            "--input-format",
+            "stream-json",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--include-partial-messages",
+        ]
+        .map(String::from)
+        .into();
+        args.extend(self.agent_args(&live.conversation)?);
+        // `started` keeps the chat's own choice, so Default never looks like a change.
+        let (model, effort) = (
+            live.conversation.model.clone(),
+            live.conversation.effort.clone(),
+        );
         let mut live = live;
         live.started = (model, effort);
         if let Some(point) = live.fork.take() {
@@ -1140,8 +1172,8 @@ impl Chats {
                     (events, ended.zip(folder))
                 };
                 chats.emit(events);
-                if let Some(((turn, point), folder)) = ended {
-                    chats.keep_page(&id, folder, turn, point).await;
+                if let Some(((turn, point, before), folder)) = ended {
+                    chats.keep_page(&id, folder, turn, point, before).await;
                 }
             }
             let _ = reader.child.lock().await.wait().await;
@@ -1150,16 +1182,29 @@ impl Chats {
         });
     }
     /// Keeps a Canvas page as a turn left it, and tells the app which turns it can go back to.
-    async fn keep_page(&self, id: &str, folder: PathBuf, turn: usize, point: crate::canvas::Point) {
-        let turns = tokio::task::spawn_blocking(move || {
+    async fn keep_page(
+        &self,
+        id: &str,
+        folder: PathBuf,
+        turn: usize,
+        mut point: crate::canvas::Point,
+        before: u64,
+    ) {
+        let id = id.to_owned();
+        let events = tokio::task::spawn_blocking(move || {
+            // A turn that changed the page made it for the screen its message came from.
+            point.layout = crate::canvas::record_layout(&folder, &point.layout, before);
             if let Err(e) = crate::canvas::snapshot(&folder, turn, &point) {
                 eprintln!("canvas: could not keep turn {turn}: {e}");
             }
-            crate::canvas::turns(&folder)
+            let turns = crate::canvas::turns(&folder);
+            vec![
+                json!({"type":"turns","id":id,"turns":turns}),
+                page_event(&id, &folder),
+            ]
         })
-        .await
-        .unwrap_or_default();
-        let mut events = vec![json!({"type":"turns","id":id,"turns":turns})];
+        .await;
+        let mut events = events.unwrap_or_default();
         self.stamp(&mut events);
         self.emit(events);
     }
@@ -1201,12 +1246,7 @@ impl Chats {
         let folder = path.parent().unwrap_or(root);
         let mut events = vec![
             json!({"type":"rewound","id":id,"entries":conversation.entries.len(),"turns":turns}),
-            json!({
-                "type": "page",
-                "id": id,
-                "version": page_version(folder),
-                "page": folder.join("index.html").is_file(),
-            }),
+            page_event(id, folder),
         ];
         self.stamp(&mut events);
         self.emit(events);
@@ -1227,6 +1267,9 @@ impl Chats {
     }
     /// Stops a conversation's agent for good, before its file is archived or deleted.
     async fn retire(&self, id: &str) {
+        if let Some((_, Some(job))) = self.redrawing.lock().unwrap().remove(id) {
+            job.abort();
+        }
         let running = self.running.lock().unwrap().remove(id);
         if let Some(running) = running {
             running.live.lock().unwrap().removed = true;
@@ -1339,6 +1382,29 @@ fn page_version(folder: &FsPath) -> u64 {
     }
     newest(folder, 3)
 }
+/// A Canvas page's state for the app: its version, whether it exists yet, the screen it was made
+/// for, and the layouts redrawn from it as it is now.
+fn page_event(id: &str, folder: &FsPath) -> Value {
+    json!({
+        "type": "page",
+        "id": id,
+        "version": page_version(folder),
+        "page": folder.join("index.html").is_file(),
+        "layout": crate::canvas::layouts(folder).made_for,
+        "variants": crate::canvas::fresh(folder),
+    })
+}
+/// The screen of the last message in a Claude session log that gave one.
+fn infer_layout(log: &FsPath) -> Option<&'static str> {
+    let text = fs::read_to_string(log).ok()?;
+    // The context is JSON inside the message's JSON string, so its quotes are escaped.
+    let device = regex::Regex::new(r#"\\"device\\":\s*\\"(\w+)\\""#).unwrap();
+    text.lines()
+        .rev()
+        .filter(|line| line.contains("canvas-context"))
+        .find_map(|line| device.captures(line))
+        .map(|c| crate::canvas::layout_of(&c[1]))
+}
 /// The routes of a set of conversations, mounted at `/api/chat` for Chat and `/api/canvas` for
 /// Canvas.
 pub fn router<S: Clone + std::marker::Send + Sync + 'static>(chats: Chats) -> axum::Router<S> {
@@ -1352,6 +1418,7 @@ pub fn router<S: Clone + std::marker::Send + Sync + 'static>(chats: Chats) -> ax
         .route("/{id}", get(read))
         .route("/{id}/stop", post(stop))
         .route("/{id}/rename", post(rename))
+        .route("/{id}/redraw", post(redraw))
         .route("/{id}/attachments/{name}", get(attachment))
         .route("/{id}/response", get(response))
         .route("/{id}/speech", post(speech))
@@ -1412,7 +1479,12 @@ pub async fn read(
         let mut value = live.conversation.json();
         value["busy"] = json!(live.busy);
         value["folder"] = json!(live.path.parent().map(|d| d.to_string_lossy()));
-        chats.describe_page(&mut value, &id, live.path.parent());
+        chats.describe_page(
+            &mut value,
+            &id,
+            live.path.parent(),
+            &live.conversation.session,
+        );
         value["partial"] = json!(live.partial);
         value["seq"] = json!(live.seq);
         value["n"] = json!(chats.counter.load(Ordering::SeqCst));
@@ -1422,9 +1494,10 @@ pub async fn read(
     prepare(&root).map_err(error)?;
     let path = find(&root, &id)
         .map_err(|e| (StatusCode::NOT_FOUND, Json(json!({"error":e.to_string()}))))?;
-    let mut value = load(&path).map_err(error)?.json();
+    let conversation = load(&path).map_err(error)?;
+    let mut value = conversation.json();
     value["folder"] = json!(path.parent().map(|d| d.to_string_lossy()));
-    chats.describe_page(&mut value, &id, path.parent());
+    chats.describe_page(&mut value, &id, path.parent(), &conversation.session);
     value["busy"] = json!(false);
     value["partial"] = json!("");
     value["seq"] = json!(0);
@@ -1646,6 +1719,8 @@ pub async fn send(
                 last_message: String::new(),
                 ended: None,
                 fork,
+                turn_layout: String::new(),
+                page_before: 0,
             };
             if agent == "codex" {
                 // Each Codex turn is its own run, given the message as it starts.
@@ -1667,6 +1742,16 @@ pub async fn send(
         let mut live = running.live.lock().unwrap();
         if let Some(design) = design {
             live.conversation.design = design;
+        }
+        if chats.kind == Kind::Canvas {
+            // A turn that changes the page makes it for the screen this message came from.
+            live.page_before = crate::canvas::page_time(live.path.parent().unwrap_or(&root));
+            live.turn_layout = request
+                .context
+                .as_ref()
+                .and_then(|c| c["device"].as_str())
+                .map_or("", crate::canvas::layout_of)
+                .to_owned();
         }
         let (id, events, attachments) =
             add_message(&chats, &mut live, &text, &uploads, &root).map_err(error)?;
@@ -2078,6 +2163,175 @@ pub async fn attachment(
 /// Stops the agent mid-reply. Its session keeps everything up to the last complete message, and
 /// the streamed text so far is kept in the conversation.
 #[derive(Deserialize)]
+pub struct Redraw {
+    /// The screen to redraw for: one of `canvas::LAYOUTS`.
+    layout: String,
+    /// The screen and theme, as a message sends them.
+    #[serde(default)]
+    context: Option<Value>,
+}
+/// Redraws a Canvas page for the other kind of screen, as `index.<layout>.html` beside it. A
+/// one-off Claude run forks the canvas's session, so it knows what the page is for, without
+/// adding to the conversation.
+pub async fn redraw(
+    State(chats): State<Chats>,
+    Path(id): Path<String>,
+    Json(request): Json<Redraw>,
+) -> Result<Json<Value>, ApiError> {
+    let refuse = |status: StatusCode, message: &str| (status, Json(json!({"error": message})));
+    let layout = request.layout.clone();
+    if chats.kind != Kind::Canvas || !crate::canvas::LAYOUTS.contains(&layout.as_str()) {
+        return Err(refuse(StatusCode::BAD_REQUEST, "Unknown layout"));
+    }
+    let (conversation, path, busy) = match chats.get(&id) {
+        Some(running) => {
+            let live = running.live.lock().unwrap();
+            (live.conversation.clone(), live.path.clone(), live.busy)
+        }
+        None => {
+            let root = chats.root().map_err(error)?;
+            let path =
+                find(&root, &id).map_err(|e| refuse(StatusCode::NOT_FOUND, &e.to_string()))?;
+            (load(&path).map_err(error)?, path, false)
+        }
+    };
+    if busy {
+        return Err(refuse(
+            StatusCode::CONFLICT,
+            "Wait for the reply to finish before redrawing",
+        ));
+    }
+    if !claude_family(agent_of(&conversation)) || conversation.session.is_empty() {
+        return Err(refuse(
+            StatusCode::BAD_REQUEST,
+            "This canvas cannot be redrawn",
+        ));
+    }
+    let folder = path.parent().map(FsPath::to_owned).unwrap_or_default();
+    let Some(from) = crate::canvas::page_hash(&folder) else {
+        return Err(refuse(
+            StatusCode::CONFLICT,
+            "There is no page to redraw yet",
+        ));
+    };
+    {
+        let mut redrawing = chats.redrawing.lock().unwrap();
+        if redrawing.contains_key(&id) {
+            return Err(refuse(
+                StatusCode::CONFLICT,
+                "This page is already being redrawn",
+            ));
+        }
+        redrawing.insert(id.clone(), (layout.clone(), None));
+    }
+    let screen = |layout: &str| {
+        if layout == "phone" {
+            "a phone"
+        } else {
+            "a wider screen (a tablet or computer)"
+        }
+    };
+    let other = if layout == "phone" { "wide" } else { "phone" };
+    let text = format!(
+        "The page, index.html, was made for {}; this person is now looking at it on {}. Write a version of it for this screen as index.{layout}.html beside it: the same page, laid out and sized to work well here. Link the page's other files by the same relative paths, and leave index.html and every other file as it is. Reply with one short sentence.",
+        screen(other),
+        screen(&layout),
+    );
+    let prompt = with_context(
+        json!(text),
+        request.context.as_ref().unwrap_or(&json!({})),
+        &conversation.design,
+    );
+    let prompt = prompt.as_str().unwrap_or(&text).to_owned();
+    let start = || -> anyhow::Result<Child> {
+        let mut args: Vec<String> = [
+            "-p",
+            "--output-format",
+            "json",
+            "--resume",
+            &conversation.session,
+            "--fork-session",
+            "--no-session-persistence",
+        ]
+        .map(String::from)
+        .into();
+        args.extend(chats.agent_args(&conversation)?);
+        let command = AGENTS
+            .iter()
+            .find(|(id, _, _)| *id == agent_of(&conversation))
+            .map_or("claude", |(_, _, command)| *command);
+        Ok(Command::new(apps::resolve_program(command)?)
+            .args(&args)
+            .current_dir(&folder)
+            .env_remove("CLAUDECODE")
+            .env_remove("CLAUDE_CODE_ENTRYPOINT")
+            .env_remove("CLAUDE_CODE_SESSION_ID")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .process_group(0)
+            .kill_on_drop(true)
+            .spawn()?)
+    };
+    let mut child = match start() {
+        Ok(child) => child,
+        Err(e) => {
+            chats.redrawing.lock().unwrap().remove(&id);
+            return Err(error(format!("Claude could not start: {e}")));
+        }
+    };
+    let mut events = vec![json!({"type":"redraw","id":id,"layout":layout,"state":"started"})];
+    chats.stamp(&mut events);
+    chats.emit(events);
+    let stdin = child.stdin.take();
+    let job = {
+        let (chats, id, layout) = (chats.clone(), id.clone(), layout.clone());
+        tokio::spawn(async move {
+            if let Some(mut stdin) = stdin {
+                // Closing the input tells Claude the prompt is complete.
+                let _ = stdin.write_all(prompt.as_bytes()).await;
+            }
+            let output = child.wait_with_output().await;
+            // The last line of output is the run's result.
+            let result = output.as_ref().ok().and_then(|out| {
+                String::from_utf8_lossy(&out.stdout)
+                    .lines()
+                    .rev()
+                    .find_map(|line| serde_json::from_str::<Value>(line).ok())
+            });
+            let failure = match (&output, &result) {
+                (Err(e), _) => Some(e.to_string()),
+                (_, Some(result)) if result["is_error"] == true => Some(
+                    result["result"]
+                        .as_str()
+                        .unwrap_or("Claude stopped with an error")
+                        .to_owned(),
+                ),
+                _ if !folder.join(format!("index.{layout}.html")).is_file() => {
+                    Some("Claude did not write the redrawn page".into())
+                }
+                _ => None,
+            };
+            if failure.is_none()
+                && let Err(e) = crate::canvas::add_variant(&folder, &layout, &from)
+            {
+                eprintln!("canvas: could not note the redrawn page: {e}");
+            }
+            chats.redrawing.lock().unwrap().remove(&id);
+            let mut events = vec![
+                page_event(&id, &folder),
+                json!({"type":"redraw","id":id,"layout":layout,"state":"done","error":failure}),
+            ];
+            chats.stamp(&mut events);
+            chats.emit(events);
+        })
+    };
+    if let Some(entry) = chats.redrawing.lock().unwrap().get_mut(&id) {
+        entry.1 = Some(job.abort_handle());
+    }
+    Ok(Json(json!({"redrawing":layout})))
+}
+#[derive(Deserialize)]
 pub struct Rename {
     title: String,
 }
@@ -2429,6 +2683,8 @@ mod tests {
             last_message: String::new(),
             ended: None,
             fork: None,
+            turn_layout: String::new(),
+            page_before: 0,
         };
         let events = live.apply(&json!({"type":"thread.started","thread_id":"01a13635-b662"}));
         assert_eq!(live.conversation.session, "01a13635-b662");
@@ -2582,22 +2838,46 @@ mod tests {
             last_message: String::new(),
             ended: None,
             fork: None,
+            turn_layout: String::new(),
+            page_before: 0,
         };
         live.apply(&json!({"type":"assistant","uuid":"u1","parent_tool_use_id":null,"message":{"id":"m1","content":[{"type":"text","text":"Here it is."}]}}));
         // A subagent's messages are not where the conversation stands.
         live.apply(&json!({"type":"assistant","uuid":"sub","parent_tool_use_id":"t","message":{"id":"m2","content":[]}}));
         assert!(live.ended.is_none());
         live.apply(&json!({"type":"result","subtype":"success","result":"Here it is."}));
-        let (turn, point) = live.ended.take().unwrap();
+        let (turn, point, _) = live.ended.take().unwrap();
         assert_eq!(turn, 1);
         assert_eq!(
             point,
             crate::canvas::Point {
                 session: "s1".into(),
                 uuid: "u1".into(),
-                entries: 2
+                entries: 2,
+                layout: String::new(),
             }
         );
+    }
+
+    #[test]
+    fn an_older_canvas_takes_the_screen_of_its_last_message() {
+        let dir = crate::dictation::AudioDir::new().unwrap();
+        let log = dir.0.join("session.jsonl");
+        let message = |device: &str| {
+            let context = serde_json::to_string_pretty(&json!({"device": device})).unwrap();
+            json!({"type":"user","message":{"role":"user","content":format!("<canvas-context>\n{context}\n</canvas-context>\n\nHi")}})
+                .to_string()
+        };
+        assert_eq!(infer_layout(&log), None);
+        let lines = [
+            message("tablet"),
+            r#"{"type":"assistant"}"#.into(),
+            message("phone"),
+        ];
+        fs::write(&log, lines.join("\n")).unwrap();
+        assert_eq!(infer_layout(&log), Some("phone"));
+        fs::write(&log, [message("phone"), message("computer")].join("\n")).unwrap();
+        assert_eq!(infer_layout(&log), Some("wide"));
     }
 
     #[test]
@@ -2769,6 +3049,8 @@ mod tests {
             last_message: String::new(),
             ended: None,
             fork: None,
+            turn_layout: String::new(),
+            page_before: 0,
         };
         let delta = |text: &str| json!({"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":text}}});
         assert_eq!(live.apply(&delta("Hel"))[0]["seq"], 1);

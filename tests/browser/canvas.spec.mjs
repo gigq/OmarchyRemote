@@ -27,6 +27,7 @@ async function setup(page, before) {
     },
     sent: [],
     loads: [],
+    paths: [],
     n: 0,
   };
   await page.route('**/api/**', r => r.abort());
@@ -57,6 +58,7 @@ async function setup(page, before) {
   await page.route('**/api/canvas/view/**', r => {
     const url = new URL(r.request().url());
     state.loads.push(url.search);
+    state.paths.push(url.pathname.slice(VIEW.length) + url.search);
     // A kept page says which turn left it.
     const turn = url.pathname.match(/\/@(\d+)\//)?.[1];
     const body = turn ? `<!doctype html><h1>Turn ${turn}</h1>` : PAGE;
@@ -326,4 +328,55 @@ test('a canvas has a design level, sent with each message and kept for new canva
   // A new canvas starts with the level used last.
   await app.locator('.chat-thread-view .chat-new').click();
   await expect(chip).toHaveText('max UI · Default · default');
+});
+
+test('a page made for a wider screen offers a phone version, kept and shown on the phone', async ({
+  page,
+}) => {
+  const { app, state, emit } = await setup(page);
+  Object.assign(state.session, { layout: 'wide', variants: [], version: 2 });
+  state.redraws = [];
+  await page.route(/\/api\/canvas\/[0-9a-f-]{36}\/redraw$/, r => {
+    state.redraws.push(r.request().postDataJSON());
+    return r.fulfill({ json: { redrawing: 'phone' } });
+  });
+  await app.locator('.chat-row').click();
+  const redraw = app.locator('.canvas-redraw');
+  await expect(redraw).toHaveText('Redraw for phone');
+  await expect.poll(() => state.paths.at(-1)).toBe('?v=2');
+  await page.screenshot({ path: 'artifacts/browser/canvas-redraw.png' });
+  await redraw.click();
+  await expect.poll(() => state.redraws.length).toBe(1);
+  expect(state.redraws[0].layout).toBe('phone');
+  expect(state.redraws[0].context.device).toBe('phone');
+  emit({ type: 'redraw', id: ID, layout: 'phone', state: 'started' });
+  await expect(redraw).toHaveText('Redrawing for phone…');
+  await expect(redraw).toBeDisabled();
+  // The phone version arrives and is what the phone shows.
+  emit({ type: 'page', id: ID, version: 3, page: true, layout: 'wide', variants: ['phone'] });
+  emit({ type: 'redraw', id: ID, layout: 'phone', state: 'done', error: null });
+  await expect(redraw).toBeHidden();
+  await expect.poll(() => state.paths.at(-1)).toBe('index.phone.html?v=3');
+  // A wider screen shows the page as it was made, and offers nothing.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect.poll(() => state.paths.at(-1)).toBe('?v=3');
+  await expect(redraw).toBeHidden();
+  // A later turn changes the page: the phone version is out of date, and is offered again.
+  await page.setViewportSize({ width: 402, height: 874 });
+  emit({ type: 'page', id: ID, version: 4, page: true, layout: 'wide', variants: [] });
+  await expect(redraw).toHaveText('Redraw for phone');
+  await expect.poll(() => state.paths.at(-1)).toBe('?v=4');
+  // A failed redraw says so and can be tried again.
+  emit({ type: 'redraw', id: ID, layout: 'phone', state: 'started' });
+  emit({ type: 'redraw', id: ID, layout: 'phone', state: 'done', error: 'Claude stopped' });
+  await expect(redraw).toHaveText('Redraw for phone failed · try again');
+  await expect(redraw).toBeEnabled();
+});
+
+test('a page made on a phone offers a version for a wider screen', async ({ page }) => {
+  const { app, state } = await setup(page);
+  Object.assign(state.session, { layout: 'phone', variants: [] });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await app.locator('.chat-row').click();
+  await expect(app.locator('.canvas-redraw')).toHaveText('Redraw for this screen');
 });

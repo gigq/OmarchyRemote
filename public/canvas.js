@@ -53,6 +53,14 @@
       this.welcome.append(node('span', 'canvas-welcome-mark', ''), this.welcomeText);
       this.messages.hidden = true;
       this.stage.prepend(this.frame, this.welcome);
+      // A page made for the other kind of screen offers a version for this one.
+      this.redrawButton = button('', () => this.redraw(), 'canvas-redraw');
+      this.redrawButton.hidden = true;
+      this.stage.append(this.redrawButton);
+      this.relayout = () => {
+        if (this.chat && this.shownLayout !== this.layoutHere()) this.showPage();
+      };
+      window.addEventListener('resize', this.relayout);
       // Claude's reply, one line until tapped.
       this.subtitle = button('', () => this.expand(), 'canvas-subtitle');
       this.subtitle.setAttribute('aria-expanded', 'false');
@@ -77,6 +85,28 @@
         if (text.trim() && !this.chat.busy) this.send(text.slice(0, 4000));
       };
       window.addEventListener('message', this.bridgeMessage);
+    }
+    // A phone, or a wider screen: the same line that names the device Claude designs for.
+    layoutHere() {
+      return window.HyprlandDesk?.isDesk?.() ? 'wide' : 'phone';
+    }
+    async redraw() {
+      const chat = this.chat;
+      if (!chat?.id) return;
+      const layout = this.layoutHere();
+      chat.redrawing = layout;
+      chat.redrawError = '';
+      this.showPage();
+      try {
+        await this.request(`/${encodeURIComponent(chat.id)}/redraw`, {
+          layout,
+          context: this.sendExtras().context,
+        });
+      } catch (e) {
+        chat.redrawing = null;
+        chat.redrawError = e.message;
+        this.showPage();
+      }
     }
     // The screen and theme the page is shown with, for Claude to design for.
     sendExtras() {
@@ -157,10 +187,19 @@
         this.render();
         return;
       }
-      if (e.type === 'page' && this.chat && e.id === this.chat.id && e.n > this.chat.n) {
+      if (own && e.type === 'page') {
         this.chat.n = e.n;
         this.chat.version = e.version;
         this.chat.page = e.page;
+        this.chat.layout = e.layout;
+        this.chat.variants = e.variants;
+        this.showPage();
+        return;
+      }
+      if (own && e.type === 'redraw') {
+        this.chat.n = e.n;
+        this.chat.redrawing = e.state === 'started' ? e.layout : null;
+        this.chat.redrawError = e.error || '';
         this.showPage();
         return;
       }
@@ -174,14 +213,44 @@
       this.frame.hidden = !ready;
       this.welcome.hidden = ready;
       this.welcomeText.textContent = `Ask for anything. ${this.agentName()} draws the answer on ${HyprlandApps.host.name}.`;
+      this.renderRedraw(ready && !kept);
       if (!ready) return;
+      // The live page in the version for this screen, where one was redrawn.
+      const here = this.layoutHere();
+      this.shownLayout = here;
+      const redrawn = chat.layout && chat.layout !== here && chat.variants?.includes(here);
       const src = kept
         ? `${chat.view}@${kept.turn}/?v=${kept.version}`
-        : `${chat.view}?v=${chat.version || 0}`;
+        : `${chat.view}${redrawn ? `index.${here}.html` : ''}?v=${chat.version || 0}`;
       if (this.frame.dataset.src !== src) {
         this.frame.dataset.src = src;
         this.frame.src = src;
       }
+    }
+    // Offered when the live page was made for the other kind of screen and has no version for
+    // this one yet, or while one is being drawn.
+    renderRedraw(live) {
+      const chat = this.chat;
+      const here = this.layoutHere();
+      const name = here === 'phone' ? 'phone' : 'this screen';
+      const redrawing = chat?.redrawing === here;
+      const needed =
+        live &&
+        !!chat.layout &&
+        chat.layout !== here &&
+        !chat.variants?.includes(here) &&
+        (!chat.redrawing || redrawing);
+      this.redrawButton.hidden = !needed;
+      this.redrawButton.disabled = redrawing || !!chat?.busy;
+      this.redrawButton.classList.toggle('working', redrawing);
+      this.redrawButton.textContent = redrawing
+        ? `Redrawing for ${name}…`
+        : chat?.redrawError
+          ? `Redraw for ${name} failed · try again`
+          : `Redraw for ${name}`;
+      this.redrawButton.title =
+        chat?.redrawError ||
+        `This page was made for a ${chat?.layout === 'phone' ? 'phone' : 'wider screen'}`;
     }
     render() {
       const chat = this.chat;
@@ -280,6 +349,7 @@
     renderState() {
       super.renderState();
       this.renderSubtitle();
+      if (this.redrawButton) this.renderRedraw(!this.frame.hidden && !this.at);
       if (this.chat?.error) return;
       this.status.textContent = '';
       this.status.classList.remove('thinking');
@@ -317,6 +387,7 @@
       ];
     }
     dispose() {
+      window.removeEventListener('resize', this.relayout);
       cancelAnimationFrame(this.readFrame);
       window.removeEventListener('message', this.bridgeMessage);
       super.dispose();

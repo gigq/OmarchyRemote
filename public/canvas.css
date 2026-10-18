@@ -121,3 +121,31 @@
   margin-right: 8px;
   color: var(--theme-accent);
 }
+/* A page made for the other kind of screen: a version for this one, on request. */
+.canvas-redraw {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  z-index: 2;
+  transform: translateX(-50%);
+  max-width: calc(100% - 20px);
+  padding: 7px 14px;
+  border: 1px solid var(--theme-accent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--theme-surface-raised) 92%, transparent);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  color: var(--theme-foreground);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.canvas-redraw:disabled {
+  cursor: default;
+}
+.canvas-redraw.working {
+  color: var(--theme-secondary);
+  animation: chat-thinking 1.4s ease-in-out infinite;
+}
