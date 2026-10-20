@@ -348,8 +348,18 @@ test('a right-click or a long press on a chat offers rename, archive, and delete
   await page.setViewportSize({ width: 1280, height: 800 });
   const first = app.locator('.chat-row').first();
   await expect(first).toBeVisible();
-  const spot = await first.boundingBox();
+  // Wait for the resized layout to settle before clicking where the row is.
+  let spot = null;
+  await expect
+    .poll(async () => {
+      const box = await first.boundingBox();
+      const settled = !!box && !!spot && box.x === spot.x && box.y === spot.y;
+      spot = box;
+      return settled;
+    })
+    .toBe(true);
   await page.mouse.click(spot.x + 30, spot.y + 10, { button: 'right' });
+  await expect(menu).toBeVisible();
   const placed = await menu.boundingBox();
   expect(Math.abs(placed.x - (spot.x + 30))).toBeLessThan(2);
   expect(Math.abs(placed.y - (spot.y + 10))).toBeLessThan(2);

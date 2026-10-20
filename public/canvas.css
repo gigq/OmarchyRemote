@@ -178,3 +178,7 @@
 .canvas-exit-full:focus-visible {
   opacity: 1;
 }
+.canvas-icon-mark {
+  font: 18px var(--chrome-glyph);
+  color: var(--theme-dim);
+}

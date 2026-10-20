@@ -69,6 +69,8 @@
     title: 'Chats',
     emptyTitle: 'No chats yet',
     emptyText: 'Ask Claude anything. No project needed.',
+    // A Nerd Font glyph: chat bubbles.
+    emptyIcon: '\uf086',
     start: 'Start a chat',
   };
   class ChatApp {
@@ -121,7 +123,7 @@
       this.list.setAttribute('role', 'list');
       this.empty = node('div', 'chat-list-empty');
       this.empty.append(
-        node('span', 'chat-list-empty-icon', '\uf086'),
+        node('span', 'chat-list-empty-icon', this.options.emptyIcon),
         node('p', 'chat-list-empty-title', this.options.emptyTitle),
         node('p', 'chat-list-empty-text', this.options.emptyText),
         button(this.options.start, () => this.startNew(), 'remote-button chat-start')
@@ -295,6 +297,10 @@
     sendExtras() {
       return {};
     }
+    // An icon for a chat in the list, from an app built on Chat; none by default.
+    listIcon() {
+      return null;
+    }
     // Settings an app built on Chat adds to the chip, each { key, label, choices: [[value, text]],
     // fallback, chip(value) }; they are remembered for new chats like the model and effort.
     extraSettings() {
@@ -423,7 +429,15 @@
               : []),
             node('time', '', ago(chat.updated))
           );
-          row.append(top, node('span', 'chat-row-preview', chat.preview || ''));
+          const preview = node('span', 'chat-row-preview', chat.preview || '');
+          const icon = this.listIcon(chat);
+          if (icon) {
+            // An app's icon for the chat stands beside its title and preview.
+            const text = node('span', 'chat-row-text');
+            text.append(top, preview);
+            row.classList.add('with-icon');
+            row.append(icon, text);
+          } else row.append(top, preview);
           if (chat.busy) row.classList.add('busy');
           // A right-click or a long press offers the chat's own actions.
           if (!selecting)

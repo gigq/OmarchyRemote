@@ -33,6 +33,8 @@
         title: 'Canvas',
         emptyTitle: 'No canvases yet',
         emptyText: 'Ask for anything, and Claude draws the answer.',
+        // The paintbrush Canvas shows on Home and in a new canvas.
+        emptyIcon: '\uf1fc',
         start: 'Start a canvas',
       });
       root.classList.add('canvas-app');
@@ -157,6 +159,19 @@
         ...(this.at ? { from: this.at } : {}),
         design: this.chat?.design || '',
       };
+    }
+    // The icon Claude drew for the canvas, or the Canvas mark until it has one.
+    listIcon(chat) {
+      const icon = node('span', 'chat-row-icon');
+      if (chat.icon) {
+        const img = node('img');
+        img.src = chat.icon;
+        img.alt = '';
+        img.loading = 'lazy';
+        img.onerror = () => img.replaceWith(node('span', 'canvas-icon-mark', '\uf1fc'));
+        icon.append(img);
+      } else icon.append(node('span', 'canvas-icon-mark', '\uf1fc'));
+      return icon;
     }
     // How much design work a page gets: the words for each level are the host's, given to Claude
     // with every message.

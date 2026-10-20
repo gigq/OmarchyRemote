@@ -28,6 +28,15 @@ async function setup(page, before) {
     sent: [],
     loads: [],
     paths: [],
+    list: [
+      {
+        id: ID,
+        title: 'Plan dinner',
+        preview: 'Here is a dinner plan.',
+        updated: new Date().toISOString(),
+        busy: false,
+      },
+    ],
     n: 0,
   };
   await page.route('**/api/**', r => r.abort());
@@ -38,15 +47,7 @@ async function setup(page, before) {
         available: true,
         agent: 'claude',
         agents: [{ id: 'claude', label: 'Claude', models: [], efforts: ['high'], defaults: {} }],
-        chats: [
-          {
-            id: ID,
-            title: 'Plan dinner',
-            preview: 'Here is a dinner plan.',
-            updated: new Date().toISOString(),
-            busy: false,
-          },
-        ],
+        chats: state.list,
       },
     })
   );
@@ -423,3 +424,52 @@ for (const viewport of [
     await page.keyboard.press('Escape');
     await expect(exit).toBeHidden();
   });
+
+test('each canvas shows its icon in the list, or the Canvas mark until it has one', async ({
+  page,
+}) => {
+  const ICON =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="#e68e0d"/></svg>';
+  const { app } = await setup(page, async (page, state) => {
+    await page.route('**/icon.svg?v=*', r =>
+      r.fulfill({ body: ICON, contentType: 'image/svg+xml' })
+    );
+    state.list = [
+      { ...state.list[0], icon: `${VIEW}icon.svg?v=5` },
+      {
+        id: '5d8ab544-8cc5-430e-8a40-0aec58bc3b10',
+        title: 'Tea types',
+        preview: 'Three teas.',
+        updated: new Date().toISOString(),
+        busy: false,
+      },
+    ];
+  });
+  const rows = app.locator('.chat-row');
+  await expect(rows).toHaveCount(2);
+  const drawn = rows.first().locator('.chat-row-icon img');
+  await expect(drawn).toHaveAttribute('src', `${VIEW}icon.svg?v=5`);
+  await expect.poll(() => drawn.evaluate(img => img.naturalWidth)).toBeGreaterThan(0);
+  await expect(rows.nth(1).locator('.canvas-icon-mark')).toBeVisible();
+  // The title and preview sit beside the icon, measured together so a sliding app agrees.
+  const beside = await rows.first().evaluate(row => {
+    const icon = row.querySelector('.chat-row-icon').getBoundingClientRect();
+    const title = row.querySelector('.chat-row-title').getBoundingClientRect();
+    return title.left >= icon.right;
+  });
+  expect(beside).toBe(true);
+  await page.screenshot({ path: 'artifacts/browser/canvas-icons.png' });
+  // Selecting still works with icons.
+  await app.getByRole('button', { name: 'Select' }).click();
+  await app.getByRole('checkbox', { name: /Tea types/ }).click();
+  await expect(app.locator('.chat-heading')).toHaveText('1 selected');
+});
+
+test('an empty canvas list shows the Canvas paintbrush, not Chat’s bubbles', async ({ page }) => {
+  const { app } = await setup(page, async (page, state) => {
+    state.list = [];
+  });
+  await expect(app.locator('.chat-list-empty-title')).toHaveText('No canvases yet');
+  await expect(app.locator('.chat-list-empty-icon')).toHaveText('\uf1fc');
+  await page.screenshot({ path: 'artifacts/browser/canvas-empty.png' });
+});

@@ -122,6 +122,34 @@
   font-size: 11px;
   color: var(--theme-secondary);
 }
+/* A row with an app's icon: the icon, then the title and preview. */
+.chat-row.with-icon {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+.chat-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+.chat-row-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--theme-surface-raised);
+}
+.chat-row-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
 .chat-row-preview {
   font-size: 12px;
   line-height: 1.45;

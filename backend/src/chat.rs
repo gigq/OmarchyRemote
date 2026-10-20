@@ -487,6 +487,8 @@ fn folder_in_home(variable: &str, default: &str) -> anyhow::Result<PathBuf> {
 }
 /// A chat folder's conversation file.
 const FILE: &str = "chat.md";
+/// A canvas's icon in the list, which Claude draws.
+const ICON: &str = "icon.svg";
 /// Creates `~/Chats` privately and converts chats saved before conversations had folders.
 fn prepare(root: &FsPath) -> anyhow::Result<()> {
     private_dir(root)?;
@@ -860,6 +862,8 @@ pub struct Chats {
     counter: Arc<AtomicU64>,
     /// Canvas pages being redrawn for another screen: the layout, and the job doing it.
     redrawing: Arc<Mutex<HashMap<String, Redrawing>>>,
+    /// Canvas icons being drawn, with the job drawing each.
+    icons: Arc<Mutex<HashMap<String, Option<tokio::task::AbortHandle>>>>,
 }
 pub fn start(kind: Kind) -> Chats {
     let chats = Chats {
@@ -869,6 +873,7 @@ pub fn start(kind: Kind) -> Chats {
         events: broadcast::channel(1024).0,
         counter: Arc::new(AtomicU64::new(0)),
         redrawing: Arc::new(Mutex::new(HashMap::new())),
+        icons: Arc::new(Mutex::new(HashMap::new())),
     };
     let reaper = chats.clone();
     tokio::spawn(async move {
@@ -1181,6 +1186,76 @@ impl Chats {
             chats.finish(&id, &reader, &last);
         });
     }
+    /// A one-off Claude run in a canvas's folder that forks its session, so it knows the
+    /// conversation, without adding to it. The caller gives it its prompt with `run_once`.
+    fn one_off(&self, conversation: &Conversation, folder: &FsPath) -> anyhow::Result<Child> {
+        let mut args: Vec<String> = [
+            "-p",
+            "--output-format",
+            "json",
+            "--resume",
+            &conversation.session,
+            "--fork-session",
+            "--no-session-persistence",
+        ]
+        .map(String::from)
+        .into();
+        args.extend(self.agent_args(conversation)?);
+        let command = AGENTS
+            .iter()
+            .find(|(id, _, _)| *id == agent_of(conversation))
+            .map_or("claude", |(_, _, command)| *command);
+        Ok(Command::new(apps::resolve_program(command)?)
+            .args(&args)
+            .current_dir(folder)
+            .env_remove("CLAUDECODE")
+            .env_remove("CLAUDE_CODE_ENTRYPOINT")
+            .env_remove("CLAUDE_CODE_SESSION_ID")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .process_group(0)
+            .kill_on_drop(true)
+            .spawn()?)
+    }
+    /// Has Claude draw a canvas's icon, `icon.svg`, for the list; returns false when one is
+    /// already being drawn or the canvas cannot be.
+    fn draw_icon(&self, id: &str, conversation: &Conversation, folder: &FsPath) -> bool {
+        if !claude_family(agent_of(conversation)) || conversation.session.is_empty() {
+            return false;
+        }
+        {
+            let mut icons = self.icons.lock().unwrap();
+            if icons.contains_key(id) {
+                return false;
+            }
+            icons.insert(id.to_owned(), None);
+        }
+        let child = match self.one_off(conversation, folder) {
+            Ok(child) => child,
+            Err(e) => {
+                eprintln!("canvas: could not start drawing an icon: {e}");
+                self.icons.lock().unwrap().remove(id);
+                return false;
+            }
+        };
+        let job = {
+            let (chats, id) = (self.clone(), id.to_owned());
+            tokio::spawn(async move {
+                if let Err(e) = run_once(child, ICON_PROMPT).await {
+                    eprintln!("canvas: could not draw an icon for {id}: {e}");
+                }
+                chats.icons.lock().unwrap().remove(&id);
+                let mut events = vec![json!({"type":"icon","id":id})];
+                chats.stamp(&mut events);
+                chats.emit(events);
+            })
+        };
+        if let Some(entry) = self.icons.lock().unwrap().get_mut(id) {
+            *entry = Some(job.abort_handle());
+        }
+        true
+    }
     /// Keeps a Canvas page as a turn left it, and tells the app which turns it can go back to.
     async fn keep_page(
         &self,
@@ -1191,6 +1266,13 @@ impl Chats {
         before: u64,
     ) {
         let id = id.to_owned();
+        // A canvas without an icon for the list gets one drawn once its turn is over.
+        if !folder.join(ICON).is_file()
+            && let Some(running) = self.get(&id)
+        {
+            let conversation = running.live.lock().unwrap().conversation.clone();
+            self.draw_icon(&id, &conversation, &folder);
+        }
         let events = tokio::task::spawn_blocking(move || {
             // A turn that changed the page made it for the screen its message came from.
             point.layout = crate::canvas::record_layout(&folder, &point.layout, before);
@@ -1270,6 +1352,9 @@ impl Chats {
         if let Some((_, Some(job))) = self.redrawing.lock().unwrap().remove(id) {
             job.abort();
         }
+        if let Some(Some(job)) = self.icons.lock().unwrap().remove(id) {
+            job.abort();
+        }
         let running = self.running.lock().unwrap().remove(id);
         if let Some(running) = running {
             running.live.lock().unwrap().removed = true;
@@ -1325,6 +1410,8 @@ Design whatever the moment calls for: a chart, a table, a timeline, a map, a com
 The page can answer for the person: parent.postMessage({ type: 'canvas', text: 'Show the vegetarian version' }, '*') arrives as their next message. Use it for buttons, choices, and forms that should continue the conversation.
 
 Keep your text reply to one or two short sentences in plain speech, with no Markdown: it is shown as a subtitle and may be read aloud. Put the detail on the page. Each message's <canvas-context> ends with a design level: how much time to spend on the page's UI. How much to research comes from what the person asks. Get a useful page up early; search and fetch the web for anything current.";
+/// What a one-off run is asked when a canvas needs an icon for the list.
+const ICON_PROMPT: &str = "Draw an icon for this canvas as icon.svg in this folder: a square SVG that stands for what the conversation is about, shown small beside its title in the list of canvases. Leave every other file as it is. Reply with one short sentence.";
 /// How much design work a Canvas page gets, chosen per canvas; each level's words go to Claude
 /// with every message. They set how far to go, never a look.
 const DESIGNS: [(&str, &str); 4] = [
@@ -1365,7 +1452,8 @@ fn page_version(folder: &FsPath) -> u64 {
             .filter(|e| {
                 let name = e.file_name();
                 let name = name.to_string_lossy();
-                !name.starts_with('.') && name != FILE
+                // The list's icon is not part of the page.
+                !name.starts_with('.') && name != FILE && name != ICON
             })
             .map(|e| match e.file_type() {
                 Ok(t) if t.is_dir() && depth > 0 => newest(&e.path(), depth - 1),
@@ -1419,6 +1507,7 @@ pub fn router<S: Clone + std::marker::Send + Sync + 'static>(chats: Chats) -> ax
         .route("/{id}/stop", post(stop))
         .route("/{id}/rename", post(rename))
         .route("/{id}/redraw", post(redraw))
+        .route("/{id}/icon", post(icon))
         .route("/{id}/attachments/{name}", get(attachment))
         .route("/{id}/response", get(response))
         .route("/{id}/speech", post(speech))
@@ -1435,8 +1524,26 @@ pub async fn status(State(chats): State<Chats>) -> Result<Json<Value>, ApiError>
     let chats: Vec<Value> = list(&root)
         .into_iter()
         .map(|mut chat| {
-            let id = chat["id"].as_str().unwrap_or_default();
-            chat["busy"] = json!(running.get(id).is_some_and(|r| r.live.lock().unwrap().busy));
+            let id = chat["id"].as_str().unwrap_or_default().to_owned();
+            chat["busy"] = json!(
+                running
+                    .get(&id)
+                    .is_some_and(|r| r.live.lock().unwrap().busy)
+            );
+            if chats.kind == Kind::Canvas {
+                let icon = FsPath::new(chat["folder"].as_str().unwrap_or_default()).join(ICON);
+                let changed = fs::metadata(&icon)
+                    .and_then(|m| m.modified())
+                    .ok()
+                    .and_then(|m| m.duration_since(UNIX_EPOCH).ok());
+                if let Some(changed) = changed {
+                    chat["icon"] = json!(format!(
+                        "{}{ICON}?v={}",
+                        chats.view(&id),
+                        changed.as_millis()
+                    ));
+                }
+            }
             chat
         })
         .collect();
@@ -2162,6 +2269,31 @@ pub async fn attachment(
 
 /// Stops the agent mid-reply. Its session keeps everything up to the last complete message, and
 /// the streamed text so far is kept in the conversation.
+/// Draws a canvas's icon for the list again, or for the first time.
+pub async fn icon(
+    State(chats): State<Chats>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    if chats.kind != Kind::Canvas {
+        return Err((StatusCode::NOT_FOUND, Json(json!({"error":"Not found"}))));
+    }
+    let (conversation, path) = match chats.get(&id) {
+        Some(running) => {
+            let live = running.live.lock().unwrap();
+            (live.conversation.clone(), live.path.clone())
+        }
+        None => {
+            let root = chats.root().map_err(error)?;
+            let path = find(&root, &id)
+                .map_err(|e| (StatusCode::NOT_FOUND, Json(json!({"error":e.to_string()}))))?;
+            (load(&path).map_err(error)?, path)
+        }
+    };
+    let folder = path.parent().map(FsPath::to_owned).unwrap_or_default();
+    Ok(Json(
+        json!({"drawing": chats.draw_icon(&id, &conversation, &folder)}),
+    ))
+}
 #[derive(Deserialize)]
 pub struct Redraw {
     /// The screen to redraw for: one of `canvas::LAYOUTS`.
@@ -2169,6 +2301,27 @@ pub struct Redraw {
     /// The screen and theme, as a message sends them.
     #[serde(default)]
     context: Option<Value>,
+}
+/// Gives a one-off run its prompt and waits for it; returns the error it ended with, if any.
+async fn run_once(mut child: Child, prompt: &str) -> Result<(), String> {
+    if let Some(mut stdin) = child.stdin.take() {
+        // Closing the input tells Claude the prompt is complete.
+        let _ = stdin.write_all(prompt.as_bytes()).await;
+    }
+    let output = child.wait_with_output().await.map_err(|e| e.to_string())?;
+    // The last line of output is the run's result.
+    let result = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .rev()
+        .find_map(|line| serde_json::from_str::<Value>(line).ok());
+    match result {
+        Some(result) if result["is_error"] != true => Ok(()),
+        Some(result) => Err(result["result"]
+            .as_str()
+            .unwrap_or("Claude stopped with an error")
+            .to_owned()),
+        None => Err("Claude stopped with an error".into()),
+    }
 }
 /// Redraws a Canvas page for the other kind of screen, as `index.<layout>.html` beside it. A
 /// one-off Claude run forks the canvas's session, so it knows what the page is for, without
@@ -2243,37 +2396,7 @@ pub async fn redraw(
         &conversation.design,
     );
     let prompt = prompt.as_str().unwrap_or(&text).to_owned();
-    let start = || -> anyhow::Result<Child> {
-        let mut args: Vec<String> = [
-            "-p",
-            "--output-format",
-            "json",
-            "--resume",
-            &conversation.session,
-            "--fork-session",
-            "--no-session-persistence",
-        ]
-        .map(String::from)
-        .into();
-        args.extend(chats.agent_args(&conversation)?);
-        let command = AGENTS
-            .iter()
-            .find(|(id, _, _)| *id == agent_of(&conversation))
-            .map_or("claude", |(_, _, command)| *command);
-        Ok(Command::new(apps::resolve_program(command)?)
-            .args(&args)
-            .current_dir(&folder)
-            .env_remove("CLAUDECODE")
-            .env_remove("CLAUDE_CODE_ENTRYPOINT")
-            .env_remove("CLAUDE_CODE_SESSION_ID")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .process_group(0)
-            .kill_on_drop(true)
-            .spawn()?)
-    };
-    let mut child = match start() {
+    let child = match chats.one_off(&conversation, &folder) {
         Ok(child) => child,
         Err(e) => {
             chats.redrawing.lock().unwrap().remove(&id);
@@ -2283,34 +2406,15 @@ pub async fn redraw(
     let mut events = vec![json!({"type":"redraw","id":id,"layout":layout,"state":"started"})];
     chats.stamp(&mut events);
     chats.emit(events);
-    let stdin = child.stdin.take();
     let job = {
         let (chats, id, layout) = (chats.clone(), id.clone(), layout.clone());
         tokio::spawn(async move {
-            if let Some(mut stdin) = stdin {
-                // Closing the input tells Claude the prompt is complete.
-                let _ = stdin.write_all(prompt.as_bytes()).await;
-            }
-            let output = child.wait_with_output().await;
-            // The last line of output is the run's result.
-            let result = output.as_ref().ok().and_then(|out| {
-                String::from_utf8_lossy(&out.stdout)
-                    .lines()
-                    .rev()
-                    .find_map(|line| serde_json::from_str::<Value>(line).ok())
-            });
-            let failure = match (&output, &result) {
-                (Err(e), _) => Some(e.to_string()),
-                (_, Some(result)) if result["is_error"] == true => Some(
-                    result["result"]
-                        .as_str()
-                        .unwrap_or("Claude stopped with an error")
-                        .to_owned(),
-                ),
-                _ if !folder.join(format!("index.{layout}.html")).is_file() => {
+            let failure = match run_once(child, &prompt).await {
+                Err(e) => Some(e),
+                Ok(()) if !folder.join(format!("index.{layout}.html")).is_file() => {
                     Some("Claude did not write the redrawn page".into())
                 }
-                _ => None,
+                Ok(()) => None,
             };
             if failure.is_none()
                 && let Err(e) = crate::canvas::add_variant(&folder, &layout, &from)
@@ -2813,6 +2917,11 @@ mod tests {
         std::thread::sleep(Duration::from_millis(20));
         fs::write(folder.join("index.html"), "<h1>Hi</h1>").unwrap();
         assert!(page_version(&folder) > first);
+        // The list's icon is not part of the page, so drawing it does not reload the page.
+        let page = page_version(&folder);
+        std::thread::sleep(Duration::from_millis(20));
+        fs::write(folder.join(ICON), "<svg/>").unwrap();
+        assert_eq!(page_version(&folder), page);
     }
 
     #[test]
