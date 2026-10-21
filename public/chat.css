@@ -194,8 +194,33 @@
   font-weight: 600;
 }
 .chat-folder {
-  flex: none;
+  flex: 1;
+  min-width: 0;
   padding: 8px 12px 4px;
+}
+/* Under the list: where chats are saved, and the way to the archive. */
+.chat-list-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chat-archive-link {
+  margin-right: 4px;
+}
+/* An archived chat: its title and preview beside a Restore key. */
+.chat-row.chat-archived {
+  box-sizing: border-box;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  cursor: default;
+}
+.chat-restore {
+  flex: none;
+}
+.chat-archive-empty {
+  padding: 24px 12px;
 }
 .chat-folder.error {
   color: var(--theme-red);

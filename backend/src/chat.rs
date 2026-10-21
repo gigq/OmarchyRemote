@@ -898,6 +898,25 @@ pub fn start(kind: Kind) -> Chats {
     chats
 }
 impl Chats {
+    /// A canvas's icon in a list entry, where Claude has drawn one.
+    fn add_icon(&self, chat: &mut Value) {
+        if self.kind != Kind::Canvas {
+            return;
+        }
+        let id = chat["id"].as_str().unwrap_or_default().to_owned();
+        let icon = FsPath::new(chat["folder"].as_str().unwrap_or_default()).join(ICON);
+        let changed = fs::metadata(&icon)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|m| m.duration_since(UNIX_EPOCH).ok());
+        if let Some(changed) = changed {
+            chat["icon"] = json!(format!(
+                "{}{ICON}?v={}",
+                self.view(&id),
+                changed.as_millis()
+            ));
+        }
+    }
     /// A Canvas session's page: its address, its version, and whether it has been written yet.
     fn describe_page(&self, value: &mut Value, id: &str, folder: Option<&FsPath>, session: &str) {
         if self.kind != Kind::Canvas {
@@ -1502,6 +1521,8 @@ pub fn router<S: Clone + std::marker::Send + Sync + 'static>(chats: Chats) -> ax
         .route("/send", post(send))
         .route("/archive", post(archive))
         .route("/delete", post(delete))
+        .route("/restore", post(restore))
+        .route("/archived", get(archived))
         .route("/ws", get(upgrade))
         .route("/{id}", get(read))
         .route("/{id}/stop", post(stop))
@@ -1530,20 +1551,7 @@ pub async fn status(State(chats): State<Chats>) -> Result<Json<Value>, ApiError>
                     .get(&id)
                     .is_some_and(|r| r.live.lock().unwrap().busy)
             );
-            if chats.kind == Kind::Canvas {
-                let icon = FsPath::new(chat["folder"].as_str().unwrap_or_default()).join(ICON);
-                let changed = fs::metadata(&icon)
-                    .and_then(|m| m.modified())
-                    .ok()
-                    .and_then(|m| m.duration_since(UNIX_EPOCH).ok());
-                if let Some(changed) = changed {
-                    chat["icon"] = json!(format!(
-                        "{}{ICON}?v={}",
-                        chats.view(&id),
-                        changed.as_millis()
-                    ));
-                }
-            }
+            chats.add_icon(&mut chat);
             chat
         })
         .collect();
@@ -1574,7 +1582,21 @@ pub async fn status(State(chats): State<Chats>) -> Result<Json<Value>, ApiError>
         "efforts": EFFORTS,
         "defaults": {"model": model, "effort": effort},
         "chats": chats,
+        "archived": chat_files(&root.join("archives")).len(),
     })))
+}
+/// The archive: chats moved out of the list, newest first, which can be restored or deleted.
+pub async fn archived(State(chats): State<Chats>) -> Result<Json<Value>, ApiError> {
+    let root = chats.root().map_err(error)?;
+    prepare(&root).map_err(error)?;
+    let list: Vec<Value> = list(&root.join("archives"))
+        .into_iter()
+        .map(|mut chat| {
+            chats.add_icon(&mut chat);
+            chat
+        })
+        .collect();
+    Ok(Json(json!({"chats": list})))
 }
 
 pub async fn read(
@@ -2200,7 +2222,13 @@ pub async fn view(
     }
     let transcript = match chats.get(&id) {
         Some(running) => running.live.lock().unwrap().path.clone(),
-        None => find(&chats.root().map_err(error)?, &id).map_err(|_| missing())?,
+        None => {
+            // An archived canvas still shows its icon in the archive.
+            let root = chats.root().map_err(error)?;
+            find(&root, &id)
+                .or_else(|_| find(&root.join("archives"), &id))
+                .map_err(|_| missing())?
+        }
     };
     let mut folder = transcript.parent().ok_or_else(missing)?.to_owned();
     // `@3/…` is the page as turn 3 left it.
@@ -2587,28 +2615,38 @@ fn chat_dir(parent: &FsPath, path: &FsPath) -> anyhow::Result<PathBuf> {
     Ok(dir.to_owned())
 }
 /// Moves a chat's folder to `archives`, keeping Claude's session so it can be resumed.
-fn archive_dir(config: &FsPath, root: &FsPath, path: &FsPath) -> anyhow::Result<PathBuf> {
-    let dir = chat_dir(root, path)?;
-    let session = load(path)?.session;
-    let archives = root.join("archives");
-    private_dir(&archives)?;
+/// Moves a chat's folder into `parent`, with Claude's logs of its sessions so they can still be
+/// resumed there; a name already taken there gains a number. Returns the new folder.
+fn relocate(config: &FsPath, dir: &FsPath, parent: &FsPath) -> anyhow::Result<PathBuf> {
+    let session = load(&dir.join(FILE))?.session;
     let name = dir
         .file_name()
         .unwrap_or_default()
         .to_string_lossy()
         .into_owned();
-    let mut target = archives.join(&name);
+    let mut target = parent.join(&name);
     let mut copy = 2;
     while fs::symlink_metadata(&target).is_ok() {
-        target = archives.join(format!("{name}-{copy}"));
+        target = parent.join(format!("{name}-{copy}"));
         copy += 1;
     }
-    let sessions = sessions(&dir, session);
-    fs::rename(&dir, &target)?;
+    let sessions = sessions(dir, session);
+    fs::rename(dir, &target)?;
     for session in sessions {
-        move_session(config, &dir, &target, &session);
+        move_session(config, dir, &target, &session);
     }
     Ok(target)
+}
+fn archive_dir(config: &FsPath, root: &FsPath, path: &FsPath) -> anyhow::Result<PathBuf> {
+    let dir = chat_dir(root, path)?;
+    let archives = root.join("archives");
+    private_dir(&archives)?;
+    relocate(config, &dir, &archives)
+}
+/// Brings an archived chat back to the list, with its sessions.
+fn restore_dir(config: &FsPath, root: &FsPath, path: &FsPath) -> anyhow::Result<PathBuf> {
+    let dir = chat_dir(&root.join("archives"), path)?;
+    relocate(config, &dir, root)
 }
 fn claude_config() -> anyhow::Result<PathBuf> {
     Ok(match std::env::var_os("CLAUDE_CONFIG_DIR") {
@@ -2643,20 +2681,40 @@ fn sessions(dir: &FsPath, session: String) -> Vec<String> {
 #[derive(Deserialize)]
 pub struct Batch {
     ids: Vec<String>,
+    /// Chats in the archive rather than the list: to delete, or to restore.
+    #[serde(default)]
+    archived: bool,
+}
+#[derive(Clone, Copy, PartialEq)]
+enum Manage {
+    Archive,
+    Delete,
+    Restore,
 }
 pub async fn archive(
     State(chats): State<Chats>,
     Json(batch): Json<Batch>,
 ) -> Result<Json<Value>, ApiError> {
-    manage(&chats, batch.ids, false).await
+    manage(&chats, batch.ids, Manage::Archive, false).await
+}
+pub async fn restore(
+    State(chats): State<Chats>,
+    Json(batch): Json<Batch>,
+) -> Result<Json<Value>, ApiError> {
+    manage(&chats, batch.ids, Manage::Restore, true).await
 }
 pub async fn delete(
     State(chats): State<Chats>,
     Json(batch): Json<Batch>,
 ) -> Result<Json<Value>, ApiError> {
-    manage(&chats, batch.ids, true).await
+    manage(&chats, batch.ids, Manage::Delete, batch.archived).await
 }
-async fn manage(chats: &Chats, ids: Vec<String>, delete: bool) -> Result<Json<Value>, ApiError> {
+async fn manage(
+    chats: &Chats,
+    ids: Vec<String>,
+    action: Manage,
+    archived: bool,
+) -> Result<Json<Value>, ApiError> {
     if ids.is_empty() || ids.len() > 1000 {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -2665,9 +2723,10 @@ async fn manage(chats: &Chats, ids: Vec<String>, delete: bool) -> Result<Json<Va
     }
     let root = chats.root().map_err(error)?;
     prepare(&root).map_err(error)?;
+    let archives = root.join("archives");
     let (mut done, mut failed) = (Vec::new(), Vec::new());
     for id in ids {
-        let path = match find(&root, &id) {
+        let path = match find(if archived { &archives } else { &root }, &id) {
             Ok(path) => path,
             Err(e) => {
                 failed.push(json!({"id":id,"error":e.to_string()}));
@@ -2675,17 +2734,23 @@ async fn manage(chats: &Chats, ids: Vec<String>, delete: bool) -> Result<Json<Va
             }
         };
         chats.retire(&id).await;
-        let result = if delete {
-            claude_config().and_then(|config| delete_dir(&config, &root, &path, &id))
-        } else {
-            claude_config().and_then(|config| archive_dir(&config, &root, &path).map(|_| ()))
-        };
+        let result = claude_config().and_then(|config| match action {
+            Manage::Delete if archived => delete_dir(&config, &archives, &path, &id),
+            Manage::Delete => delete_dir(&config, &root, &path, &id),
+            Manage::Archive => archive_dir(&config, &root, &path).map(|_| ()),
+            Manage::Restore => restore_dir(&config, &root, &path).map(|_| ()),
+        });
         match result {
             Ok(()) => done.push(id),
             Err(e) => failed.push(json!({"id":id,"error":e.to_string()})),
         }
     }
-    let mut events = vec![json!({"type":"removed","ids":done})];
+    let kind = if action == Manage::Restore {
+        "restored"
+    } else {
+        "removed"
+    };
+    let mut events = vec![json!({"type":kind,"ids":done})];
     chats.stamp(&mut events);
     chats.emit(events);
     Ok(Json(json!({"done":done,"failed":failed})))
@@ -3290,6 +3355,47 @@ mod tests {
             archive_dir(&config, &root, &again.join(FILE)).unwrap(),
             root.join("archives").join(format!("{name}-2"))
         );
+    }
+
+    #[test]
+    fn an_archived_chat_comes_back_with_its_files_and_sessions() {
+        let dir = crate::dictation::AudioDir::new().unwrap();
+        let (root, config) = (dir.0.join("Canvas"), dir.0.join("claude"));
+        let conversation = sample();
+        let name = "2026-10-03-plan-dinner-ideas-1b8ab544";
+        let folder = new_dir(&root, name).unwrap();
+        save(&conversation, &folder.join(FILE)).unwrap();
+        write(&folder.join("index.html"), "<h1>Dinner</h1>");
+        // A canvas that forked has an earlier session too.
+        let earlier = "2d8ab544-8cc5-430e-8a40-0aec58bc3b10";
+        crate::canvas::left(&folder, earlier).unwrap();
+        write(&project(&config, &folder, &conversation.session), "log");
+        write(&project(&config, &folder, earlier), "earlier log");
+        let archived = archive_dir(&config, &root, &folder.join(FILE)).unwrap();
+        assert_eq!(list(&root.join("archives")).len(), 1);
+        // Only an archived chat can be restored.
+        assert!(restore_dir(&config, &root, &folder.join(FILE)).is_err());
+        let restored = restore_dir(&config, &root, &archived.join(FILE)).unwrap();
+        assert_eq!(restored, folder);
+        assert!(!archived.exists());
+        assert!(list(&root.join("archives")).is_empty());
+        assert_eq!(list(&root).len(), 1);
+        assert!(restored.join("index.html").exists());
+        for session in [conversation.session.as_str(), earlier] {
+            assert!(project(&config, &restored, session).exists(), "{session}");
+            assert!(!project(&config, &archived, session).exists(), "{session}");
+        }
+        // Deleting from the archive removes the folder and its sessions.
+        let archived = archive_dir(&config, &root, &restored.join(FILE)).unwrap();
+        delete_dir(
+            &config,
+            &root.join("archives"),
+            &archived.join(FILE),
+            &conversation.id,
+        )
+        .unwrap();
+        assert!(!archived.exists());
+        assert!(!project(&config, &archived, earlier).exists());
     }
 
     #[test]

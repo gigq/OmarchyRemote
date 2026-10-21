@@ -97,7 +97,23 @@
       this.cancelSelect = button('Cancel', () => this.select(false), 'chat-text-button');
       this.cancelSelect.hidden = true;
       this.newButton = iconButton('compose', 'New chat', () => this.startNew(), 'chat-new');
-      listBar.append(this.heading, this.selectButton, this.cancelSelect, this.newButton);
+      // The archive: chats moved out of the list, to restore or delete.
+      this.archiveOpen = false;
+      this.archivedChats = [];
+      this.archiveBack = iconButton(
+        'back',
+        `Back to ${this.options.title.toLowerCase()}`,
+        () => this.openArchive(false),
+        'chat-back'
+      );
+      this.archiveBack.hidden = true;
+      listBar.append(
+        this.archiveBack,
+        this.heading,
+        this.selectButton,
+        this.cancelSelect,
+        this.newButton
+      );
       // Selecting several chats offers Archive and Delete; Delete asks to confirm first.
       this.selected = new Set();
       this.actionBar = node('div', 'chat-actions');
@@ -130,7 +146,15 @@
       );
       this.empty.hidden = true;
       this.listStatus = node('p', 'remote-status chat-folder');
-      this.listView.append(listBar, this.list, this.empty, this.actionBar, this.listStatus);
+      this.archiveLink = button(
+        '',
+        () => this.openArchive(true),
+        'chat-text-button chat-archive-link'
+      );
+      this.archiveLink.hidden = true;
+      const foot = node('div', 'chat-list-foot');
+      foot.append(this.listStatus, this.archiveLink);
+      this.listView.append(listBar, this.list, this.empty, this.actionBar, foot);
 
       this.threadView = node('section', 'chat-thread-view');
       this.threadView.hidden = true;
@@ -383,6 +407,8 @@
       try {
         const data = await this.request('');
         this.chats = data.chats;
+        this.archivedCount = data.archived || 0;
+        if (this.archiveOpen) this.archivedChats = (await this.request('/archived')).chats;
         this.folder = data.folder;
         this.available = data.available;
         // The agents installed on the host, each with its models and effort levels.
@@ -405,6 +431,9 @@
       }
     }
     renderList() {
+      this.archiveLink.hidden = this.archiveOpen || !this.archivedCount;
+      this.archiveLink.textContent = `Archived · ${this.archivedCount}`;
+      if (this.archiveOpen) return this.renderArchive();
       this.list.replaceChildren(
         ...this.chats.map(chat => {
           const selecting = this.selecting;
@@ -467,6 +496,75 @@
       this.selectButton.hidden = this.selecting || !this.chats.length;
       this.renderActions();
     }
+    openArchive(open) {
+      if (open) this.select(false);
+      this.archiveOpen = open;
+      this.listError = '';
+      this.archiveBack.hidden = !open;
+      this.heading.textContent = open ? 'Archived' : this.options.title;
+      this.newButton.hidden = open;
+      this.renderList();
+      this.refresh();
+    }
+    // Archived chats, newest first: each restores to the list, or is deleted for good.
+    renderArchive() {
+      this.list.replaceChildren(
+        ...this.archivedChats.map(chat => {
+          const row = node('div', 'chat-row chat-archived');
+          row.setAttribute('role', 'listitem');
+          const top = node('span', 'chat-row-top');
+          top.append(
+            node('span', 'chat-row-title', chat.title),
+            node('time', '', ago(chat.updated))
+          );
+          const text = node('span', 'chat-row-text');
+          text.append(top, node('span', 'chat-row-preview', chat.preview || ''));
+          const icon = this.listIcon(chat);
+          const restore = button(
+            'Restore',
+            () => this.unarchive(chat),
+            'chat-text-button chat-restore'
+          );
+          restore.setAttribute('aria-label', `Restore ${chat.title}`);
+          row.append(...(icon ? [icon] : []), text, restore);
+          contextMenu(row, () => ({
+            title: chat.title,
+            items: [
+              { label: 'Restore', run: () => this.unarchive(chat) },
+              {
+                label: 'Delete',
+                danger: true,
+                confirm: `Delete “${chat.title}” permanently?`,
+                run: () => this.unarchive(chat, true),
+              },
+            ],
+          }));
+          return row;
+        })
+      );
+      if (!this.archivedChats.length)
+        this.list.append(node('p', 'remote-empty chat-archive-empty', 'Nothing archived.'));
+      this.empty.hidden = true;
+      this.selectButton.hidden = true;
+      this.listStatus.textContent =
+        this.listError || `Archived in ${this.folder || '~/Chats'}/archives`;
+      this.listStatus.classList.toggle('error', !!this.listError);
+    }
+    // Restores an archived chat to the list, or deletes it for good.
+    async unarchive(chat, remove = false) {
+      try {
+        const result = await this.request(remove ? '/delete' : '/restore', {
+          ids: [chat.id],
+          archived: true,
+        });
+        this.listError = result.failed.length
+          ? `Could not ${remove ? 'delete' : 'restore'} it: ${result.failed[0].error}`
+          : '';
+      } catch (e) {
+        this.listError = e.message;
+      }
+      this.refresh();
+    }
     select(on) {
       if (on) this.listError = '';
       this.selecting = on;
@@ -487,9 +585,13 @@
     renderActions() {
       const count = this.selected.size;
       const chats = count === 1 ? 'chat' : 'chats';
-      this.heading.textContent = this.selecting ? `${count} selected` : this.options.title;
+      this.heading.textContent = this.selecting
+        ? `${count} selected`
+        : this.archiveOpen
+          ? 'Archived'
+          : this.options.title;
       this.cancelSelect.hidden = !this.selecting;
-      this.newButton.hidden = !!this.selecting;
+      this.newButton.hidden = !!this.selecting || this.archiveOpen;
       this.actionBar.hidden = !this.selecting;
       this.actionBar.classList.toggle('confirming', !!this.confirming);
       this.actionText.textContent = this.confirming

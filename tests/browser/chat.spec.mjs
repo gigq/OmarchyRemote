@@ -86,8 +86,8 @@ async function setup(page, extra = [], before) {
   state.managed = [];
   for (const action of ['archive', 'delete'])
     await page.route(`**/api/chat/${action}`, r => {
-      const { ids } = r.request().postDataJSON();
-      state.managed.push({ action, ids });
+      const { ids, archived } = r.request().postDataJSON();
+      state.managed.push({ action, ids, ...(archived ? { archived } : {}) });
       const failed = ids.filter(id => id === state.failId);
       const done = ids.filter(id => id !== state.failId);
       state.chats = state.chats.filter(c => !done.includes(c.id));
@@ -367,6 +367,55 @@ test('a right-click or a long press on a chat offers rename, archive, and delete
   await expect(menu.getByRole('menuitem', { name: 'Rename' })).toBeFocused();
   await page.mouse.click(5, 5);
   await expect(menu).toBeHidden();
+});
+
+test('archived chats are listed apart, and come back or go for good', async ({ page }) => {
+  const archived = [
+    { id: more[0].id, title: 'Old notes', preview: 'Notes', updated: new Date().toISOString() },
+    { id: more[1].id, title: 'Trip plan', preview: 'Day one', updated: new Date().toISOString() },
+  ];
+  const { app, state } = await setup(page, [], async (page, state) => {
+    state.status = { archived: 2 };
+    state.archive = [];
+    await page.route('**/api/chat/archived', r => r.fulfill({ json: { chats: archived } }));
+    await page.route('**/api/chat/restore', r => {
+      const body = r.request().postDataJSON();
+      state.archive.push({ action: 'restore', ...body });
+      const chat = archived.find(c => body.ids.includes(c.id));
+      archived.splice(archived.indexOf(chat), 1);
+      state.chats.push({ ...chat, busy: false });
+      state.status = { archived: archived.length };
+      return r.fulfill({ json: { done: body.ids, failed: [] } });
+    });
+  });
+  const link = app.getByRole('button', { name: 'Archived · 2' });
+  await expect(link).toBeVisible();
+  await page.screenshot({ path: 'artifacts/browser/chat-archive-link.png' });
+  await link.click();
+  await expect(app.locator('.chat-heading')).toHaveText('Archived');
+  await expect(app.getByRole('button', { name: 'New chat' })).toBeHidden();
+  const rows = app.locator('.chat-archived');
+  await expect(rows.locator('.chat-row-title')).toHaveText(['Old notes', 'Trip plan']);
+  await expect(app.locator('.chat-folder')).toHaveText('Archived in ~/Chats/archives');
+  await page.screenshot({ path: 'artifacts/browser/chat-archive.png' });
+  // Restore brings it back to the list.
+  await app.getByRole('button', { name: 'Restore Old notes' }).click();
+  await expect
+    .poll(() => state.archive)
+    .toEqual([{ action: 'restore', ids: [more[0].id], archived: true }]);
+  await expect(rows).toHaveCount(1);
+  // Delete, from its menu, asks first and deletes from the archive.
+  await rows.first().click({ button: 'right' });
+  await page.getByRole('menu').getByRole('menuitem', { name: 'Delete' }).click();
+  await expect(page.getByText('Delete “Trip plan” permanently?')).toBeVisible();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await expect
+    .poll(() => state.managed)
+    .toEqual([{ action: 'delete', ids: [more[1].id], archived: true }]);
+  // Back in the list, the restored chat is there.
+  await app.getByRole('button', { name: 'Back to chats' }).click();
+  await expect(app.locator('.chat-heading')).toHaveText('Chats');
+  await expect(app.locator('.chat-row-title')).toContainText(['Old notes']);
 });
 
 test('deleting asks first, and a chat that fails stays with the reason', async ({ page }) => {
