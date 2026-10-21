@@ -1430,7 +1430,7 @@ The page can answer for the person: parent.postMessage({ type: 'canvas', text: '
 
 Keep your text reply to one or two short sentences in plain speech, with no Markdown: it is shown as a subtitle and may be read aloud. Put the detail on the page. Each message's <canvas-context> ends with a design level: how much time to spend on the page's UI. How much to research comes from what the person asks. Get a useful page up early; search and fetch the web for anything current.";
 /// What a one-off run is asked when a canvas needs an icon for the list.
-const ICON_PROMPT: &str = "Draw an icon for this canvas as icon.svg in this folder: a square SVG that stands for what the conversation is about, shown small beside its title in the list of canvases. Leave every other file as it is. Reply with one short sentence.";
+const ICON_PROMPT: &str = "Draw an icon for this canvas as icon.svg in this folder: a square, polished app icon for what the conversation is about, with the craft of a well-designed iOS app icon. Then render it to a PNG outside this folder (in /tmp) with rsvg-convert, look at it, and refine it until it looks professional and reads clearly at small sizes. Leave every other file as it is. Reply with one short sentence.";
 /// How much design work a Canvas page gets, chosen per canvas; each level's words go to Claude
 /// with every message. They set how far to go, never a look.
 const DESIGNS: [(&str, &str); 4] = [
