@@ -9,6 +9,7 @@
         dismissOnSend = false,
         draftStore = null,
         compactControls = false,
+        direct = null,
         send,
         key,
         focus,
@@ -16,6 +17,8 @@
       }
     ) {
       this.compactControls = compactControls;
+      // A terminal's own input: on a computer, keys go straight to it, with no panel at all.
+      this.direct = direct;
       this.draftStore = draftStore;
       this.dismissOnSend = dismissOnSend;
       this.send = send;
@@ -181,6 +184,15 @@
         this.hideButton.classList.add('native-dismiss');
       }
       this.configure();
+      this.classChanged = () => this.configure();
+      window.addEventListener('hyprland-desktop-class', this.classChanged);
+    }
+    get isDirect() {
+      return !!this.direct && !!window.HyprlandUtil?.desktopClass();
+    }
+    // Where typing goes: the terminal's own input when direct, or this panel's field.
+    get target() {
+      return this.isDirect ? this.direct : this.field;
     }
     loadDraft(id) {
       if (this.drafts.has(id)) return this.drafts.get(id);
@@ -224,6 +236,7 @@
       button.title = label;
     }
     configure() {
+      this.element.classList.toggle('direct', this.isDirect);
       this.tools.hidden = this.message;
       this.mode.textContent = this.message ? 'Message' : 'Keys';
       this.field.setAttribute(
@@ -321,11 +334,16 @@
       this.storeDraft(id, text);
     }
     dismiss() {
+      this.target.blur();
       this.field.blur();
       this.onHide();
       window.dispatchEvent(new Event('hyprland-keyboard-dismiss'));
     }
     focus() {
+      if (this.isDirect) {
+        this.direct.focus({ preventScroll: true });
+        return;
+      }
       this.element.hidden = false;
       this.field.focus({ preventScroll: true });
       if (!this.message)
@@ -333,7 +351,10 @@
     }
     show(visible) {
       this.element.hidden = !visible;
-      if (!visible) this.field.blur();
+      if (!visible) {
+        this.field.blur();
+        if (this.isDirect) this.direct.blur();
+      }
     }
     select(id) {
       if (id !== this.id) {
@@ -348,6 +369,7 @@
       this.configure();
     }
     dispose() {
+      window.removeEventListener('hyprland-desktop-class', this.classChanged);
       this.saveDraft();
       this.field.blur();
       this.element.remove();

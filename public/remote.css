@@ -96,6 +96,10 @@
   position: absolute !important;
   inset: 0;
 }
+/* On a computer its input takes typing from the keyboard; xterm keeps it transparent. */
+.desktop-class .terminal-parser .xterm-helper-textarea {
+  visibility: visible;
+}
 .native-terminal-scroll {
   position: absolute;
   inset: 0;
@@ -156,6 +160,11 @@
   overflow-x: auto;
   gap: 3px;
   touch-action: pan-x;
+}
+/* On a computer, real keys stand in for the touch key row, and a terminal takes typing itself. */
+.desktop-class .native-input-tools,
+.native-input-panel.direct {
+  display: none !important;
 }
 .native-input-tools button,
 .native-send {

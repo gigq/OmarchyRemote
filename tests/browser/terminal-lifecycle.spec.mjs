@@ -34,29 +34,30 @@ test('active terminal accepts typing immediately and exited tabs/windows disappe
     dispatchEvent(new Event('hyprland-hardware-keyboard'));
   });
   await p.keyboard.press('Meta+Enter');
-  await expect(p.locator('.native-input:focus')).toHaveCount(1);
+  // With a keyboard attached, the terminal takes typing itself.
+  await expect(p.locator('.xterm-helper-textarea:focus')).toHaveCount(1);
   await expect(p.locator('#remote-terminal-app .remote-status')).toHaveText(/connected/);
   await p.keyboard.type('hello');
   await expect.poll(() => inputs.join('')).toBe('hello');
   await p.keyboard.press('Meta+Comma');
   await p.keyboard.press('Meta+ArrowLeft');
-  await expect(p.locator('.terminal-tab .native-input')).toBeFocused();
+  await expect(p.locator('.terminal-tab .xterm-helper-textarea')).toBeFocused();
   await p.keyboard.press('Meta+t');
   await expect.poll(() => sockets.length).toBe(2);
-  await expect(p.locator('.terminal-tab:not([hidden]) .native-input')).toBeFocused();
+  await expect(p.locator('.terminal-tab:not([hidden]) .xterm-helper-textarea')).toBeFocused();
   // Closing an inactive shell must preserve the focused shell.
   sockets[0].send(JSON.stringify({ type: 'exit' }));
   await expect(p.locator('.terminal-tab')).toHaveCount(1);
-  await expect(p.locator('.terminal-tab .native-input')).toBeFocused();
+  await expect(p.locator('.terminal-tab .xterm-helper-textarea')).toBeFocused();
   await p.keyboard.press('Meta+Digit1');
   await p.keyboard.press('Meta+Digit2');
-  await expect(p.locator('.terminal-tab .native-input')).toBeFocused();
+  await expect(p.locator('.terminal-tab .xterm-helper-textarea')).toBeFocused();
   // Recover if a transition or native responder change blurs the already-active input.
-  await p.locator('.terminal-tab .native-input').evaluate(el => el.blur());
-  await expect(p.locator('.terminal-tab .native-input')).toBeFocused();
+  await p.locator('.terminal-tab .xterm-helper-textarea').evaluate(el => el.blur());
+  await expect(p.locator('.terminal-tab .xterm-helper-textarea')).toBeFocused();
   await p.keyboard.press('Meta+e');
   await p.keyboard.press('Escape');
-  await expect(p.locator('.terminal-tab .native-input')).toBeFocused();
+  await expect(p.locator('.terminal-tab .xterm-helper-textarea')).toBeFocused();
   await p.keyboard.type('again');
   await expect.poll(() => inputs.join('')).toBe('helloagain');
   holdClose = true;

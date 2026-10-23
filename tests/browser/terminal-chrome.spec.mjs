@@ -24,7 +24,9 @@ test('hardware keyboard terminal uses keyboard tabs and keeps its prompt at the 
   const prompt = await root.locator('.remote-terminal').boundingBox(),
     frame = await root.boundingBox();
   expect(prompt.y - frame.y).toBeLessThan(1);
-  await expect(root.locator('textarea.native-input')).toBeFocused();
+  // Typing goes straight to the terminal: no message box or touch key row.
+  await expect(root.locator('.xterm-helper-textarea')).toBeFocused();
+  await expect(root.locator('.native-input-panel')).toBeHidden();
   await expect(root.locator('.native-input-tools')).toBeHidden();
   await p.keyboard.press('Meta+t');
   await expect(root.locator('.terminal-tabs')).toBeVisible();
@@ -62,7 +64,7 @@ test('Command Return focuses input without a click and preserves typing during i
     dispatchEvent(new Event('hyprland-hardware-keyboard'));
   });
   await p.keyboard.press('Meta+Enter');
-  await expect(p.locator('#remote-terminal-app textarea.native-input')).toBeFocused();
+  await expect(p.locator('#remote-terminal-app .xterm-helper-textarea')).toBeFocused();
   await p.keyboard.type('echo startup');
   expect(input).toEqual([]);
   await expect.poll(() => typeof release).toBe('function');
@@ -72,5 +74,5 @@ test('Command Return focuses input without a click and preserves typing during i
   await expect.poll(() => input.join('')).toBe('echo startup ready');
   await p.keyboard.press('Meta+BracketLeft');
   await p.keyboard.press('Meta+Enter');
-  await expect(p.locator('#remote-terminal-app textarea.native-input')).toBeFocused();
+  await expect(p.locator('#remote-terminal-app .xterm-helper-textarea')).toBeFocused();
 });

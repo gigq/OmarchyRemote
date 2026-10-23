@@ -87,7 +87,8 @@ test('native focus follows active apps, survives closing Terminal and rejects st
   ).toBe(true);
   await expect(composer).toHaveValue('unsent draft');
   await page.keyboard.press('Meta+Enter');
-  const terminal = page.locator('#remote-terminal-app textarea.native-input');
+  // With a keyboard attached, Terminal takes typing itself, not through a message box.
+  const terminal = page.locator('#remote-terminal-app .xterm-helper-textarea');
   await expect.poll(latest).not.toBe(herdRequest);
   expect(await deliver(herdRequest)).toBe(false);
   await page.waitForTimeout(400);

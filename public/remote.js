@@ -445,8 +445,12 @@
       this.resizeObserver = new ResizeObserver(() => this.resize());
       this.resizeObserver.observe(this.host);
       this.host.addEventListener('click', () => bridge.keyboard());
-      this.nativeInput = bridge.createInput(root, false, (text, enter) =>
-        this.input(text + (enter ? '\r' : ''))
+      // On a computer, typing goes straight to the terminal; on touch, through the key panel.
+      this.nativeInput = bridge.createInput(
+        root,
+        false,
+        (text, enter) => this.input(text + (enter ? '\r' : '')),
+        { direct: this.term.textarea }
       );
     }
     resize() {
@@ -2018,8 +2022,8 @@
         return;
       }
       if (input) {
-        this.focusElement(input.field, input);
-        if (document.activeElement !== input.field && !this.pendingNativeFocus) {
+        this.focusElement(input.target, input);
+        if (document.activeElement !== input.target && !this.pendingNativeFocus) {
           if (this.focusRetries++ < 60) this.reconcileFocus();
         } else this.focusRetries = 0;
         return;
@@ -2077,8 +2081,10 @@
       )
         return reject();
       if (perform && request.input) request.input.element.hidden = false;
-      if (!request.target.checkVisibility()) return reject();
-      const rect = request.target.getBoundingClientRect();
+      // A terminal's own input sits off screen by design; its window is what must show.
+      const shown = request.input?.isDirect ? root : request.target;
+      if (!shown.checkVisibility()) return reject();
+      const rect = shown.getBoundingClientRect();
       if (rect.right <= 0 || rect.left >= innerWidth || rect.bottom <= 0 || rect.top >= innerHeight)
         return reject();
       if (!perform) return true;

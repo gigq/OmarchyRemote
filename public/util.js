@@ -95,5 +95,29 @@
     },
     write: (k, v) => storage.set(k, JSON.stringify(v)),
   };
-  window.HyprlandUtil = { node, mount, button, storage };
+  /* A computer, or a phone or tablet with a keyboard attached: typing comes from real keys, so
+     apps leave out what touch typing needs (the row of Esc, Tab, arrow, and Ctrl keys, and
+     Terminal's message box). The desktop app is one; the iOS, Android, and visionOS apps are not
+     unless a keyboard is connected; a browser is one unless it is on iOS or Android, or its main
+     pointer is a finger. */
+  const desktopClass = () => {
+    if (window.__HYPRLAND_HARDWARE_KEYBOARD__ === true) return true;
+    if (window.__OMARCHY_PLATFORM__ === 'desktop') return true;
+    if (window.__HYPRLAND_NATIVE_FOCUS__ || window.__OMARCHY_PLATFORM__) return false;
+    const { userAgent = '', platform = '', maxTouchPoints = 0 } = globalThis.navigator || {};
+    const touchSystem =
+      /iPhone|iPad|iPod|Android/.test(userAgent) || (platform === 'MacIntel' && maxTouchPoints > 1);
+    return !touchSystem && !globalThis.matchMedia?.('(pointer: coarse)').matches;
+  };
+  const markDesktopClass = () => {
+    const on = desktopClass();
+    const root = globalThis.document?.documentElement;
+    if (!root || root.classList.contains('desktop-class') === on) return;
+    root.classList.toggle('desktop-class', on);
+    window.dispatchEvent(new Event('hyprland-desktop-class'));
+  };
+  markDesktopClass();
+  window.addEventListener('hyprland-hardware-keyboard', markDesktopClass);
+  globalThis.matchMedia?.('(pointer: coarse)').addEventListener?.('change', markDesktopClass);
+  window.HyprlandUtil = { node, mount, button, storage, desktopClass };
 })();
