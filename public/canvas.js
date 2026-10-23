@@ -64,7 +64,22 @@
       };
       window.addEventListener('resize', this.relayout);
       // Claude's reply, one line until tapped.
-      this.subtitle = button('', () => this.expand(), 'canvas-subtitle');
+      // Not a <button>, so its words can be selected and copied; a tap that selected nothing
+      // shows or hides the rest.
+      this.subtitle = node('div', 'canvas-subtitle');
+      this.subtitle.setAttribute('role', 'button');
+      this.subtitle.tabIndex = 0;
+      this.subtitle.onclick = e => {
+        e.stopPropagation();
+        const selection = getSelection();
+        if (!selection.isCollapsed && this.subtitle.contains(selection.anchorNode)) return;
+        this.expand();
+      };
+      this.subtitle.onkeydown = e => {
+        if (e.target !== this.subtitle || (e.key !== 'Enter' && e.key !== ' ')) return;
+        e.preventDefault();
+        this.expand();
+      };
       this.subtitle.setAttribute('aria-expanded', 'false');
       this.subtitle.hidden = true;
       // Back and forward step through the pages earlier turns left; sending from one continues

@@ -473,3 +473,31 @@ test('an empty canvas list shows the Canvas paintbrush, not Chat’s bubbles', a
   await expect(app.locator('.chat-list-empty-icon')).toHaveText('\uf1fc');
   await page.screenshot({ path: 'artifacts/browser/canvas-empty.png' });
 });
+
+test('the reply under the page can be selected and copied, and a tap still opens it', async ({
+  page,
+}) => {
+  const { app } = await setup(page);
+  await app.locator('.chat-row').click();
+  const subtitle = app.getByRole('button', { name: /Here is a dinner plan/ });
+  const said = app.locator('.canvas-said');
+  await expect(said).toHaveText('Here is a dinner plan.');
+  expect(
+    await said.evaluate(e => getComputedStyle(e).webkitUserSelect || getComputedStyle(e).userSelect)
+  ).toBe('text');
+  // Dragging across the words selects them, without opening or closing the subtitle.
+  const box = await said.boundingBox();
+  await page.mouse.move(box.x + 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 2, box.y + box.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => getSelection().toString())).toContain('dinner plan');
+  await expect(subtitle).toHaveAttribute('aria-expanded', 'false');
+  // A plain tap opens it, as before, and Enter closes it.
+  await page.evaluate(() => getSelection().removeAllRanges());
+  await subtitle.click();
+  await expect(subtitle).toHaveAttribute('aria-expanded', 'true');
+  await subtitle.focus();
+  await page.keyboard.press('Enter');
+  await expect(subtitle).toHaveAttribute('aria-expanded', 'false');
+});

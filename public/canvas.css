@@ -72,6 +72,9 @@
   line-height: 1.5;
   text-align: left;
   cursor: pointer;
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 .canvas-asked {
   display: none;
