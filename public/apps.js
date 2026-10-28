@@ -124,6 +124,14 @@
     description: 'claude draws the answer',
     native: true,
   });
+  define('corral', {
+    name: 'corral',
+    color: 'var(--theme-yellow)',
+    glyph: 'co',
+    icon: '\uf0c0',
+    description: 'channels and DMs with your agents',
+    native: true,
+  });
   define('chat', {
     name: 'chat',
     color: 'var(--theme-magenta)',
@@ -241,6 +249,7 @@
     'muster',
     'chat',
     'canvas',
+    'corral',
     'btop',
     'services',
     'lazydocker',

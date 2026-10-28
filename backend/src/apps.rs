@@ -123,6 +123,11 @@ const SERVICES: &[(&str, &str, &[&str])] = &[
     ("chat", "Chat", &["conversations", "stream", "stop"]),
     ("canvas", "Canvas", &["sessions", "pages", "stream", "stop"]),
     (
+        "corral",
+        "Corral",
+        &["agents", "channels", "messages", "stream"],
+    ),
+    (
         "muster",
         "Muster",
         &["projects", "questions", "answers", "messages"],

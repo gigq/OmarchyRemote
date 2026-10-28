@@ -4,6 +4,7 @@ mod browser;
 mod canvas;
 mod chat;
 mod codexbar;
+mod corral;
 mod dictation;
 mod files;
 mod files_ops;
@@ -48,6 +49,7 @@ struct App {
     preferences: preferences::Shared,
     chats: chat::Chats,
     canvas: chat::Chats,
+    corral: corral::Corral,
 }
 type ApiError = (StatusCode, Json<Value>);
 fn error(e: impl std::fmt::Display) -> ApiError {
@@ -580,6 +582,7 @@ async fn main() -> anyhow::Result<()> {
         )?)),
         chats: chat::start(chat::Kind::Chat),
         canvas: chat::start(chat::Kind::Canvas),
+        corral: corral::start()?,
     };
     let router = Router::new()
         .route("/api/capabilities", get(capabilities))
@@ -634,6 +637,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/terminal/{id}/close", post(terminal_close))
         .nest("/api/chat", chat::router(app.chats.clone()))
         .nest("/api/canvas", chat::router(app.canvas.clone()))
+        .nest("/api/corral", corral::router(app.corral.clone()))
         .route("/api/muster", get(muster::board))
         .route("/api/muster/hidden", post(muster::hide))
         .route("/api/muster/reviewed", post(muster::reviewed))
