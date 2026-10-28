@@ -243,3 +243,43 @@ test('a sent message stays in view as the working line and replies arrive', asyn
   await page.waitForTimeout(200);
   expect(await list.evaluate(e => e.scrollTop)).toBeLessThan(10);
 });
+
+test('Tab steps through the names to mention, putting each in place', async ({ page }) => {
+  const { app, state } = await setup(page);
+  await app.getByRole('listitem').filter({ hasText: 'infra' }).click();
+  await app.getByRole('button', { name: 'Write a message' }).click();
+  const field = app.locator('textarea.native-input');
+  await field.pressSequentially('hey @');
+  const chips = app.locator('.corral-suggestion');
+  await expect(chips).toHaveText(['@alex', '@sam', '@here']);
+  await field.press('Tab');
+  await expect(field).toHaveValue('hey @alex');
+  await expect(chips.nth(0)).toHaveClass(/active/);
+  await field.press('Tab');
+  await expect(field).toHaveValue('hey @sam');
+  await expect(chips.nth(1)).toHaveClass(/active/);
+  await field.press('Tab');
+  await field.press('Tab');
+  // Round to the first again, and Shift-Tab goes back.
+  await expect(field).toHaveValue('hey @alex');
+  await field.press('Shift+Tab');
+  await expect(field).toHaveValue('hey @here');
+  // The open composer stands in for the prompt row; there is one message box.
+  await expect(app.locator('.corral-prompt-row')).toBeHidden();
+  await page.screenshot({ path: 'artifacts/browser/corral-tab.png' });
+  // Return keeps the name rather than sending.
+  await field.press('Enter');
+  await expect(field).toHaveValue('hey @here ');
+  await expect(app.locator('.corral-suggest')).toBeHidden();
+  expect(state.sent).toEqual([]);
+  // A narrowed @word cycles only its matches; Escape closes them.
+  await field.pressSequentially('and @s');
+  await expect(chips).toHaveText(['@sam']);
+  await field.press('Tab');
+  await expect(field).toHaveValue('hey @here and @sam');
+  await field.press('Escape');
+  await expect(app.locator('.corral-suggest')).toBeHidden();
+  await field.pressSequentially(' ok');
+  await field.press('Enter');
+  await expect.poll(() => state.sent).toEqual([{ id: INFRA, text: 'hey @here and @sam ok' }]);
+});

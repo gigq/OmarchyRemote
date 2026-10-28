@@ -122,6 +122,8 @@
       this.workingLine.append(this.workingText, this.stopKey);
       this.workingLine.hidden = true;
       this.suggestions = node('div', 'corral-suggest');
+      this.choices = [];
+      this.cycle = null;
       this.suggestions.hidden = true;
       this.promptRow = node('div', 'herdr-prompt-row corral-prompt-row');
       this.promptField = button('', () => bridge.keyboard());
@@ -142,6 +144,8 @@
         draftStore: 'omarchy-corral-drafts',
       });
       this.nativeInput.field.addEventListener('input', () => this.suggest());
+      // Ahead of the composer's own keys, which would send Tab and Escape on.
+      this.nativeInput.field.addEventListener('keydown', e => this.mentionKeys(e), true);
       this.resized = new ResizeObserver(() => {
         this.root.classList.toggle('corral-wide', this.root.clientWidth >= 700);
         this.layout();
@@ -427,43 +431,89 @@
     }
     // Names to mention, offered while an @word is being typed.
     suggest() {
+      this.cycle = null;
       const field = this.nativeInput.field;
       const before = field.value.slice(0, field.selectionStart);
       const m = before.match(/(?:^|\s)@([a-zA-Z0-9-]*)$/);
       const c = this.conversation(this.openId);
       if (!m || !c) {
         this.suggestions.hidden = true;
+        this.choices = [];
         return;
       }
       const q = m[1].toLowerCase();
-      const choices = [
+      this.choices = [
         ...this.data.agents.map(a => a.name),
         ...(c.kind === 'channel' ? ['here'] : []),
-      ].filter(n => n.startsWith(q));
-      this.suggestions.hidden = !choices.length;
+      ]
+        .filter(n => n.startsWith(q))
+        .slice(0, 8);
+      // Where the @word starts, which a chosen name replaces up to the caret.
+      this.mentionAt = field.selectionStart - m[1].length - 1;
+      this.renderSuggestions();
+    }
+    renderSuggestions(active = -1) {
+      const field = this.nativeInput.field;
+      this.suggestions.hidden = !this.choices.length;
       this.suggestions.replaceChildren(
-        ...choices.slice(0, 8).map(name => {
+        ...this.choices.map((name, i) => {
           const b = button(
             '@' + name,
             () => {
-              const start = field.selectionStart - m[1].length - 1;
-              field.setRangeText('@' + name + ' ', start, field.selectionStart, 'end');
-              this.nativeInput.saveDraft();
-              this.suggestions.hidden = true;
+              this.complete(name);
+              this.accept();
               field.focus();
             },
             'keycap small corral-suggestion'
           );
+          b.classList.toggle('active', i === active);
+          b.setAttribute('aria-pressed', String(i === active));
           b.onpointerdown = e => e.preventDefault();
           return b;
         })
       );
+    }
+    // Puts @name in place of the @word being typed, or of the name Tab put there.
+    complete(name) {
+      const field = this.nativeInput.field;
+      field.setRangeText('@' + name, this.mentionAt, field.selectionStart, 'end');
+      this.nativeInput.saveDraft();
+    }
+    // Keeps the name, with a space after it, and closes the suggestions.
+    accept() {
+      const field = this.nativeInput.field;
+      field.setRangeText(' ', field.selectionStart, field.selectionEnd, 'end');
+      this.nativeInput.saveDraft();
+      this.cycle = null;
+      this.choices = [];
+      this.suggestions.hidden = true;
+    }
+    // Tab and Shift-Tab step through the names, each put in place as it is reached; Return
+    // keeps the one there, and Escape closes the suggestions.
+    mentionKeys(e) {
+      if (this.suggestions.hidden || !this.choices?.length || e.isComposing) return;
+      if (e.key === 'Tab') {
+        const step = e.shiftKey ? -1 : 1;
+        const n = this.choices.length;
+        this.cycle = this.cycle === null ? (step > 0 ? 0 : n - 1) : (this.cycle + step + n) % n;
+        this.complete(this.choices[this.cycle]);
+        this.renderSuggestions(this.cycle);
+      } else if (e.key === 'Enter' && this.cycle !== null && !e.shiftKey) {
+        this.accept();
+      } else if (e.key === 'Escape') {
+        this.cycle = null;
+        this.choices = [];
+        this.suggestions.hidden = true;
+      } else return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
     }
     send(text) {
       text = text.trim();
       const id = this.openId;
       if (!text || !id) return false;
       this.suggestions.hidden = true;
+      this.cycle = null;
       // What you send is what you want to see.
       this.pinned = true;
       return request(`/conversations/${encodeURIComponent(id)}/messages`, { text }).then(
@@ -758,6 +808,11 @@
     hostChanged() {
       this.renderSide();
     }
+    // While the composer is open it stands in for the prompt row, as in Chat.
+    placeLatest() {
+      this.promptRow.hidden = !this.nativeInput.element.hidden;
+    }
+    key() {}
     dispose() {
       this.disposed = true;
       clearTimeout(this.retry);

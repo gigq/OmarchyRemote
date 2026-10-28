@@ -267,6 +267,11 @@
   gap: 4px;
   padding: 0 8px 6px;
 }
+.corral-suggestion.active {
+  border-color: var(--theme-accent);
+  background: color-mix(in srgb, var(--theme-accent) 25%, transparent);
+  color: var(--theme-foreground);
+}
 .corral-prompt-row {
   flex: none;
 }
