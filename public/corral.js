@@ -240,7 +240,8 @@
       return a ? a.name : 'removed agent';
     }
     names() {
-      return new Set(['you', 'here', ...this.data.agents.map(a => a.name)]);
+      // Lowercased: mentions ignore case.
+      return new Set(['you', 'here', ...this.data.agents.map(a => a.name.toLowerCase())]);
     }
     label(c) {
       if (c.kind === 'channel') return '#' + c.name;
@@ -555,7 +556,7 @@
         ...this.data.agents.map(a => a.name),
         ...(c.kind === 'channel' ? ['here'] : []),
       ]
-        .filter(n => n.startsWith(q))
+        .filter(n => n.toLowerCase().startsWith(q))
         .slice(0, 8);
       // Where the @word starts, which a chosen name replaces up to the caret.
       this.mentionAt = field.selectionStart - m[1].length - 1;
@@ -727,8 +728,8 @@
         const name = this.field(
           form,
           'Name',
-          this.input(a?.name || '', 'alex'),
-          'Mention it as @name.'
+          this.input(a?.name || '', 'AsBuilt'),
+          'Mention it as @name, in any case.'
         );
         const engine = this.field(
           form,

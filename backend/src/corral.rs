@@ -49,7 +49,8 @@ const ENGINES: [(&str, &str, &str); 3] = [
 ];
 const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
 const CODEX_EFFORTS: [&str; 4] = ["low", "medium", "high", "xhigh"];
-const RESERVED: [&str; 5] = [YOU, CORRAL, "here", "channel", "everyone"];
+/// Handles that mean something else in a message, so no agent can have them.
+const RESERVED: [&str; 4] = [YOU, "here", "channel", "everyone"];
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Agent {
@@ -228,11 +229,16 @@ pub fn mentions(text: &str) -> Vec<String> {
     }
     found
 }
+/// An agent's handle: a letter, then letters, digits, or dashes, in any case; @mentions and
+/// uniqueness ignore the case.
 fn valid_name(name: &str) -> bool {
-    regex::Regex::new(r"^[a-z][a-z0-9-]{0,23}$")
+    regex::Regex::new(r"^[A-Za-z][A-Za-z0-9-]{0,23}$")
         .unwrap()
         .is_match(name)
-        && !RESERVED.contains(&name)
+        && !reserved(name)
+}
+fn reserved(name: &str) -> bool {
+    RESERVED.iter().any(|r| r.eq_ignore_ascii_case(name))
 }
 fn valid_channel(name: &str) -> bool {
     regex::Regex::new(r"^[a-z0-9][a-z0-9_-]{0,39}$")
@@ -1097,10 +1103,11 @@ impl Corral {
         if message.author == CORRAL {
             return (Vec::new(), None, false);
         }
+        // Mentions are lowercased; so is each name here.
         let by_name: HashMap<String, String> = state
             .agents
             .values()
-            .map(|a| (a.name.clone(), a.id.clone()))
+            .map(|a| (a.name.to_ascii_lowercase(), a.id.clone()))
             .collect();
         let named = mentions(&message.text);
         let everyone = named
@@ -1343,7 +1350,7 @@ pub async fn overview(State(corral): State<Corral>) -> Result<Json<Value>, ApiEr
     let engines = corral.engines().await;
     let state = corral.state.lock().unwrap();
     let mut agents: Vec<&Agent> = state.agents.values().collect();
-    agents.sort_by(|a, b| a.name.cmp(&b.name));
+    agents.sort_by_key(|a| a.name.to_ascii_lowercase());
     let agents: Vec<Value> = agents
         .into_iter()
         .map(|a| {
@@ -1391,26 +1398,33 @@ pub struct AgentForm {
 impl Corral {
     /// Checks an agent's settings against what the host offers.
     async fn checked(&self, form: &AgentForm, id: &str) -> Result<(String, String), ApiError> {
-        let name = form
-            .name
-            .trim()
-            .trim_start_matches('@')
-            .to_ascii_lowercase();
+        let name = form.name.trim().trim_start_matches('@').to_owned();
+        if reserved(&name) {
+            return Err(refuse(
+                StatusCode::BAD_REQUEST,
+                &format!(
+                    "@{name} means something else in a message (@you is you, @here everyone in a channel); choose another name"
+                ),
+            ));
+        }
         if !valid_name(&name) {
             return Err(refuse(
                 StatusCode::BAD_REQUEST,
-                "A name is a lowercase letter, then letters, digits, or dashes, up to 24",
+                "A name starts with a letter, then letters, digits, or dashes, up to 24, such as AsBuilt or web-2",
             ));
         }
-        if self
+        if let Some(other) = self
             .state
             .lock()
             .unwrap()
             .agents
             .values()
-            .any(|a| a.name == name && a.id != id)
+            .find(|a| a.name.eq_ignore_ascii_case(&name) && a.id != id)
         {
-            return Err(refuse(StatusCode::CONFLICT, "Another agent has that name"));
+            return Err(refuse(
+                StatusCode::CONFLICT,
+                &format!("@{} already has that name; names ignore case", other.name),
+            ));
         }
         let engines = self.engines().await;
         let Some(engine) = engines.iter().find(|e| e["id"] == form.engine.as_str()) else {
@@ -1940,7 +1954,7 @@ impl Corral {
                 state
                     .agents
                     .values()
-                    .find(|a| a.name == *n)
+                    .find(|a| a.name.eq_ignore_ascii_case(n))
                     .map(|a| a.id.clone())
                     .ok_or_else(|| {
                         bad(&format!(
@@ -2009,7 +2023,7 @@ pub async fn agent_action(
             let engines = corral.engines().await;
             let state = corral.state.lock().unwrap();
             let mut agents: Vec<&Agent> = state.agents.values().collect();
-            agents.sort_by(|a, b| a.name.cmp(&b.name));
+            agents.sort_by_key(|a| a.name.to_ascii_lowercase());
             Ok(agents
                 .into_iter()
                 .map(|a| {
@@ -2337,12 +2351,28 @@ mod tests {
             ["alex", "sam"]
         );
         assert!(valid_name("alex-2") && !valid_name("2alex") && !valid_name("here"));
+        // Names keep their case; reserved words are reserved in any case; Corral is a fine name.
+        assert!(valid_name("AsBuilt") && valid_name("corral") && !valid_name("Here"));
         assert!(valid_channel("infra_ops") && !valid_channel("Infra"));
         assert_eq!(
             gemini_label("gemini-3.8-flash-high"),
             "Gemini 3.8 Flash High"
         );
         assert_eq!(now().len(), 24);
+    }
+
+    #[test]
+    fn names_keep_their_case_and_mentions_ignore_it() {
+        let (corral, root) = corral();
+        let built = agent(&corral, "AsBuilt");
+        let talk = channel(&corral, "films", vec![]);
+        let mut state = corral.state.lock().unwrap();
+        let (wake, _, _) =
+            corral.targets(&mut state, &talk, &message(YOU, "@asbuilt where are we", 0));
+        assert_eq!(wake, std::slice::from_ref(&built.id));
+        assert_eq!(handle(&state, &built.id), "@AsBuilt");
+        drop(state);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
