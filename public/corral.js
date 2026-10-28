@@ -6,6 +6,8 @@
   const { node, button, storage, contextMenu } = window.HyprlandUtil;
   const headers = { 'X-Hyprland-Client': '1', 'Content-Type': 'application/json' };
   const OPEN = 'omarchy-corral-open';
+  // Folders whose agents the sidebar shows collapsed.
+  const COLLAPSED = 'omarchy-corral-collapsed';
   async function request(path, body) {
     const response = await fetch(
       '/api/corral' + path,
@@ -272,7 +274,8 @@
       }
       if (!rows.length) rows.push(node('p', 'corral-empty', 'No channels yet.'));
       this.channelList.replaceChildren(...rows);
-      const agents = this.data.agents.map(a => {
+      const agentRows = new Map();
+      for (const a of this.data.agents) {
         const dm = this.data.conversations.find(c => c.kind === 'dm' && c.members[0] === a.id);
         const row = button('', () => this.direct(a.id), 'corral-row corral-agent-row');
         row.setAttribute('role', 'listitem');
@@ -301,8 +304,51 @@
             },
           ],
         }));
-        return row;
-      });
+        agentRows.set(a.id, { row, busy: where.length > 0 });
+      }
+      // Agents whose home folders share a parent group under it, collapsible; the rest stand alone.
+      const parent = a => a.home.replace(/\/+$/, '').replace(/\/[^/]*$/, '') || '/';
+      const groups = new Map();
+      for (const a of this.data.agents)
+        groups.set(parent(a), [...(groups.get(parent(a)) || []), a]);
+      const collapsed = new Set(storage.read(COLLAPSED, []) || []);
+      const agents = [];
+      for (const a of this.data.agents) {
+        const members = groups.get(parent(a));
+        if (members.length < 2) {
+          agents.push(agentRows.get(a.id).row);
+          continue;
+        }
+        if (members[0] !== a) continue;
+        const folder = parent(a);
+        const shut = collapsed.has(folder);
+        const head = button(
+          '',
+          () => {
+            const next = new Set(storage.read(COLLAPSED, []) || []);
+            if (next.has(folder)) next.delete(folder);
+            else next.add(folder);
+            storage.write(COLLAPSED, [...next]);
+            this.renderSide();
+          },
+          'corral-group-head'
+        );
+        head.setAttribute('aria-expanded', String(!shut));
+        head.title = window.HyprlandApps.tilde(folder);
+        head.append(
+          node('span', 'corral-caret', '›'),
+          node('span', 'corral-row-name', folder.split('/').pop() || folder),
+          node('span', 'corral-count', String(members.length))
+        );
+        if (shut && members.some(m => agentRows.get(m.id).busy))
+          head.append(node('span', 'corral-busy', ''));
+        const group = node('div', 'corral-folder-group');
+        group.setAttribute('role', 'group');
+        group.setAttribute('aria-label', folder.split('/').pop() || folder);
+        group.append(head);
+        if (!shut) for (const m of members) group.append(agentRows.get(m.id).row);
+        agents.push(group);
+      }
       if (!agents.length)
         agents.push(node('p', 'corral-empty', 'Make an agent with + to start talking.'));
       this.agentList.replaceChildren(...agents);

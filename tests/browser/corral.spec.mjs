@@ -128,7 +128,8 @@ test('channels and agents list in the sidebar, and a channel shows its conversat
   page,
 }) => {
   const { app, state, emit } = await setup(page);
-  await expect(app.locator('.corral-row-name')).toHaveText(['infra', 'alex', 'sam']);
+  // Both agents live in ~/git, so they group under it.
+  await expect(app.locator('.corral-row-name')).toHaveText(['infra', 'git', 'alex', 'sam']);
   await expect(app.locator('.corral-row-status')).toHaveText([
     'Claude · opus',
     'Claude X · gemini-3-flash',
@@ -359,4 +360,37 @@ test('a reply in a thread stays in the thread, and the message shows how many it
   await replies.click();
   await expect(app.locator('.corral-title')).toHaveText('Thread');
   await expect(list).toContainText('The api and web ones.');
+});
+
+test('agents whose homes share a folder group under it and collapse', async ({ page }) => {
+  const { app } = await setup(page, {}, async (page, state) => {
+    state.agents.push({
+      id: 'a4444444-4444-4444-8444-444444444444',
+      name: 'Ops',
+      engine: 'codex',
+      model: '',
+      effort: '',
+      home: '/home/qa/git/infra-tools',
+      instructions: '',
+      working: [],
+    });
+    // alex's home moves beside it, under ~/git, with sam elsewhere.
+    state.agents[0].home = '/home/qa/git/infra';
+    state.agents[1].home = '/home/qa/sites/web';
+  });
+  const group = app.getByRole('group', { name: 'git' });
+  await expect(group.locator('.corral-row-name')).toHaveText(['git', 'alex', 'Ops']);
+  await expect(group.locator('.corral-count')).toHaveText('2');
+  // sam stands alone.
+  await expect(app.locator('.corral-agent-row', { hasText: 'sam' })).toBeVisible();
+  await page.screenshot({ path: 'artifacts/browser/corral-groups.png' });
+  await group.getByRole('button', { name: /git/ }).click();
+  await expect(group.locator('.corral-agent-row')).toHaveCount(0);
+  await expect(group.locator('.corral-group-head')).toHaveAttribute('aria-expanded', 'false');
+  // Collapsed stays collapsed after a reload.
+  await page.reload();
+  await expect(app).toBeVisible();
+  await expect(app.getByRole('group', { name: 'git' }).locator('.corral-agent-row')).toHaveCount(0);
+  await app.getByRole('group', { name: 'git' }).getByRole('button', { name: /git/ }).click();
+  await expect(app.getByRole('group', { name: 'git' }).locator('.corral-agent-row')).toHaveCount(2);
 });

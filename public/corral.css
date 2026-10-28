@@ -112,6 +112,44 @@
 .corral-row[aria-current='true'] {
   background: color-mix(in srgb, var(--theme-accent) 22%, transparent);
 }
+/* Agents grouped by the folder their homes share. */
+.corral-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 30px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--theme-secondary);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.corral-group-head:hover {
+  background: color-mix(in srgb, var(--theme-surface-raised) 70%, transparent);
+  color: var(--theme-foreground);
+}
+.corral-caret {
+  width: 14px;
+  font-size: 15px;
+  line-height: 1;
+  text-align: center;
+  transition: transform 0.15s;
+}
+.corral-group-head[aria-expanded='true'] .corral-caret {
+  transform: rotate(90deg);
+}
+.corral-count {
+  font-size: 11px;
+  color: var(--theme-secondary);
+}
+.corral-folder-group > .corral-agent-row {
+  padding-left: 22px;
+}
 .corral-hash {
   width: 22px;
   text-align: center;
