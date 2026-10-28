@@ -63,6 +63,83 @@
     return a;
   }
 
+  // Dictation hears names as words: "at as built" for @AsBuilt, "hash moving records" for
+  // #MovingRecords. This second pass turns what sounds close to a real agent or channel into its
+  // mention, and a message that opens by addressing an agent ("As built, …") mentions it.
+  const squash = text => text.toLowerCase().replace(/[^a-z0-9]/g, '');
+  function distance(a, b) {
+    let row = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      const next = [i];
+      for (let j = 1; j <= b.length; j++)
+        next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] !== b[j - 1]));
+      row = next;
+    }
+    return row[b.length];
+  }
+  // How far a heard name may be from the real one: not at all for a short name, more for a long.
+  function closeness(heard, name) {
+    const d = distance(heard, name);
+    return d <= (name.length <= 4 ? 0 : name.length <= 8 ? 1 : 2) ? d : null;
+  }
+  const AT = new Set(['at', '@']);
+  const HASH = new Set(['hash', 'hashtag', 'pound', '#']);
+  const GREETINGS = new Set(['hey', 'hi', 'ok', 'okay', 'yo']);
+  function spokenMentions(text, agents, channels) {
+    const words = [...text.matchAll(/[@#]|[A-Za-z0-9][A-Za-z0-9'’_-]*/g)].map(m => ({
+      word: m[0],
+      start: m.index,
+      end: m.index + m[0].length,
+    }));
+    const gap = (i, j) => text.slice(words[i].end, words[j].start);
+    // The closest name heard in up to four words from `from`; a tie goes to the longer name, and
+    // a possessive keeps its 's.
+    const heardName = (from, names) => {
+      let found = null;
+      let heard = '';
+      for (let i = from; i < Math.min(words.length, from + 4); i++) {
+        if (i > from && !/^\s+$/.test(gap(i - 1, i))) break;
+        const word = words[i].word;
+        if (word === '@' || word === '#') break;
+        const tries = [[heard + squash(word), '']];
+        if (/['’]s$/i.test(word)) tries.push([heard + squash(word.slice(0, -2)), word.slice(-2)]);
+        heard += squash(word);
+        for (const [sound, suffix] of tries)
+          for (const name of names) {
+            const d = closeness(sound, squash(name));
+            if (
+              d !== null &&
+              (!found || d < found.d || (d === found.d && name.length >= found.name.length))
+            )
+              found = { name, suffix, end: i, d };
+          }
+      }
+      return found;
+    };
+    const marks = [];
+    const mark = (start, found, sign) =>
+      marks.push({ start, end: words[found.end].end, text: sign + found.name + found.suffix });
+    const first = words[0] && GREETINGS.has(words[0].word.toLowerCase()) ? 1 : 0;
+    const opening = words[first] && heardName(first, agents);
+    let i = 0;
+    if (opening && /^\s*[,:.!?]/.test(text.slice(words[opening.end].end))) {
+      mark(words[first].start, opening, '@');
+      i = opening.end + 1;
+    }
+    for (; i < words.length - 1; i++) {
+      const word = words[i].word.toLowerCase();
+      const sign = AT.has(word) ? '@' : HASH.has(word) ? '#' : '';
+      if (!sign || !/^\s*$/.test(gap(i, i + 1))) continue;
+      const found = heardName(i + 1, sign === '@' ? [...agents, 'here', 'everyone'] : channels);
+      if (!found) continue;
+      mark(words[i].start, found, sign);
+      i = found.end;
+    }
+    for (const m of marks.reverse()) text = text.slice(0, m.start) + m.text + text.slice(m.end);
+    return text;
+  }
+  window.HyprlandCorral = { spokenMentions };
+
   class CorralApp {
     constructor(root, bridge) {
       this.root = root;
@@ -140,7 +217,13 @@
       this.placeholder = node('span', 'corral-placeholder', 'Message');
       this.promptField.append(this.placeholder);
       this.promptRow.append(this.promptField);
-      this.main.append(bar, this.list, this.workingLine, this.suggestions, this.promptRow);
+      // As in Chat, the conversation's stage holds Voice's floating controls.
+      this.stage = node('div', 'herdr-output-stage corral-stage');
+      this.voiceTools = node('div', 'herdr-output-tools corral-voice-tools');
+      this.voiceTools.onpointerdown = e => e.preventDefault();
+      this.voiceTools.onclick = e => e.stopPropagation();
+      this.stage.append(this.list, this.voiceTools);
+      this.main.append(bar, this.stage, this.workingLine, this.suggestions, this.promptRow);
       this.main.hidden = true;
       this.sheet = node('section', 'corral-sheet');
       this.sheet.hidden = true;
@@ -154,6 +237,39 @@
       this.nativeInput.field.addEventListener('input', () => this.suggest());
       // Ahead of the composer's own keys, which would send Tab and Escape on.
       this.nativeInput.field.addEventListener('keydown', e => this.mentionKeys(e), true);
+      // The microphone works as in Chat: tap to talk and send, hold for replies read aloud. The
+      // composer's key is `corral:<conversation>` or `corral:<conversation>/<thread>`.
+      const voicePath = (key, end) => {
+        const [conversation, thread = ''] = key.slice('corral:'.length).split('/');
+        const at = `/api/corral/conversations/${encodeURIComponent(conversation)}/${end}`;
+        return at + '?thread=' + encodeURIComponent(thread);
+      };
+      this.dictation = new HyprlandDictation(
+        this.nativeInput,
+        () => (this.openId && !this.main.hidden ? this.nativeInput.id : null),
+        this.stage,
+        this.voiceTools,
+        {
+          group: 'Corral',
+          changed: () => this.voiceChanged(),
+          revise: text =>
+            spokenMentions(
+              text,
+              this.data.agents.map(a => a.name),
+              this.data.conversations.filter(c => c.kind === 'channel').map(c => c.name)
+            ),
+          endpoints: {
+            latest: async (voice, key) => (await voice.request(voicePath(key, 'response'))).json(),
+            speech: key => voicePath(key, 'speech'),
+            send: async (voice, key) => {
+              const sent = key === this.nativeInput.id && this.send(voice.dictation.input.draft);
+              if (!(await sent)) throw Error('Not sent');
+            },
+          },
+        }
+      );
+      this.promptRow.append(this.dictation.control);
+      this.voiceChanged();
       this.resized = new ResizeObserver(() => {
         this.root.classList.toggle('corral-wide', this.root.clientWidth >= 700);
         this.layout();
@@ -442,12 +558,26 @@
       this.layout();
       this.renderSide();
     }
+    // Voice follows the conversation or thread on screen.
+    followVoice() {
+      if (!this.dictation) return;
+      const target = this.dictation.getTarget();
+      if (target === this.voiceTarget) return;
+      this.voiceTarget = target;
+      this.dictation.voice.changeThread();
+    }
+    voiceChanged() {
+      const voice = this.dictation?.voice;
+      if (!voice) return;
+      this.voiceTools.hidden = !voice.enabled && !voice.loading && voice.stop.hidden;
+    }
     // One view at a time on a phone; both side by side when there is room.
     layout() {
       const wide = this.root.classList.contains('corral-wide');
       this.main.hidden = !this.openId || !this.sheet.hidden;
       this.side.hidden = !wide && (!!this.openId || !this.sheet.hidden);
       this.backKey.hidden = wide && !this.threadId;
+      this.followVoice();
     }
     renderHeader() {
       const c = this.conversation(this.openId);
@@ -971,7 +1101,14 @@
     }
     // While the composer is open it stands in for the prompt row, as in Chat.
     placeLatest() {
-      this.promptRow.hidden = !this.nativeInput.element.hidden;
+      const composing = !this.nativeInput.element.hidden;
+      this.promptRow.hidden = composing;
+      if (composing)
+        this.nativeInput.row.insertBefore(this.dictation.control, this.nativeInput.field);
+      else this.promptRow.append(this.dictation.control);
+    }
+    get actions() {
+      return this.openId && !this.main.hidden ? this.dictation.actions : [];
     }
     key() {}
     dispose() {
@@ -987,6 +1124,7 @@
           () => {}
         );
       this.folderPicker?.dispose();
+      this.dictation.dispose();
       this.nativeInput.dispose();
     }
   }

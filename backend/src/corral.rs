@@ -11,7 +11,7 @@ use crate::{ApiError, apps, error};
 use axum::{
     Json,
     extract::{
-        Path, State,
+        Path, Query, State,
         ws::{Message as WsMessage, WebSocket, WebSocketUpgrade},
     },
     http::StatusCode,
@@ -1333,6 +1333,8 @@ pub fn router<S: Clone + std::marker::Send + Sync + 'static>(corral: Corral) -> 
         .route("/conversations/{id}", get(read).post(update_conversation))
         .route("/conversations/{id}/messages", post(send))
         .route("/conversations/{id}/stop", post(stop))
+        .route("/conversations/{id}/response", get(response))
+        .route("/conversations/{id}/speech", post(speech))
         .route("/conversations/{id}/delete", post(delete_conversation))
         .route("/ws", get(upgrade))
         // The `corral` command in an agent's turn, which sends the turn's token instead of the
@@ -1755,6 +1757,93 @@ pub async fn read(
     let mut value = corral.summary(&state, conversation);
     value["messages"] = json!(state.messages.get(&id).cloned().unwrap_or_default());
     Ok(Json(value))
+}
+/// A name as it is spoken: `WhatWaltBuilt` as "What Walt Built", `as-built` as "as built".
+fn spoken_name(name: &str) -> String {
+    let mut out = String::new();
+    let mut previous = ' ';
+    for c in name.chars() {
+        if c == '-' || c == '_' {
+            out.push(' ');
+        } else {
+            if c.is_uppercase() && previous.is_lowercase() {
+                out.push(' ');
+            }
+            out.push(c);
+        }
+        previous = c;
+    }
+    out
+}
+/// The agents' replies in a conversation, or in one of its threads, in the shape Voice mode reads:
+/// each message a paragraph, the last one the `answer`, and whether an agent is `working` there.
+/// In a channel each is read with who said it.
+fn voice_state(state: &Workspace, id: &str, thread: &str) -> Option<Value> {
+    let conversation = state.conversations.get(id)?;
+    let channel = conversation.kind == "channel";
+    let replies: Vec<Value> = state
+        .messages
+        .get(id)
+        .into_iter()
+        .flatten()
+        .filter(|m| m.author != YOU && m.author != CORRAL)
+        .filter(|m| {
+            if thread.is_empty() {
+                m.thread.is_empty()
+            } else {
+                m.thread == thread || m.id == thread
+            }
+        })
+        .map(|m| {
+            let name = state
+                .agents
+                .get(&m.author)
+                .map_or(m.author.as_str(), |a| &a.name);
+            let text = if channel {
+                format!("{} says: {}", spoken_name(name), m.text)
+            } else {
+                m.text.clone()
+            };
+            json!({"id": m.id, "text": text})
+        })
+        .collect();
+    let paragraphs = replies[replies.len().saturating_sub(30)..].to_vec();
+    let working = state.turns.keys().any(|(c, _, t)| c == id && t == thread);
+    Some(json!({
+        "session": format!("{id}/{thread}"),
+        "answer": paragraphs.last(),
+        "paragraphs": paragraphs,
+        "updates": [],
+        "working": working,
+        "can_send": true,
+    }))
+}
+#[derive(Deserialize)]
+pub struct VoiceQuery {
+    #[serde(default)]
+    thread: String,
+}
+pub async fn response(
+    State(corral): State<Corral>,
+    Path(id): Path<String>,
+    Query(query): Query<VoiceQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let state = corral.state.lock().unwrap();
+    Ok(Json(
+        voice_state(&state, &id, &query.thread).ok_or_else(not_found)?,
+    ))
+}
+pub async fn speech(
+    State(corral): State<Corral>,
+    Path(id): Path<String>,
+    Query(query): Query<VoiceQuery>,
+    Json(request): Json<crate::voice::SpeechRequest>,
+) -> Result<Response, ApiError> {
+    let value = {
+        let state = corral.state.lock().unwrap();
+        voice_state(&state, &id, &query.thread).ok_or_else(not_found)?
+    };
+    crate::voice::speak(&value, request).await
 }
 #[derive(Deserialize)]
 pub struct SendForm {
@@ -2719,6 +2808,38 @@ mod tests {
                 .join("memory.md")
                 .exists()
         );
+        drop(state);
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn voice_reads_the_agents_replies_in_the_open_view() {
+        let (corral, root) = corral();
+        let walt = agent(&corral, "WhatWaltBuilt");
+        let talk = channel(&corral, "MovingRecords", vec![walt.id.clone()]);
+        let asked = message(YOU, "@WhatWaltBuilt status?", 0);
+        let answered = message(&walt.id, "All green.", 0);
+        let threaded = reply(&walt.id, "Details here.", &asked.id);
+        corral.state.lock().unwrap().messages.insert(
+            talk.id.clone(),
+            vec![
+                asked.clone(),
+                message(CORRAL, "WhatWaltBuilt joined", 0),
+                answered.clone(),
+                threaded.clone(),
+            ],
+        );
+        let state = corral.state.lock().unwrap();
+        // The conversation: replies outside threads, each with who said it.
+        let main = voice_state(&state, &talk.id, "").unwrap();
+        assert_eq!(main["paragraphs"].as_array().unwrap().len(), 1);
+        assert_eq!(main["answer"]["id"], json!(answered.id));
+        assert_eq!(main["answer"]["text"], "What Walt Built says: All green.");
+        assert_eq!(main["working"], false);
+        // A thread: its replies, and a session of its own.
+        let thread = voice_state(&state, &talk.id, &asked.id).unwrap();
+        assert_eq!(thread["answer"]["id"], json!(threaded.id));
+        assert_ne!(thread["session"], main["session"]);
+        assert!(voice_state(&state, "missing", "").is_none());
         drop(state);
         fs::remove_dir_all(root).unwrap();
     }

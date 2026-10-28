@@ -394,3 +394,137 @@ test('agents whose homes share a folder group under it and collapse', async ({ p
   await app.getByRole('group', { name: 'git' }).getByRole('button', { name: /git/ }).click();
   await expect(app.getByRole('group', { name: 'git' }).locator('.corral-agent-row')).toHaveCount(2);
 });
+
+test('spoken names become the mentions they sound like', async ({ page }) => {
+  await page.goto('/native/');
+  const heard = await page.evaluate(() => {
+    const agents = ['AsBuilt', 'WhatWaltBuilt', 'Corral', 'alex'];
+    const channels = ['MovingRecords', 'infra'];
+    return [
+      'At as built, can you check with at what walt built?',
+      'Ask at coral to post in hash moving records.',
+      'hashtag Moving Records is quiet, at here.',
+      'As built, where were we?',
+      "Hey what walt built: read at as-built's notes.",
+      'Meet at noon at the corral with at Alex.',
+      'Look at everyone in #infra, @WhatWaltBuilt',
+    ].map(text => HyprlandCorral.spokenMentions(text, agents, channels));
+  });
+  expect(heard).toEqual([
+    '@AsBuilt, can you check with @WhatWaltBuilt?',
+    'Ask @Corral to post in #MovingRecords.',
+    '#MovingRecords is quiet, @here.',
+    '@AsBuilt, where were we?',
+    "Hey @WhatWaltBuilt: read @AsBuilt's notes.",
+    // An ordinary "at" stays, and a short name has to be heard exactly.
+    'Meet at noon at the corral with @alex.',
+    'Look @everyone in #infra, @WhatWaltBuilt',
+  ]);
+});
+
+// A microphone that records at once and a host that transcribes it, as in the Chat specs.
+async function voice(page, state) {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {
+      value: async () => ({ getTracks: () => [{ stop() {} }] }),
+    });
+    window.MediaRecorder = class {
+      static isTypeSupported() {
+        return true;
+      }
+      constructor() {
+        this.state = 'inactive';
+        this.mimeType = 'audio/mp4';
+      }
+      start() {
+        this.state = 'recording';
+      }
+      stop() {
+        this.state = 'inactive';
+        queueMicrotask(() => {
+          this.ondataavailable({ data: new Blob(['audio']) });
+          this.onstop();
+        });
+      }
+    };
+    window.Audio = class {
+      constructor() {
+        this.paused = true;
+        this.source = '';
+      }
+      set src(value) {
+        this.source = value;
+        this.currentSrc = value;
+      }
+      get src() {
+        return this.source;
+      }
+      play() {
+        this.paused = false;
+        return Promise.resolve();
+      }
+      pause() {
+        this.paused = true;
+      }
+      removeAttribute() {
+        this.src = '';
+      }
+    };
+  });
+  await page.route('**/api/dictation', r =>
+    r.fulfill({
+      json:
+        r.request().method() === 'GET'
+          ? { available: true, provider: 'Voxtype' }
+          : { text: 'Hey alex, check hash infra' },
+    })
+  );
+  await page.route('**/api/voice', r => r.fulfill({ json: { available: true } }));
+  state.replies = [];
+  state.spoken = [];
+  await page.route(/\/api\/corral\/conversations\/[^/]+\/response\?/, r => {
+    const url = new URL(r.request().url());
+    const session = url.pathname.split('/').at(-2) + '/' + url.searchParams.get('thread');
+    return r.fulfill({
+      json: {
+        session,
+        working: false,
+        answer: state.replies.at(-1) || null,
+        paragraphs: state.replies,
+      },
+    });
+  });
+  await page.route(/\/api\/corral\/conversations\/[^/]+\/speech\?/, r => {
+    const url = new URL(r.request().url());
+    state.spoken.push({ path: url.pathname + url.search, ...r.request().postDataJSON() });
+    return r.fulfill({ contentType: 'audio/wav', body: 'fixture audio' });
+  });
+}
+
+test('a tap on the microphone sends with mentions; holding Talk reads replies aloud', async ({
+  page,
+}) => {
+  const { app, state } = await setup(page, {}, voice);
+  await app.getByRole('listitem').filter({ hasText: 'infra' }).click();
+  state.replies = [{ id: 'm2', text: 'alex says: On it.' }];
+  const floating = app.locator('.herdr-voice-microphone');
+  await app.locator('.dictation-button').click();
+  await expect(floating).toHaveText('Send');
+  await floating.click();
+  // The spoken names went out as the mentions they sounded like.
+  await expect.poll(() => state.sent).toEqual([{ id: INFRA, text: 'Hey @alex, check #infra' }]);
+  await expect(floating).toHaveText('Talk');
+  await page.screenshot({ path: 'artifacts/browser/corral-voice.png' });
+  // Holding Talk reads the next reply aloud, from the conversation it came in.
+  await floating.click({ delay: 650 });
+  await expect(floating.locator('.herdr-voice-speaker')).toBeVisible();
+  state.replies.push({ id: 'm5', text: 'alex says: Certs look fine.' });
+  await expect
+    .poll(() => state.spoken, { timeout: 6000 })
+    .toMatchObject([
+      { path: `/api/corral/conversations/${INFRA}/speech?thread=`, response_id: 'm5' },
+    ]);
+  // Tapping the bar microphone turns Voice off.
+  await app.locator('.dictation-button').click();
+  await expect(floating).toBeHidden();
+});

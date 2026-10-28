@@ -375,6 +375,11 @@
   flex: none;
 }
 .corral-placeholder {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--theme-secondary);
 }
 /* Forms for an agent or a channel take the conversation's place. */

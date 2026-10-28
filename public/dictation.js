@@ -629,6 +629,9 @@
       this.changed = options.changed;
       // Called with what Voice reads aloud and its progress, or null when it stops.
       this.speaking = options.speaking;
+      // Rewrites a transcript before it reaches the draft, as Corral turns spoken names into
+      // mentions.
+      this.revise = options.revise || (text => text);
       this.state = 'idle';
       this.generation = 0;
       this.button = button('', () => this.toggle(), 'keycap herdr-attach dictation-button');
@@ -940,13 +943,14 @@
         if (!response.ok || typeof data.text !== 'string')
           throw Error(data.error || 'Transcription failed.');
         if (generation !== this.generation) return;
-        if (data.text.trim()) {
-          this.input.insertDictation(this.target, data.text.trim());
-          await this.voice.transcribed(this.voiceContext, data.text.trim(), generation);
+        const text = data.text.trim() && this.revise(data.text.trim());
+        if (text) {
+          this.input.insertDictation(this.target, text);
+          await this.voice.transcribed(this.voiceContext, text, generation);
         }
         if (generation !== this.generation) return;
         this.audio = null;
-        this.paint(data.text.trim() ? 'idle' : 'error', 'No speech detected.');
+        this.paint(text ? 'idle' : 'error', 'No speech detected.');
         if (active === this) active = null;
       } catch (e) {
         if (generation === this.generation)
@@ -994,7 +998,7 @@
       node(
         'p',
         'theme-note',
-        'Herdr and Chat: microphone or ⌘⌃X to start/stop. Hold the microphone to toggle Voice mode (or Shift+Enter with the microphone focused). The host administrator can override Voxtype with OMARCHY_DICTATION_COMMAND.'
+        'Herdr, Chat and Corral: microphone or ⌘⌃X to start/stop. Hold the microphone to toggle Voice mode (or Shift+Enter with the microphone focused). The host administrator can override Voxtype with OMARCHY_DICTATION_COMMAND.'
       )
     );
     host.append(section);
