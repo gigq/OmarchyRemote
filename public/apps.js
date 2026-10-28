@@ -10,6 +10,7 @@
   // offline: the app works without the host backend, so no "connect to the host" placeholder.
   // glyph: two-letter fallback shown where the Nerd Font is unavailable; icon: the Nerd Font
   //   codepoint (public/assets/nerd-symbols.woff2 is a subset; add glyphs there when adding one).
+  // listed: false keeps an app off Home, the launcher and the app list; it opens only when asked.
   // deskKeys: desk-mode bindings ({keys, code, label, shift?, alt?, browserOnly?}) that open the
   //   app, or call the instance's reopen() when reopen: true and the app is already in front.
   const define = (key, spec) => {
@@ -50,6 +51,17 @@
     color: 'var(--theme-magenta)',
     glyph: 'cb',
     description: 'AI usage, banked resets, credits and costs',
+  });
+  // Web pages opened from links in agents' replies and terminal output (see public/links.js).
+  define('web', {
+    name: 'browser',
+    color: 'var(--theme-blue)',
+    glyph: 'wb',
+    icon: '\uf0ac',
+    description: 'links opened from apps',
+    offline: true,
+    listed: false,
+    mountClass: 'remote-app web-app',
   });
   define('files', {
     name: 'files',

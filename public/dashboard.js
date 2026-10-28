@@ -103,7 +103,9 @@
       };
       const draw = () => {
         const keys = pins().filter(k => this.logic.APPS[k]);
-        const apps = Object.entries(this.logic.APPS).filter(([k, a]) => k !== 'home' && !a.baseKey);
+        const apps = Object.entries(this.logic.APPS).filter(
+          ([k, a]) => k !== 'home' && !a.baseKey && a.listed !== false
+        );
         const webCount = apps.filter(([k]) => k.startsWith('webapp-')).length;
         panel.replaceChildren();
         const head = el('div', 'home-sheet-head');
@@ -383,7 +385,10 @@
           'APPS',
           Object.entries(this.logic.APPS)
             .filter(
-              ([k, a]) => !a.baseKey && (a.name + ' ' + a.description).toLowerCase().includes(q)
+              ([k, a]) =>
+                !a.baseKey &&
+                a.listed !== false &&
+                (a.name + ' ' + a.description).toLowerCase().includes(q)
             )
             .map(([k, a]) => ({
               name: a.name,

@@ -1790,6 +1790,8 @@
   class HostBridge {
     constructor(logic) {
       activeBridge = this;
+      // Modules that open an app themselves, such as a link from a reply, reach the shell here.
+      HyprlandApps.logic = logic;
       this.focusSerial = 0;
       this.nativeActivationNeeded = true;
       this.logic = logic;

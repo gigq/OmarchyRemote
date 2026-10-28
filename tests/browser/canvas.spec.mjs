@@ -501,3 +501,45 @@ test('the reply under the page can be selected and copied, and a tap still opens
   await page.keyboard.press('Enter');
   await expect(subtitle).toHaveAttribute('aria-expanded', 'false');
 });
+
+test('links in the subtitle and on the page open in the browser window', async ({ page }) => {
+  const { app, state } = await setup(page, async page => {
+    await page.addInitScript(() => {
+      window.webCommands = [];
+      window.webkit = {
+        messageHandlers: {
+          browserDevice: {
+            postMessage: async message => {
+              webCommands.push(message);
+              return message.action === 'capabilities' ? { embedded: true, webApps: true } : {};
+            },
+          },
+        },
+      };
+    });
+  });
+  state.session.entries = [
+    entry('user', 'Plan dinner'),
+    entry('assistant', 'Recipe from https://example.com/stew, scaled for four.'),
+  ];
+  await app.locator('.chat-row').click();
+  const opened = () =>
+    page.evaluate(() =>
+      webCommands.filter(c => c.action === 'open' && c.appID === 'webapp-link').map(c => c.url)
+    );
+  const link = app.locator('.canvas-said a.canvas-link');
+  await expect(link).toHaveText('https://example.com/stew');
+  await link.click();
+  await expect.poll(opened).toEqual(['https://example.com/stew']);
+  // Following the link did not open or close the subtitle.
+  await expect(app.locator('.canvas-subtitle')).toHaveAttribute('aria-expanded', 'false');
+  // A link on the page comes up from the frame, as the host's script sends it.
+  await page.evaluate(() => HyprlandApps.logic.openApp('canvas'));
+  await page
+    .frameLocator('#remote-canvas-app iframe.canvas-frame')
+    .locator('body')
+    .evaluate(() =>
+      parent.postMessage({ type: 'canvas-link', url: 'https://example.org/map' }, '*')
+    );
+  await expect.poll(opened).toEqual(['https://example.com/stew', 'https://example.org/map']);
+});

@@ -108,7 +108,7 @@
     );
     const list = node('div', 'solo-app-list');
     const apps = Object.values(HyprlandApps.catalog).filter(
-      spec => spec.key !== 'home' && !spec.baseKey && spec.provider
+      spec => spec.key !== 'home' && !spec.baseKey && spec.provider && spec.listed !== false
     );
     for (const spec of apps) {
       const row = node('div', 'solo-app');

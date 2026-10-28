@@ -60,9 +60,13 @@
       return;
     }
     target.innerHTML = DOMPurify.sanitize(marked.parse(text, { gfm: true }));
+    // Links open in Omarchy Remote's browser window, or a new browser tab where it has none.
     for (const link of target.querySelectorAll('a[href]')) {
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
+      link.onclick = e => {
+        if (window.HyprlandLinks?.open(link.href)) e.preventDefault();
+      };
     }
   }
   function icon(name) {

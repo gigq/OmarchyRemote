@@ -2254,7 +2254,26 @@ pub async fn view(
             p
         }
     }));
+    let bytes = if kind.starts_with("text/html") {
+        with_page_links(bytes)
+    } else {
+        bytes
+    };
     Ok(([(axum::http::header::CONTENT_TYPE, kind)], bytes).into_response())
+}
+/// Added to each page a canvas frame loads: a link to another site, followed or opened with
+/// `window.open`, goes to the app, which opens it in its browser window, instead of leaving the
+/// sandboxed frame. Links among the canvas's own files still work in the frame.
+const PAGE_LINKS: &str = "<script>(()=>{const out=u=>{try{const x=new URL(u,location.href);if(/^https?:$/.test(x.protocol)&&x.origin!==location.origin){parent.postMessage({type:'canvas-link',url:x.href},'*');return true}}catch{}return false};addEventListener('click',e=>{const a=e.target.closest&&e.target.closest('a[href]');if(a&&!e.defaultPrevented&&out(a.href))e.preventDefault()});const open=window.open;window.open=function(u,...rest){return out(u)?null:open.call(window,u,...rest)}})()</script>";
+/// A page with `PAGE_LINKS` before its `</head>`, or at its end when it has none.
+fn with_page_links(mut page: Vec<u8>) -> Vec<u8> {
+    let lower = page.to_ascii_lowercase();
+    let at = lower
+        .windows(7)
+        .position(|w| w == b"</head>")
+        .unwrap_or(page.len());
+    page.splice(at..at, PAGE_LINKS.bytes());
+    page
 }
 
 /// A chat's attachment, for the app to show: `name` must be a file in its `attachments` folder.
@@ -3052,6 +3071,20 @@ mod tests {
         assert_eq!(infer_layout(&log), Some("phone"));
         fs::write(&log, [message("phone"), message("computer")].join("\n")).unwrap();
         assert_eq!(infer_layout(&log), Some("wide"));
+    }
+
+    #[test]
+    fn canvas_pages_hand_their_links_to_the_app() {
+        let page = String::from_utf8(with_page_links(
+            b"<html><HEAD><title>t</title></HEAD><body>".to_vec(),
+        ))
+        .unwrap();
+        assert!(page.starts_with("<html><HEAD><title>t</title><script>"));
+        assert!(page.ends_with("</script></HEAD><body>"));
+        assert!(page.contains("canvas-link"));
+        // A page without a head gets it at the end.
+        let bare = String::from_utf8(with_page_links(b"<p>Hi</p>".to_vec())).unwrap();
+        assert!(bare.starts_with("<p>Hi</p><script>"));
     }
 
     #[test]

@@ -25,6 +25,26 @@
   const chevron = d =>
     `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
 
+  // Text with its web addresses as links that open in Omarchy Remote's browser window.
+  function withLinks(target, text) {
+    let at = 0;
+    for (const m of text.matchAll(/https?:\/\/[^\s"'<>`]+[^\s"'<>`.,;:!?)\]}]/g)) {
+      target.append(text.slice(at, m.index));
+      const link = node('a', 'canvas-link', m[0]);
+      link.href = m[0];
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.onclick = e => {
+        e.stopPropagation();
+        if (window.HyprlandLinks?.open(link.href)) e.preventDefault();
+      };
+      target.append(link);
+      at = m.index + m[0].length;
+    }
+    target.append(text.slice(at));
+    return target;
+  }
+
   class CanvasApp extends ChatApp {
     constructor(root, bridge) {
       super(root, bridge, {
@@ -117,6 +137,12 @@
       // The page answers for the person: its message continues the conversation.
       this.bridgeMessage = e => {
         if (e.source !== this.frame.contentWindow || !this.chat) return;
+        // A link on the page, which the host's script hands up rather than leave the frame.
+        if (e.data?.type === 'canvas-link' && typeof e.data.url === 'string') {
+          if (!window.HyprlandLinks?.open(e.data.url))
+            window.open(e.data.url, '_blank', 'noopener');
+          return;
+        }
         const text =
           e.data?.type === 'canvas' && typeof e.data.text === 'string' ? e.data.text : '';
         if (text.trim() && !this.chat.busy) this.send(text.slice(0, 4000));
@@ -333,7 +359,9 @@
       this.subtitle.classList.toggle('working', !earlier && !!chat.busy && !chat.partial && !reply);
       this.subtitle.classList.toggle('earlier', earlier);
       const asked = last >= 0 ? entries[last].text : '';
-      const said = node('span', 'canvas-said', this.spoken ? '' : text);
+      const said = this.spoken
+        ? node('span', 'canvas-said')
+        : withLinks(node('span', 'canvas-said'), text);
       if (earlier && !this.spoken)
         said.prepend(node('span', 'canvas-position', `${this.at}/${users.length}`));
       this.words = [];
@@ -354,7 +382,10 @@
         this.subtitle.classList.remove('working');
         this.lit = -1;
       }
-      this.subtitle.replaceChildren(...(asked ? [node('span', 'canvas-asked', asked)] : []), said);
+      this.subtitle.replaceChildren(
+        ...(asked ? [withLinks(node('span', 'canvas-asked'), asked)] : []),
+        said
+      );
       this.said = said;
     }
     // In talk mode the subtitle is what is read aloud, its words lit as they are spoken.

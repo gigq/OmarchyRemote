@@ -12,6 +12,23 @@
     document.addEventListener('pointermove', note, { capture: true, passive: true });
     document.addEventListener('pointerdown', note, { capture: true, passive: true });
   }
+  // Web addresses in the output. An agent's text wrapping breaks a long address across lines, so
+  // one that reaches the end of a full line carries on with the next line's text after its indent.
+  const ADDRESS = /https?:\/\/[^\s"'<>`]+/g;
+  const ADDRESS_REST = /^[^\s"'<>`]+/;
+  // Trailing punctuation belongs to the sentence, not the address, as does a bracket it never opened.
+  function trimAddress(url) {
+    for (;;) {
+      const trimmed = url.replace(/[.,;:!?'"*]+$/, '');
+      const close = trimmed.at(-1);
+      const open = { ')': '(', ']': '[', '}': '{' }[close];
+      if (open && trimmed.split(open).length < trimmed.split(close).length) {
+        url = trimmed.slice(0, -1);
+        continue;
+      }
+      return trimmed;
+    }
+  }
   const palette = [
     '#26233a',
     '#eb6f92',
@@ -186,11 +203,14 @@
         },
         { capture: true }
       );
-      // A tap that was not a drag or a selection reaches TUIs that asked for mouse reports.
-      // The edge guards keep swipes local but still pass their taps through.
-      listen('click', e => this.report(e));
+      // A tap that was not a drag or a selection opens a web address under it, or reaches TUIs
+      // that asked for mouse reports. The edge guards keep swipes local but pass their taps.
+      const tap = e => {
+        if (!this.openLink(e)) this.report(e);
+      };
+      listen('click', tap);
       for (const edge of this.edges)
-        edge.addEventListener('click', e => this.report(e), { signal: this.abort.signal });
+        edge.addEventListener('click', tap, { signal: this.abort.signal });
       listen('contextmenu', () => {
         this.moved = true;
       });
@@ -375,6 +395,86 @@
         col = Math.min(last, entry.start + Math.floor((clientX - rect.left) / this.width));
       if (row < 0 || row >= term.rows || col < 0 || col >= term.cols) return null;
       return { x: col + 1, y: row + 1 };
+    }
+    // The web addresses on buffer lines `from` to `to`, by line: each part's columns and its
+    // address, which may run on from a line above.
+    links(from, to) {
+      const b = this.term.buffer.active,
+        found = new Map(),
+        taken = new Map();
+      const text = y => {
+        const line = b.getLine(y);
+        if (!line) return null;
+        const cell = b.getNullCell();
+        let chars = '';
+        const cols = [];
+        for (let x = 0; x < line.length; x++) {
+          const c = line.getCell(x, cell);
+          if (!c || !c.getWidth()) continue;
+          for (const ch of c.getChars() || ' ') {
+            chars += ch;
+            cols.push(x);
+          }
+        }
+        return { line, chars: chars.replace(/\s+$/, ''), cols };
+      };
+      for (let y = Math.max(0, from); y < to; y++) {
+        const first = text(y);
+        if (!first) continue;
+        ADDRESS.lastIndex = taken.get(y) || 0;
+        let m;
+        while ((m = ADDRESS.exec(first.chars))) {
+          const link = { url: m[0] };
+          const parts = [{ y, start: m.index, end: m.index + m[0].length, at: first }];
+          let last = parts[0];
+          for (;;) {
+            const next = text(last.y + 1);
+            const full =
+              last.end === last.at.chars.length &&
+              (next?.line.isWrapped || last.at.cols[last.end - 1] >= this.term.cols - 3);
+            if (!next || !full) break;
+            const indent = next.line.isWrapped
+              ? 0
+              : next.chars.length - next.chars.trimStart().length;
+            const rest = ADDRESS_REST.exec(next.chars.slice(indent));
+            if (!rest || /^https?:\/\//.test(rest[0])) break;
+            link.url += rest[0];
+            last = { y: last.y + 1, start: indent, end: indent + rest[0].length, at: next };
+            parts.push(last);
+            taken.set(last.y, last.end);
+          }
+          const url = trimAddress(link.url);
+          last.end = Math.max(last.start, last.end - (link.url.length - url.length));
+          link.url = url;
+          for (const part of parts) {
+            if (part.end <= part.start) continue;
+            if (!found.has(part.y)) found.set(part.y, []);
+            found.get(part.y).push({
+              start: part.at.cols[part.start],
+              end: part.at.cols[part.end - 1] + 1,
+              link,
+            });
+          }
+        }
+      }
+      return found;
+    }
+    // Opens the web address a tap or click landed on; true when there was one. A TUI that tracks
+    // the mouse keeps plain mouse clicks, so there a modifier opens the address.
+    openLink(e) {
+      if (this.tracking() && e.pointerType === 'mouse' && !e.metaKey && !e.ctrlKey) return false;
+      const rect = this.content.getBoundingClientRect(),
+        entry = this.layout[this.origin() + Math.floor((e.clientY - rect.top) / this.height)];
+      if (!entry) return false;
+      const col = entry.start + Math.floor((e.clientX - rect.left) / this.width);
+      const url = this.links(entry.source - 12, entry.source + 1)
+        .get(entry.source)
+        ?.find(part => col >= part.start && col < part.end)?.link.url;
+      if (!url) return false;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (!window.HyprlandLinks?.open(url)) window.open(url, '_blank', 'noopener');
+      return true;
     }
     // Mouse reports go to apps that asked for them (DECSET 1000/1002/1003; 9 is press only),
     // SGR encoded when the app enabled 1006. Button 0 releases with 'm', 64/65 are wheel ticks.
@@ -576,6 +676,13 @@
           this.rows.delete(i);
         }
       const cell = b.getNullCell();
+      // Web addresses are underlined; found once per render, only if a row is drawn.
+      let links;
+      const linksOn = source =>
+        (links ??= this.links(
+          (this.layout[top]?.source ?? 0) - 12,
+          (this.layout[end - 1]?.source ?? 0) + 1
+        )).get(source);
       for (let y = top; y < end; y++) {
         const entry = this.layout[y],
           line = b.getLine(entry.source);
@@ -594,6 +701,7 @@
         row.style.height = row.style.lineHeight = `${this.height}px`;
         const runs = [];
         let run;
+        const linked = linksOn(entry.source);
         for (let x = entry.start; x < entry.end; x++) {
           const c = line.getCell(x, cell);
           if (!c || !c.getWidth()) continue;
@@ -616,15 +724,16 @@
           // Read-only views show no cursor unless their owner sets showCursor (Herdr at a prompt).
           const cursor =
             this.cursorShown() && entry.source === b.baseY + b.cursorY && x === b.cursorX;
+          const link = linked?.some(part => x >= part.start && x < part.end);
           const decoration =
             [
-              c.isUnderline() ? 'underline' : '',
+              c.isUnderline() || link ? 'underline' : '',
               c.isStrikethrough() ? 'line-through' : '',
               c.isOverline() ? 'overline' : '',
             ]
               .filter(Boolean)
               .join(' ') || 'none';
-          const style = `color:${fg};background:${bg};font-weight:${c.isBold() ? 700 : 400};font-style:${c.isItalic() ? 'italic' : 'normal'};opacity:${c.isDim() ? 0.5 : 1};text-decoration:${decoration};${cursor ? `box-shadow:inset 0 0 0 1px ${this.term.options.theme.cursor || '#ebbcba'};` : ''}`;
+          const style = `color:${fg};background:${bg};font-weight:${c.isBold() ? 700 : 400};font-style:${c.isItalic() ? 'italic' : 'normal'};opacity:${c.isDim() ? 0.5 : 1};text-decoration:${decoration};${link ? 'cursor:pointer;' : ''}${cursor ? `box-shadow:inset 0 0 0 1px ${this.term.options.theme.cursor || '#ebbcba'};` : ''}`;
           const chars = c.isInvisible() ? ' '.repeat(c.getWidth()) : c.getChars() || ' ';
           if (run && run.style === style && c.getWidth() === 1 && run.simple) {
             run.text += chars;

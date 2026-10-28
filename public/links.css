@@ -1,0 +1,40 @@
+/* The browser window for links: a bar of keys over the page. */
+.web-app {
+  gap: 6px;
+}
+.web-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.web-key {
+  flex: none;
+  min-width: 34px;
+  height: 30px;
+}
+.web-key:disabled {
+  opacity: 0.35;
+}
+.web-key.loading {
+  animation: chat-thinking 1.4s ease-in-out infinite;
+}
+.web-address {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  font-size: 12px;
+  color: var(--theme-secondary);
+}
+.web-page {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--theme-surface);
+}

@@ -185,3 +185,8 @@
   font: 18px var(--chrome-glyph);
   color: var(--theme-dim);
 }
+.canvas-link {
+  color: var(--theme-accent);
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
