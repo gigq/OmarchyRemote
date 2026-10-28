@@ -147,6 +147,11 @@
   font-size: 11px;
   color: var(--theme-secondary);
 }
+.corral-offline {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--theme-red);
+}
 .corral-folder-group > .corral-agent-row {
   padding-left: 22px;
 }

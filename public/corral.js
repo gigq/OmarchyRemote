@@ -422,8 +422,10 @@
         }));
         agentRows.set(a.id, { row, busy: where.length > 0 });
       }
-      // Agents whose home folders share a parent group under it, collapsible; the rest stand alone.
-      const parent = a => a.home.replace(/\/+$/, '').replace(/\/[^/]*$/, '') || '/';
+      // Another host's agents group under its name; this host's, whose home folders share a
+      // parent, under that folder. Groups collapse; an agent alone in its folder stands alone.
+      const parent = a =>
+        a.host ? 'host:' + a.host : a.home.replace(/\/+$/, '').replace(/\/[^/]*$/, '') || '/';
       const groups = new Map();
       for (const a of this.data.agents)
         groups.set(parent(a), [...(groups.get(parent(a)) || []), a]);
@@ -431,12 +433,14 @@
       const agents = [];
       for (const a of this.data.agents) {
         const members = groups.get(parent(a));
-        if (members.length < 2) {
+        if (members.length < 2 && !a.host) {
           agents.push(agentRows.get(a.id).row);
           continue;
         }
         if (members[0] !== a) continue;
         const folder = parent(a);
+        const host = a.host && this.host(a.host);
+        const label = a.host || folder.split('/').pop() || folder;
         const shut = collapsed.has(folder);
         const head = button(
           '',
@@ -450,17 +454,20 @@
           'corral-group-head'
         );
         head.setAttribute('aria-expanded', String(!shut));
-        head.title = window.HyprlandApps.tilde(folder);
+        head.title = a.host
+          ? `Agents on ${a.host}` + (host && !host.online ? ` · not reachable: ${host.error}` : '')
+          : window.HyprlandApps.tilde(folder);
         head.append(
           node('span', 'corral-caret', '›'),
-          node('span', 'corral-row-name', folder.split('/').pop() || folder),
+          node('span', 'corral-row-name', label),
           node('span', 'corral-count', String(members.length))
         );
+        if (host && !host.online) head.append(node('span', 'corral-offline', 'not reachable'));
         if (shut && members.some(m => agentRows.get(m.id).busy))
           head.append(node('span', 'corral-busy', ''));
         const group = node('div', 'corral-folder-group');
         group.setAttribute('role', 'group');
-        group.setAttribute('aria-label', folder.split('/').pop() || folder);
+        group.setAttribute('aria-label', label);
         group.append(head);
         if (!shut) for (const m of members) group.append(agentRows.get(m.id).row);
         agents.push(group);
@@ -499,6 +506,10 @@
     }
     engineLabel(id) {
       return this.data.engines.find(e => e.id === id)?.label || id;
+    }
+    // Another host whose agents are here, and whether it answered.
+    host(name) {
+      return (this.data.hosts || []).find(h => h.name === name);
     }
     async direct(agent) {
       try {
@@ -603,7 +614,12 @@
       } else {
         const a = this.agent(c.members[0]);
         this.subtitle.textContent = a
-          ? [this.engineLabel(a.engine), a.model, window.HyprlandApps.tilde(a.home)]
+          ? [
+              this.engineLabel(a.engine),
+              a.model,
+              a.host && 'on ' + a.host,
+              a.host ? a.home : window.HyprlandApps.tilde(a.home),
+            ]
               .filter(Boolean)
               .join(' · ')
           : '';
@@ -899,7 +915,7 @@
       return s;
     }
     agentForm(a = null) {
-      const engines = this.data.engines;
+      const hosts = this.data.hosts || [];
       this.showSheet(a ? 'Edit @' + a.name : 'New agent', form => {
         const name = this.field(
           form,
@@ -907,18 +923,37 @@
           this.input(a?.name || '', 'AsBuilt'),
           'Mention it as @name, in any case.'
         );
-        const engine = this.field(
-          form,
-          'Agent',
-          this.select(
-            engines.map(e => [e.id, e.label]),
-            a?.engine || engines[0]?.id
-          )
+        // With other hosts, the machine it works on; an agent stays on the one it was made on.
+        const machine = this.select(
+          [
+            ['', `${this.data.machine || 'This host'} (this one)`],
+            ...hosts.map(h => [h.name, h.name + (h.online ? '' : ' · not reachable')]),
+          ],
+          a?.host || ''
         );
+        machine.disabled = !!a;
+        if (hosts.length)
+          this.field(form, 'Machine', machine, 'Where it works: its folder, tools, and files.');
+        const engines = () =>
+          (machine.value ? this.host(machine.value)?.engines : this.data.engines) || [];
+        const engine = this.field(form, 'Agent', this.select([], ''));
         const model = this.field(form, 'Model', this.select([['', 'Default']], ''));
         const effort = this.field(form, 'Effort', this.select([['', 'Default']], ''));
+        const offer = () => {
+          const keep = engine.value || a?.engine || '';
+          engine.replaceChildren(
+            ...engines().map(e => {
+              const o = node('option', '', e.label);
+              o.value = e.id;
+              return o;
+            })
+          );
+          engine.value = engines().some(e => e.id === keep) ? keep : engines()[0]?.id || '';
+          fill();
+          choose.hidden = !!machine.value;
+        };
         const fill = () => {
-          const spec = engines.find(e => e.id === engine.value) || { models: [], efforts: [] };
+          const spec = engines().find(e => e.id === engine.value) || { models: [], efforts: [] };
           const keep = [model.value || a?.model || '', effort.value || a?.effort || ''];
           model.replaceChildren(
             ...[['', 'Default'], ...spec.models.map(m => [m.id, m.label])].map(([id, label]) => {
@@ -938,12 +973,14 @@
           effort.value = spec.efforts.includes(keep[1]) ? keep[1] : '';
         };
         engine.onchange = fill;
-        fill();
         const home = this.input(a?.home || '', '~/git/project');
         const homeRow = node('div', 'corral-home');
+        // Files browses this host, so another host's folder is typed.
         const choose = button('Choose…', () => this.chooseHome(home), 'keycap small');
         homeRow.append(home, choose);
         this.field(form, 'Home folder', homeRow, 'Where its sessions start.');
+        machine.onchange = offer;
+        offer();
         const instructions = node('textarea', 'corral-input corral-instructions');
         instructions.rows = 5;
         instructions.value = a?.instructions || '';
@@ -977,6 +1014,7 @@
               effort: effort.value,
               home: home.value,
               instructions: instructions.value,
+              ...(machine.value && !a ? { host: machine.value } : {}),
             };
             const saved = await request(
               a ? '/agents/' + encodeURIComponent(a.id) : '/agents',

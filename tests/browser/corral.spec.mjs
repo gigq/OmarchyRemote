@@ -83,6 +83,8 @@ async function setup(page, { width = 402, height = 874 } = {}, before) {
           },
           { id: 'codex', label: 'Codex', models: [], efforts: ['low', 'high'] },
         ],
+        machine: 'linuxbox',
+        hosts: state.hosts || [],
         agents: state.agents,
         conversations: state.conversations.map(c => ({
           ...c,
@@ -527,4 +529,85 @@ test('a tap on the microphone sends with mentions; holding Talk reads replies al
   // Tapping the bar microphone turns Voice off.
   await app.locator('.dictation-button').click();
   await expect(floating).toBeHidden();
+});
+
+test("another host's agents group under it, and a new agent can be made there", async ({
+  page,
+}) => {
+  const WINNY = 'a4444444-4444-4444-8444-444444444444@winbox';
+  const { app, state } = await setup(page, {}, async (page, state) => {
+    state.hosts = [
+      {
+        name: 'winbox',
+        online: true,
+        error: '',
+        engines: [
+          {
+            id: 'claude',
+            label: 'Claude',
+            models: [{ id: 'sonnet', label: 'Sonnet' }],
+            efforts: ['low'],
+          },
+        ],
+      },
+      { name: 'mini', online: false, error: 'mini is not reachable', engines: [] },
+    ];
+    state.agents.push({
+      id: WINNY,
+      name: 'Winny',
+      host: 'winbox',
+      engine: 'claude',
+      model: 'sonnet',
+      effort: '',
+      home: 'C:\\Users\\Justin',
+      instructions: '',
+      working: [],
+    });
+    const dm = { id: 'c3333333-3333-4333-8333-333333333333', kind: 'dm', name: '', topic: '' };
+    state.conversations.push({ ...dm, members: [WINNY], working: [] });
+    state.messages[dm.id] = [];
+    await page.route('**/api/corral/dm', r => r.fulfill({ json: state.conversations.at(-1) }));
+  });
+  // Its own group, under the machine's name, even alone.
+  const group = app.getByRole('group', { name: 'winbox' });
+  await expect(group.locator('.corral-row-name')).toHaveText(['winbox', 'Winny']);
+  await group.getByRole('listitem').click();
+  await expect(app.locator('.corral-subtitle')).toHaveText(
+    'Claude · sonnet · on winbox · C:\\Users\\Justin'
+  );
+  await page.screenshot({ path: 'artifacts/browser/corral-hosts.png' });
+  // A new agent: the machine decides the engines, and Files cannot browse it.
+  await app.getByRole('button', { name: 'All conversations' }).click();
+  await app.getByRole('button', { name: 'New agent' }).click();
+  const form = app.locator('.corral-form');
+  await expect(form.getByLabel('Machine').locator('option')).toHaveText([
+    'linuxbox (this one)',
+    'winbox',
+    'mini · not reachable',
+  ]);
+  await expect(form.getByLabel('Agent').locator('option')).toHaveText([
+    'Claude',
+    'Claude X',
+    'Codex',
+  ]);
+  await form.getByLabel('Machine').selectOption('winbox');
+  await expect(form.getByLabel('Agent').locator('option')).toHaveText(['Claude']);
+  await expect(form.getByRole('button', { name: 'Choose…' })).toBeHidden();
+  await form.getByLabel('Name').fill('Winfix');
+  await form.getByLabel('Model').selectOption('sonnet');
+  await form.getByLabel('Home folder').fill('~');
+  await form.getByRole('button', { name: 'Create agent' }).click();
+  await expect
+    .poll(() => state.created)
+    .toEqual([
+      {
+        name: 'Winfix',
+        engine: 'claude',
+        model: 'sonnet',
+        effort: '',
+        home: '~',
+        instructions: '',
+        host: 'winbox',
+      },
+    ]);
 });

@@ -28,9 +28,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: backend
-      - run: cargo fmt --manifest-path backend/Cargo.toml --check
-      - run: cargo clippy --manifest-path backend/Cargo.toml --all-targets -- -D warnings
-      - run: cargo test --manifest-path backend/Cargo.toml
+      - run: cargo fmt --manifest-path backend/Cargo.toml --all --check
+      - run: cargo clippy --manifest-path backend/Cargo.toml --workspace --all-targets -- -D warnings
+      - run: cargo test --manifest-path backend/Cargo.toml --workspace
   ios:
     runs-on: macos-latest
     steps:

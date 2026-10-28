@@ -1,0 +1,16 @@
+[package]
+name = "corral"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Corral: a Slack-style workspace for a person and their agents, on one host or several."
+
+[dependencies]
+axum = { version = "0.8", features = ["ws"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+futures-util = "0.3"
+uuid = { version = "1", features = ["v4"] }
+anyhow = "1"
+regex = "1"
