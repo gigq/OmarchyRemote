@@ -105,6 +105,16 @@
       this.settingsKey.textContent = '⋯';
       bar.append(this.backKey, titles, this.settingsKey);
       this.list = node('div', 'corral-messages');
+      // At the latest message, the list stays there as it changes size: when a working line
+      // appears under it, a message arrives, or the keyboard comes and goes.
+      this.pinned = true;
+      this.list.addEventListener(
+        'scroll',
+        () => {
+          this.pinned = this.list.scrollHeight - this.list.scrollTop - this.list.clientHeight < 40;
+        },
+        { passive: true }
+      );
       this.list.setAttribute('role', 'log');
       this.workingLine = node('div', 'corral-working');
       this.workingText = node('span', '');
@@ -137,6 +147,8 @@
         this.layout();
       });
       this.resized.observe(root);
+      this.listResized = new ResizeObserver(() => this.pin());
+      this.listResized.observe(this.list);
     }
     connect() {
       this.socket();
@@ -355,7 +367,6 @@
       this.settingsKey.title = this.settingsKey.getAttribute('aria-label');
     }
     renderMessages(append = false) {
-      const atBottom = this.list.scrollHeight - this.list.scrollTop - this.list.clientHeight < 40;
       const names = this.names();
       const items = [];
       let last = null;
@@ -397,7 +408,12 @@
         );
       }
       this.list.replaceChildren(...items);
-      if (!append || atBottom) this.list.scrollTop = this.list.scrollHeight;
+      if (!append) this.pinned = true;
+      this.pin();
+    }
+    // Keeps the latest message in view while the list is pinned to it.
+    pin() {
+      if (this.pinned) this.list.scrollTop = this.list.scrollHeight;
     }
     renderWorking() {
       const busy = [...this.working.entries()].filter(([k]) => k.startsWith(this.openId + ' '));
@@ -448,6 +464,8 @@
       const id = this.openId;
       if (!text || !id) return false;
       this.suggestions.hidden = true;
+      // What you send is what you want to see.
+      this.pinned = true;
       return request(`/conversations/${encodeURIComponent(id)}/messages`, { text }).then(
         message => {
           if (this.openId === id && !this.messages.some(m => m.id === message.id)) {
@@ -746,6 +764,7 @@
       clearTimeout(this.refreshTimer);
       this.ws?.close();
       this.resized.disconnect();
+      this.listResized.disconnect();
       this.folderPicker?.dispose();
       this.nativeInput.dispose();
     }

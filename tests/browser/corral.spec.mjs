@@ -197,3 +197,49 @@ test('an agent is made with a name, engine, model, and home, then opens its DM',
   await expect(app.locator('.corral-main')).toBeVisible();
   await page.screenshot({ path: 'artifacts/browser/corral-wide.png' });
 });
+
+test('a sent message stays in view as the working line and replies arrive', async ({ page }) => {
+  const { app, state, emit } = await setup(page);
+  // A conversation long enough to scroll.
+  state.messages[INFRA] = Array.from({ length: 30 }, (_, i) => ({
+    ...msg(i % 2 ? ALEX : 'you', 'Line ' + i + ' about the certificates and the servers.', 0),
+    id: 'line' + i,
+  }));
+  await app.getByRole('listitem').filter({ hasText: 'infra' }).click();
+  const list = app.locator('.corral-messages');
+  const shown = async text => {
+    const [box, view] = await Promise.all([
+      list.locator('.corral-text', { hasText: text }).last().boundingBox(),
+      list.boundingBox(),
+    ]);
+    return !!box && box.y + box.height <= view.y + view.height + 1;
+  };
+  await expect.poll(() => shown('Line 29')).toBe(true);
+  await app.getByRole('button', { name: 'Write a message' }).click();
+  const field = app.locator('textarea.native-input');
+  await field.fill('@alex status?');
+  await field.press('Enter');
+  await expect.poll(() => state.sent.length).toBe(1);
+  // The agent wakes: a working line appears under the messages, and the message stays in view.
+  emit({ type: 'status', conversation: INFRA, agent: ALEX, status: 'thinking' });
+  await expect(app.locator('.corral-working')).toBeVisible();
+  await expect.poll(() => shown('@alex status?')).toBe(true);
+  // So does the reply, once the line goes.
+  emit({ type: 'status', conversation: INFRA, agent: ALEX, status: null });
+  emit({
+    type: 'message',
+    conversation: INFRA,
+    message: { ...msg(ALEX, 'All green.', 9), id: 'g' },
+  });
+  await expect.poll(() => shown('All green.')).toBe(true);
+  // Scrolled back to read, new messages do not pull the list down.
+  await list.evaluate(e => (e.scrollTop = 0));
+  await page.waitForTimeout(100);
+  emit({
+    type: 'message',
+    conversation: INFRA,
+    message: { ...msg(ALEX, 'One more thing.', 8), id: 'o' },
+  });
+  await page.waitForTimeout(200);
+  expect(await list.evaluate(e => e.scrollTop)).toBeLessThan(10);
+});
