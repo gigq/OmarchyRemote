@@ -240,8 +240,9 @@ fn valid_name(name: &str) -> bool {
 fn reserved(name: &str) -> bool {
     RESERVED.iter().any(|r| r.eq_ignore_ascii_case(name))
 }
+/// A channel's name, in any case; uniqueness and lookups ignore the case.
 fn valid_channel(name: &str) -> bool {
-    regex::Regex::new(r"^[a-z0-9][a-z0-9_-]{0,39}$")
+    regex::Regex::new(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$")
         .unwrap()
         .is_match(name)
 }
@@ -1370,7 +1371,9 @@ pub async fn overview(State(corral): State<Corral>) -> Result<Json<Value>, ApiEr
         })
         .collect();
     let mut conversations: Vec<&Conversation> = state.conversations.values().collect();
-    conversations.sort_by(|a, b| a.name.cmp(&b.name).then(a.created.cmp(&b.created)));
+    conversations.sort_by(|a, b| {
+        (a.name.to_ascii_lowercase(), &a.created).cmp(&(b.name.to_ascii_lowercase(), &b.created))
+    });
     let conversations: Vec<Value> = conversations
         .into_iter()
         .map(|c| corral.summary(&state, c))
@@ -1604,26 +1607,22 @@ impl Corral {
         form: &ChannelForm,
         id: &str,
     ) -> Result<(String, Vec<String>), ApiError> {
-        let name = form
-            .name
-            .trim()
-            .trim_start_matches('#')
-            .to_ascii_lowercase();
+        let name = form.name.trim().trim_start_matches('#').to_owned();
         if !valid_channel(&name) {
             return Err(refuse(
                 StatusCode::BAD_REQUEST,
-                "A channel name is lowercase letters, digits, dashes, or underscores, up to 40",
+                "A channel name is letters, digits, dashes, or underscores, up to 40, such as MovingRecords or web-2",
             ));
         }
         let state = self.state.lock().unwrap();
-        if state
+        if let Some(other) = state
             .conversations
             .values()
-            .any(|c| c.kind == "channel" && c.name == name && c.id != id)
+            .find(|c| c.kind == "channel" && c.name.eq_ignore_ascii_case(&name) && c.id != id)
         {
             return Err(refuse(
                 StatusCode::CONFLICT,
-                "There is a channel with that name",
+                &format!("#{} already has that name; names ignore case", other.name),
             ));
         }
         let members: Vec<String> = form
@@ -1928,7 +1927,7 @@ fn bad(message: &str) -> ApiError {
 impl Corral {
     /// A channel by its name (with or without #) or id.
     fn channel_named(&self, name: &str) -> Result<Conversation, ApiError> {
-        let name = name.trim().trim_start_matches('#').to_ascii_lowercase();
+        let name = name.trim().trim_start_matches('#');
         if name.is_empty() {
             return Err(bad("Give a channel with --channel NAME"));
         }
@@ -1937,7 +1936,7 @@ impl Corral {
             .unwrap()
             .conversations
             .values()
-            .find(|c| c.kind == "channel" && (c.name == name || c.id == name))
+            .find(|c| c.kind == "channel" && (c.name.eq_ignore_ascii_case(name) || c.id == name))
             .cloned()
             .ok_or_else(|| {
                 bad(&format!(
@@ -2136,7 +2135,7 @@ pub async fn agent_action(
                 .values()
                 .filter(|c| c.kind == "channel")
                 .collect();
-            channels.sort_by(|a, b| a.name.cmp(&b.name));
+            channels.sort_by_key(|c| c.name.to_ascii_lowercase());
             Ok(channels
                 .into_iter()
                 .map(|c| {
@@ -2353,7 +2352,9 @@ mod tests {
         assert!(valid_name("alex-2") && !valid_name("2alex") && !valid_name("here"));
         // Names keep their case; reserved words are reserved in any case; Corral is a fine name.
         assert!(valid_name("AsBuilt") && valid_name("corral") && !valid_name("Here"));
-        assert!(valid_channel("infra_ops") && !valid_channel("Infra"));
+        assert!(
+            valid_channel("infra_ops") && valid_channel("MovingRecords") && !valid_channel("-x")
+        );
         assert_eq!(
             gemini_label("gemini-3.8-flash-high"),
             "Gemini 3.8 Flash High"
@@ -2598,7 +2599,8 @@ mod tests {
                 .unwrap()
                 .starts_with("Posted in #docs")
         );
-        let read = run("read", json!({"channel":"docs"})).unwrap();
+        // Channels are found whatever the case.
+        let read = run("read", json!({"channel":"DOCS"})).unwrap();
         assert!(read.contains("@maker: hello docs"));
         let state = corral.state.lock().unwrap();
         let notes: Vec<&str> = state.messages[&infra.id]
