@@ -155,6 +155,15 @@
   font-size: 12px;
   font-weight: 700;
 }
+.corral-avatar.picture {
+  overflow: hidden;
+  background: var(--theme-surface-raised) !important;
+}
+.corral-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 .corral-empty {
   margin: 8px;
   font-size: 12px;

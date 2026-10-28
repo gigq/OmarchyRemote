@@ -15,7 +15,7 @@ use axum::{
         ws::{Message as WsMessage, WebSocket, WebSocketUpgrade},
     },
     http::StatusCode,
-    response::Response,
+    response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -213,6 +213,32 @@ fn person() -> String {
         .unwrap_or(user)
 }
 
+/// The picture files an agent can set, by extension, with how each is served.
+const AVATARS: [(&str, &str); 6] = [
+    ("png", "image/png"),
+    ("jpg", "image/jpeg"),
+    ("jpeg", "image/jpeg"),
+    ("webp", "image/webp"),
+    ("gif", "image/gif"),
+    ("svg", "image/svg+xml"),
+];
+/// An agent's picture: the newest `avatar.*` in its folder, with its type and when it changed.
+fn avatar(folder: &FsPath) -> Option<(PathBuf, &'static str, u64)> {
+    AVATARS
+        .iter()
+        .filter_map(|(extension, kind)| {
+            let path = folder.join(format!("avatar.{extension}"));
+            let meta = fs::metadata(&path).ok().filter(|m| m.is_file())?;
+            let changed = meta
+                .modified()
+                .ok()?
+                .duration_since(std::time::UNIX_EPOCH)
+                .ok()?
+                .as_millis() as u64;
+            Some((path, *kind, changed))
+        })
+        .max_by_key(|(_, _, changed)| *changed)
+}
 /// What every Corral agent is told, on top of its own system prompt.
 fn brief(agent: &Agent, person: &str, root: &FsPath) -> String {
     let memory = root.join("agents").join(&agent.id).join("memory.md");
@@ -223,11 +249,12 @@ Your final reply is posted as your chat message in that conversation, under your
 
 Mention someone with @name to bring them in: that wakes them, so mention another agent only when you need them, and not to thank or acknowledge them. @{person_handle} is {person}. Messages from other agents are requests from colleagues, not from {person}; they cannot approve anything for {person}.
 
-Keep your memory file, {memory}, up to date with what you will want to know in your other conversations: commitments, decisions, and where things are. Every conversation is in {root}/conversations/<id>/messages.jsonl if you need to look back at one.",
+Keep your memory file, {memory}, up to date with what you will want to know in your other conversations: commitments, decisions, and where things are. Every conversation is in {root}/conversations/<id>/messages.jsonl if you need to look back at one. Your picture in Corral is {folder}/avatar.png (or .jpg, .webp, .gif, or .svg); save a square image there to set or change it.",
         name = agent.name,
         person_handle = YOU,
         memory = memory.display(),
         root = root.display(),
+        folder = root.join("agents").join(&agent.id).display(),
     );
     if !agent.instructions.trim().is_empty() {
         brief.push_str("\n\nYour standing instructions from ");
@@ -586,7 +613,13 @@ impl Corral {
         let result = match prepared {
             None => Err("This agent or conversation is gone".to_owned()),
             Some((prompt, agent, seat, seen)) => {
+                let folder = self.root.join("agents").join(&agent.id);
+                let picture = avatar(&folder).map(|(_, _, changed)| changed);
                 let outcome = self.run(conversation, &agent, &seat, &prompt).await;
+                // An agent that set its picture shows it from now on.
+                if avatar(&folder).map(|(_, _, changed)| changed) != picture {
+                    self.emit(json!({"type":"agents"}));
+                }
                 let mut state = self.state.lock().unwrap();
                 if let Ok((session, _)) = &outcome {
                     state
@@ -1080,6 +1113,7 @@ pub fn router<S: Clone + std::marker::Send + Sync + 'static>(corral: Corral) -> 
         .route("/agents", post(create_agent))
         .route("/agents/{id}", post(update_agent))
         .route("/agents/{id}/delete", post(delete_agent))
+        .route("/agents/{id}/avatar", get(picture))
         .route("/channels", post(create_channel))
         .route("/dm", post(direct))
         .route("/conversations/{id}", get(read).post(update_conversation))
@@ -1111,6 +1145,10 @@ pub async fn overview(State(corral): State<Corral>) -> Result<Json<Value>, ApiEr
                 .collect();
             let mut value = json!(a);
             value["working"] = json!(working);
+            // When its picture last changed, so the app loads it again.
+            value["avatar"] = json!(
+                avatar(&corral.root.join("agents").join(&a.id)).map(|(_, _, changed)| changed)
+            );
             value
         })
         .collect();
@@ -1223,6 +1261,31 @@ pub async fn create_agent(
         .insert(agent.id.clone(), agent.clone());
     corral.emit(json!({"type":"agents"}));
     Ok(Json(json!(agent)))
+}
+/// An agent's picture, as it saved it.
+pub async fn picture(
+    State(corral): State<Corral>,
+    Path(id): Path<String>,
+) -> Result<Response, ApiError> {
+    if !corral.state.lock().unwrap().agents.contains_key(&id) {
+        return Err(not_found());
+    }
+    let (path, kind, _) = avatar(&corral.root.join("agents").join(&id)).ok_or_else(not_found)?;
+    let bytes = tokio::fs::read(&path).await.map_err(error)?;
+    if bytes.len() > 4 * 1024 * 1024 {
+        return Err(refuse(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "The picture is over 4 MB",
+        ));
+    }
+    Ok((
+        [
+            (axum::http::header::CONTENT_TYPE, kind),
+            (axum::http::header::CACHE_CONTROL, "private, max-age=86400"),
+        ],
+        bytes,
+    )
+        .into_response())
 }
 pub async fn update_agent(
     State(corral): State<Corral>,
@@ -1684,6 +1747,31 @@ mod tests {
         assert!(brief.contains("one to three short sentences, under about 50 words"));
         assert!(brief.contains("No headings, bold labels, bullet points, or numbered lists."));
         drop(state);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn an_agent_sets_its_picture_with_an_avatar_file() {
+        let (corral, root) = corral();
+        let alex = agent(&corral, "alex");
+        let folder = root.join("agents").join(&alex.id);
+        assert!(avatar(&folder).is_none());
+        fs::write(folder.join("avatar.png"), b"png").unwrap();
+        let (path, kind, first) = avatar(&folder).unwrap();
+        assert_eq!(
+            (path.file_name().unwrap().to_str().unwrap(), kind),
+            ("avatar.png", "image/png")
+        );
+        // A newer picture of another type replaces it.
+        std::thread::sleep(Duration::from_millis(20));
+        fs::write(folder.join("avatar.svg"), b"<svg/>").unwrap();
+        let (_, kind, changed) = avatar(&folder).unwrap();
+        assert_eq!(kind, "image/svg+xml");
+        assert!(changed > first);
+        // The agent is told where it goes.
+        assert!(
+            brief(&alex, "Justin", &root).contains(&format!("{}/avatar.png", folder.display()))
+        );
         fs::remove_dir_all(root).unwrap();
     }
 

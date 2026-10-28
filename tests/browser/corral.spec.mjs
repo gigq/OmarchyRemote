@@ -12,7 +12,7 @@ const msg = (author, text, i) => ({
   chain: author === 'you' ? 0 : 1,
 });
 
-async function setup(page, { width = 402, height = 874 } = {}) {
+async function setup(page, { width = 402, height = 874 } = {}, before) {
   await page.setViewportSize({ width, height });
   const state = {
     agents: [
@@ -116,6 +116,7 @@ async function setup(page, { width = 402, height = 874 } = {}) {
   await page.routeWebSocket('**/api/corral/ws', ws => {
     state.ws = ws;
   });
+  await before?.(page, state);
   await page.goto('/native/');
   await page.getByText('corral', { exact: true }).first().click();
   const app = page.locator('#remote-corral-app');
@@ -282,4 +283,36 @@ test('Tab steps through the names to mention, putting each in place', async ({ p
   await field.pressSequentially(' ok');
   await field.press('Enter');
   await expect.poll(() => state.sent).toEqual([{ id: INFRA, text: 'hey @here and @sam ok' }]);
+});
+
+test('an agent with a picture shows it in the sidebar and beside its messages', async ({
+  page,
+}) => {
+  const PICTURE =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8" fill="#e68e0d"/></svg>';
+  const asked = [];
+  const { app, state } = await setup(page, {}, async (page, state) => {
+    state.agents[0].avatar = 1761650000000;
+    await page.route(/\/api\/corral\/agents\/[^/]+\/avatar/, r => {
+      asked.push({ url: r.request().url(), client: r.request().headers()['x-hyprland-client'] });
+      return r.fulfill({ body: PICTURE, contentType: 'image/svg+xml' });
+    });
+  });
+  const pictured = app
+    .locator('.corral-agent-row', { hasText: 'alex' })
+    .locator('.corral-avatar img');
+  await expect(pictured).toBeVisible();
+  await expect.poll(() => pictured.evaluate(img => img.naturalWidth)).toBeGreaterThan(0);
+  // Without one, the initial.
+  await expect(
+    app.locator('.corral-agent-row', { hasText: 'sam' }).locator('.corral-avatar')
+  ).toHaveText('S');
+  await app.getByRole('listitem').filter({ hasText: 'infra' }).click();
+  await expect(
+    app.locator('.corral-group', { hasText: 'On it.' }).locator('.corral-avatar img')
+  ).toBeVisible();
+  // It is asked for once, with the app's header, by version.
+  expect(asked.length).toBe(1);
+  expect(asked[0].client).toBe('1');
+  expect(asked[0].url).toContain(`/api/corral/agents/${ALEX}/avatar?v=1761650000000`);
 });

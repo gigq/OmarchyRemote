@@ -69,6 +69,8 @@
       this.data = { agents: [], conversations: [], engines: [], person: 'you' };
       this.working = new Map();
       this.messages = [];
+      // Agents' pictures, loaded once per version, as blob URLs.
+      this.pictures = new Map();
       // The sidebar: channels, then a direct message with each agent.
       this.side = node('section', 'corral-side');
       const sideBar = node('div', 'corral-bar');
@@ -279,7 +281,7 @@
           node('span', 'corral-row-name', a.name),
           node('span', 'corral-row-status', status)
         );
-        row.append(avatar(a.name), text);
+        row.append(this.face(a), text);
         if (where.length) row.append(node('span', 'corral-busy', ''));
         contextMenu(row, () => ({
           title: '@' + a.name,
@@ -300,6 +302,32 @@
       this.agentList.replaceChildren(...agents);
       this.sideStatus.textContent = this.error || `Saved in ${this.data.folder || '~/Corral'}`;
       this.sideStatus.classList.toggle('error', !!this.error);
+    }
+    // An agent's picture, which it sets by saving avatar.png in its folder, or its initial.
+    face(agent, name = agent?.name || '', label = name) {
+      const face = avatar(name, label);
+      if (!agent?.avatar) return face;
+      const key = agent.id + ':' + agent.avatar;
+      if (!this.pictures.has(key))
+        this.pictures.set(
+          key,
+          fetch(`/api/corral/agents/${encodeURIComponent(agent.id)}/avatar?v=${agent.avatar}`, {
+            headers,
+          })
+            .then(r => (r.ok ? r.blob() : Promise.reject()))
+            .then(blob => URL.createObjectURL(blob))
+        );
+      this.pictures.get(key).then(
+        url => {
+          const img = node('img');
+          img.src = url;
+          img.alt = '';
+          face.replaceChildren(img);
+          face.classList.add('picture');
+        },
+        () => {}
+      );
+      return face;
     }
     engineLabel(id) {
       return this.data.engines.find(e => e.id === id)?.label || id;
@@ -390,7 +418,10 @@
           head.append(node('span', 'corral-name', name), node('time', '', time(m.ts)));
           const body = node('div', 'corral-bodies');
           body.append(head);
-          group.append(avatar(m.author === 'you' ? 'you' : name, name), body);
+          group.append(
+            this.face(this.agent(m.author), m.author === 'you' ? 'you' : name, name),
+            body
+          );
           items.push(group);
           last = { ...m, body };
         } else last.ts = m.ts;
@@ -741,7 +772,7 @@
           box.type = 'checkbox';
           box.value = a.id;
           box.checked = !!c?.members.includes(a.id);
-          label.append(box, avatar(a.name), node('span', '', '@' + a.name));
+          label.append(box, this.face(a), node('span', '', '@' + a.name));
           members.append(label);
           return box;
         });
@@ -820,6 +851,11 @@
       this.ws?.close();
       this.resized.disconnect();
       this.listResized.disconnect();
+      for (const url of this.pictures.values())
+        url.then(
+          u => URL.revokeObjectURL(u),
+          () => {}
+        );
       this.folderPicker?.dispose();
       this.nativeInput.dispose();
     }
