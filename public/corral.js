@@ -97,7 +97,11 @@
       // The open conversation.
       this.main = node('section', 'corral-main');
       const bar = node('div', 'corral-bar');
-      this.backKey = button('‹', () => this.close(), 'keycap corral-back');
+      this.backKey = button(
+        '‹',
+        () => (this.threadId ? this.closeThread() : this.close()),
+        'keycap corral-back'
+      );
       this.backKey.setAttribute('aria-label', 'All conversations');
       this.title = node('h2', 'corral-title');
       this.subtitle = node('span', 'corral-subtitle');
@@ -190,7 +194,7 @@
         }
         this.renderSide();
       } else if (e.type === 'status') {
-        const key = e.conversation + ' ' + e.agent;
+        const key = [e.conversation, e.agent, e.thread || ''].join(' ');
         if (e.status) this.working.set(key, e.status);
         else this.working.delete(key);
         this.renderWorking();
@@ -212,7 +216,8 @@
         this.data = await request('');
         this.working = new Map();
         for (const c of this.data.conversations)
-          for (const w of c.working || []) this.working.set(c.id + ' ' + w.agent, w.status);
+          for (const w of c.working || [])
+            this.working.set([c.id, w.agent, w.thread || ''].join(' '), w.status);
         this.error = '';
       } catch (e) {
         this.error = e.message;
@@ -271,7 +276,7 @@
         const row = button('', () => this.direct(a.id), 'corral-row corral-agent-row');
         row.setAttribute('role', 'listitem');
         row.setAttribute('aria-current', String(!!dm && dm.id === this.openId));
-        const busy = [...this.working.keys()].filter(k => k.endsWith(' ' + a.id));
+        const busy = [...this.working.keys()].filter(k => k.split(' ')[1] === a.id);
         const where = busy.map(k => this.conversation(k.split(' ')[0])).filter(Boolean);
         const status = where.length
           ? 'working in ' + where.map(c => this.label(c)).join(', ')
@@ -343,6 +348,7 @@
     }
     async open(id) {
       this.closeSheet();
+      this.threadId = null;
       this.openId = id;
       storage.set(OPEN, id);
       this.nativeInput.select('corral:' + id);
@@ -355,14 +361,34 @@
         const data = await request('/conversations/' + encodeURIComponent(id));
         if (this.openId !== id) return;
         this.messages = data.messages;
-        for (const w of data.working || []) this.working.set(id + ' ' + w.agent, w.status);
+        for (const w of data.working || [])
+          this.working.set([id, w.agent, w.thread || ''].join(' '), w.status);
         this.renderMessages();
         this.renderWorking();
       } catch (e) {
         if (this.openId === id) this.list.replaceChildren(node('p', 'corral-empty', e.message));
       }
     }
+    // A thread replaces the conversation's messages until its back key; the composer replies in it.
+    openThread(id) {
+      if (!this.messages.some(m => m.id === id && !m.thread)) return;
+      this.threadId = id;
+      this.nativeInput.select('corral:' + this.openId + '/' + id);
+      this.layout();
+      this.renderHeader();
+      this.renderMessages();
+      this.renderWorking();
+    }
+    closeThread() {
+      this.threadId = null;
+      this.nativeInput.select('corral:' + this.openId);
+      this.layout();
+      this.renderHeader();
+      this.renderMessages();
+      this.renderWorking();
+    }
     close() {
+      this.threadId = null;
       this.openId = null;
       storage.set(OPEN, null);
       this.nativeInput.dismiss();
@@ -374,11 +400,22 @@
       const wide = this.root.classList.contains('corral-wide');
       this.main.hidden = !this.openId || !this.sheet.hidden;
       this.side.hidden = !wide && (!!this.openId || !this.sheet.hidden);
-      this.backKey.hidden = wide;
+      this.backKey.hidden = wide && !this.threadId;
     }
     renderHeader() {
       const c = this.conversation(this.openId);
       if (!c) return;
+      this.backKey.setAttribute(
+        'aria-label',
+        this.threadId ? 'Back to ' + this.label(c) : 'All conversations'
+      );
+      if (this.threadId) {
+        this.title.textContent = 'Thread';
+        this.subtitle.textContent = this.label(c);
+        this.subtitle.title = '';
+        this.placeholder.textContent = 'Reply in thread';
+        return;
+      }
       this.title.textContent = this.label(c);
       if (c.kind === 'channel') {
         const members = c.members.map(id => '@' + this.author(id));
@@ -402,7 +439,16 @@
       const names = this.names();
       const items = [];
       let last = null;
-      for (const m of this.messages) {
+      const thread = this.threadId;
+      // A thread shows its message and the replies; the conversation, the messages outside
+      // threads, each with how many replies it has.
+      const shown = thread
+        ? this.messages.filter(m => m.id === thread || m.thread === thread)
+        : this.messages.filter(m => !m.thread);
+      const replies = new Map();
+      for (const m of this.messages)
+        if (m.thread) replies.set(m.thread, [...(replies.get(m.thread) || []), m]);
+      for (const m of shown) {
         if (m.author === 'corral') {
           const note = node('div', 'corral-note');
           markdown(note, m.text, names);
@@ -429,8 +475,36 @@
         markdown(text, m.text, names);
         last.body.append(text);
         last.author = m.author;
+        if (!thread) {
+          // Reply in thread: on hover, or from the message's menu.
+          const answer = button('Reply', () => this.openThread(m.id), 'corral-reply-key');
+          answer.setAttribute('aria-label', 'Reply in thread');
+          text.append(answer);
+          contextMenu(text, () => ({
+            title: this.author(m.author),
+            items: [{ label: 'Reply in thread', run: () => this.openThread(m.id) }],
+          }));
+          const these = replies.get(m.id);
+          if (these) {
+            const more = button('', () => this.openThread(m.id), 'corral-replies');
+            more.textContent = `${these.length} ${these.length === 1 ? 'reply' : 'replies'}`;
+            more.append(node('time', '', 'last ' + time(these.at(-1).ts)));
+            last.body.append(more);
+            last = null;
+          }
+        } else if (m.id === thread) {
+          const count = replies.get(thread)?.length || 0;
+          items.push(
+            node(
+              'div',
+              'corral-divider',
+              count ? `${count} ${count === 1 ? 'reply' : 'replies'}` : 'No replies yet'
+            )
+          );
+          last = null;
+        }
       }
-      if (!this.messages.length) {
+      if (!shown.length) {
         const c = this.conversation(this.openId);
         items.push(
           node(
@@ -450,13 +524,17 @@
     pin() {
       if (this.pinned) this.list.scrollTop = this.list.scrollHeight;
     }
+    // What agents are doing here: in the thread when one is open, or in the conversation, where
+    // work in its threads is marked as such.
     renderWorking() {
-      const busy = [...this.working.entries()].filter(([k]) => k.startsWith(this.openId + ' '));
+      const busy = [...this.working.entries()]
+        .map(([k, status]) => [...k.split(' '), status])
+        .filter(([c, , t]) => c === this.openId && (!this.threadId || t === this.threadId));
       this.workingLine.hidden = !this.openId || !busy.length;
       this.workingText.textContent = busy
-        .map(([k, status]) => {
-          const name = this.author(k.split(' ')[1]);
-          return status === 'thinking' ? `@${name} is thinking…` : `@${name} · ${status}`;
+        .map(([, agent, t, status]) => {
+          const name = '@' + this.author(agent) + (t && !this.threadId ? ' in a thread' : '');
+          return status === 'thinking' ? `${name} is thinking…` : `${name} · ${status}`;
         })
         .join('   ');
     }
@@ -547,7 +625,8 @@
       this.cycle = null;
       // What you send is what you want to see.
       this.pinned = true;
-      return request(`/conversations/${encodeURIComponent(id)}/messages`, { text }).then(
+      const thread = this.threadId || '';
+      return request(`/conversations/${encodeURIComponent(id)}/messages`, { text, thread }).then(
         message => {
           if (this.openId === id && !this.messages.some(m => m.id === message.id)) {
             this.messages.push(message);
@@ -828,6 +907,10 @@
       }
       if (!this.sheet.hidden) {
         this.closeSheet();
+        return true;
+      }
+      if (this.threadId) {
+        this.closeThread();
         return true;
       }
       if (this.openId && !this.root.classList.contains('corral-wide')) {

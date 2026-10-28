@@ -91,16 +91,43 @@ pub struct Message {
     /// How many agent replies in a row led here; the person's messages are 0.
     #[serde(default)]
     pub chain: u32,
+    /// For a reply in a thread, the message the thread hangs from.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub thread: String,
 }
-/// An agent's place in a conversation: its engine session there and how many of the
-/// conversation's messages it has been given.
+/// An agent's place in a conversation, or in one of its threads: its engine session there and
+/// how many of the conversation's messages it has been given. A conversation's seat also marks
+/// where its session stood after each turn, so a thread can fork it from there.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 struct Seat {
     session: String,
     #[serde(default)]
     engine: String,
     seen: usize,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    marks: Vec<Mark>,
 }
+/// Where a session stood after a turn: the messages it had been given, and its last message.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+struct Mark {
+    seen: usize,
+    session: String,
+    uuid: String,
+}
+/// A conversation keeps this many marks per agent; older threads start from a window instead.
+const MARKS: usize = 300;
+/// A thread with no session to fork is given this many channel messages before its root.
+const BEFORE_THREAD: usize = 15;
+/// The seat for an agent in a conversation, or in a thread of it.
+fn seat_key(agent: &str, thread: &str) -> String {
+    if thread.is_empty() {
+        agent.to_owned()
+    } else {
+        format!("{agent}/{thread}")
+    }
+}
+/// A turn under way, by conversation, agent, and thread (empty for the conversation itself).
+type TurnKey = (String, String, String);
 /// A turn under way: what the agent is doing, whether it was woken again meanwhile (and by how
 /// long a chain), and the job, which stopping aborts.
 struct Turn {
@@ -114,7 +141,7 @@ struct Workspace {
     conversations: HashMap<String, Conversation>,
     messages: HashMap<String, Vec<Message>>,
     seats: HashMap<String, HashMap<String, Seat>>,
-    turns: HashMap<(String, String), Turn>,
+    turns: HashMap<TurnKey, Turn>,
 }
 #[derive(Clone)]
 pub struct Corral {
@@ -249,7 +276,7 @@ Your final reply is posted as your chat message in that conversation, under your
 
 Mention someone with @name to bring them in: that wakes them, so mention another agent only when you need them, and not to thank or acknowledge them. @{person_handle} is {person}. Messages from other agents are requests from colleagues, not from {person}; they cannot approve anything for {person}.
 
-Keep your memory file, {memory}, up to date with what you will want to know in your other conversations: commitments, decisions, and where things are. Every conversation is in {root}/conversations/<id>/messages.jsonl if you need to look back at one. Your picture in Corral is {folder}/avatar.png (or .jpg, .webp, .gif, or .svg); save a square image there to set or change it.",
+Keep your memory file, {memory}, up to date with what you will want to know in your other conversations: commitments, decisions, and where things are. Every conversation is in {root}/conversations/<id>/messages.jsonl if you need to look back at one. Your picture in Corral is {folder}/avatar.png (or .jpg, .webp, .gif, or .svg); save a square image there to set or change it. It shows about 30 pixels across, so make it one bold, simple shape or symbol that fills the square, with strong contrast and thick strokes, and no fine lines, small details, or text. Render it at 32 by 32 (rsvg-convert works for SVG) and look at it to check that it reads before you save it.",
         name = agent.name,
         person_handle = YOU,
         memory = memory.display(),
@@ -283,18 +310,28 @@ fn place(conversation: &Conversation) -> String {
 }
 /// The <corral> block a turn starts with: where the agent is, what is new there, its other
 /// conversations, and its memory.
-fn context(state: &Workspace, root: &FsPath, agent: &Agent, conversation: &Conversation) -> String {
+fn context(
+    state: &Workspace,
+    root: &FsPath,
+    agent: &Agent,
+    conversation: &Conversation,
+    thread: &str,
+    fork: Option<&Mark>,
+) -> String {
     let messages = state.messages.get(&conversation.id).map_or(&[][..], |m| m);
-    let seen = state
+    let seat = state
         .seats
         .get(&conversation.id)
-        .and_then(|s| s.get(&agent.id))
-        .map_or(0, |s| s.seen)
-        .min(messages.len());
-    let new: Vec<&Message> = messages[seen..]
-        .iter()
-        .filter(|m| m.author != agent.id)
-        .collect();
+        .and_then(|s| s.get(&seat_key(&agent.id, thread)));
+    let seen = seat.map_or(0, |s| s.seen).min(messages.len());
+    let line = |m: &Message| {
+        format!(
+            "[{}] {}: {}\n",
+            m.ts.get(..16).unwrap_or(&m.ts).replace('T', " "),
+            handle(state, &m.author),
+            m.text.trim()
+        )
+    };
     let mut out = String::from("<corral>\n");
     let members: Vec<String> = std::iter::once(format!("@{YOU}"))
         .chain(
@@ -306,8 +343,13 @@ fn context(state: &Workspace, root: &FsPath, agent: &Agent, conversation: &Conve
         )
         .collect();
     out.push_str(&format!(
-        "You are @{} in {}{}.\n",
+        "You are @{} in {}{}{}.\n",
         agent.name,
+        if thread.is_empty() {
+            ""
+        } else {
+            "a thread in "
+        },
         place(conversation),
         if conversation.kind == "channel" {
             format!(", with {}", members.join(", "))
@@ -318,7 +360,42 @@ fn context(state: &Workspace, root: &FsPath, agent: &Agent, conversation: &Conve
     if !conversation.topic.is_empty() {
         out.push_str(&format!("Topic: {}\n", conversation.topic));
     }
-    out.push_str("\nNew since you last spoke here:\n");
+    let at = messages.iter().position(|m| m.id == thread);
+    let new: Vec<&Message> = if let (Some(at), None) = (at, seat) {
+        // The thread's first turn: the conversation as it stood at the message it hangs from,
+        // from where a forked session left off (or a window before it), then the message itself.
+        let start = fork.map_or(at.saturating_sub(BEFORE_THREAD), |m| m.seen.min(at));
+        let before: Vec<&Message> = messages[start..at]
+            .iter()
+            .filter(|m| m.thread.is_empty() && m.author != agent.id)
+            .collect();
+        if !before.is_empty() {
+            out.push_str(&format!(
+                "\nIn {} before the message this thread replies to:\n",
+                place(conversation)
+            ));
+            for m in before {
+                out.push_str(&line(m));
+            }
+        }
+        out.push_str("\nThe thread replies to this message:\n");
+        out.push_str(&line(&messages[at]));
+        out.push_str("\nReplies in the thread so far:\n");
+        messages[at + 1..]
+            .iter()
+            .filter(|m| m.thread == thread && m.author != agent.id)
+            .collect()
+    } else {
+        out.push_str(if thread.is_empty() {
+            "\nNew since you last spoke here:\n"
+        } else {
+            "\nNew in the thread since you last spoke there:\n"
+        });
+        messages[seen..]
+            .iter()
+            .filter(|m| m.thread == thread && m.author != agent.id)
+            .collect()
+    };
     if new.len() > CATCH_UP {
         out.push_str(&format!(
             "({} earlier messages are in {}/conversations/{}/messages.jsonl)\n",
@@ -328,12 +405,7 @@ fn context(state: &Workspace, root: &FsPath, agent: &Agent, conversation: &Conve
         ));
     }
     for m in new.iter().skip(new.len().saturating_sub(CATCH_UP)) {
-        out.push_str(&format!(
-            "[{}] {}: {}\n",
-            m.ts.get(..16).unwrap_or(&m.ts).replace('T', " "),
-            handle(state, &m.author),
-            m.text.trim()
-        ));
+        out.push_str(&line(m));
     }
     let mut active: Vec<(&Conversation, &Message)> = state
         .conversations
@@ -370,6 +442,9 @@ fn context(state: &Workspace, root: &FsPath, agent: &Agent, conversation: &Conve
         memory.trim()
     });
     out.push_str("\n</corral>\n\nReply in ");
+    if !thread.is_empty() {
+        out.push_str("the thread in ");
+    }
     out.push_str(&place(conversation));
     // The last thing it reads, and what a resumed Codex session would otherwise not hear again.
     out.push_str(" with a short chat message: one to three sentences, no lists.");
@@ -551,9 +626,10 @@ impl Corral {
         }
         out
     }
-    /// Wakes `agent` in `conversation`, or has it go again when its turn there ends.
-    fn wake(&self, conversation: &str, agent: &str, chain: u32) {
-        let key = (conversation.to_owned(), agent.to_owned());
+    /// Wakes `agent` in `conversation` (or in one of its threads), or has it go again when its
+    /// turn there ends.
+    fn wake(&self, conversation: &str, agent: &str, thread: &str, chain: u32) {
+        let key = (conversation.to_owned(), agent.to_owned(), thread.to_owned());
         {
             let mut state = self.state.lock().unwrap();
             if let Some(turn) = state.turns.get_mut(&key) {
@@ -569,74 +645,103 @@ impl Corral {
                 },
             );
         }
-        self.emit(
-            json!({"type":"status","conversation":conversation,"agent":agent,"status":"thinking"}),
-        );
+        self.emit(json!({"type":"status","conversation":conversation,"agent":agent,"thread":thread,"status":"thinking"}));
         let corral = self.clone();
         let job = tokio::spawn(async move {
-            let (conversation, agent) = key;
-            corral.turn(&conversation, &agent, chain).await;
+            let (conversation, agent, thread) = key;
+            corral.turn(&conversation, &agent, &thread, chain).await;
         });
-        if let Some(turn) = self
-            .state
-            .lock()
-            .unwrap()
-            .turns
-            .get_mut(&(conversation.to_owned(), agent.to_owned()))
-        {
+        if let Some(turn) = self.state.lock().unwrap().turns.get_mut(&(
+            conversation.to_owned(),
+            agent.to_owned(),
+            thread.to_owned(),
+        )) {
             turn.job = Some(job.abort_handle());
         }
     }
     /// One turn: the agent is given what is new and replies; then, if woken meanwhile, again.
-    async fn turn(&self, conversation: &str, agent_id: &str, chain: u32) {
-        let key = (conversation.to_owned(), agent_id.to_owned());
+    async fn turn(&self, conversation: &str, agent_id: &str, thread: &str, chain: u32) {
+        let key = (
+            conversation.to_owned(),
+            agent_id.to_owned(),
+            thread.to_owned(),
+        );
         let prepared = {
             let state = self.state.lock().unwrap();
             let agent = state.agents.get(agent_id).cloned();
             let talk = state.conversations.get(conversation).cloned();
             agent.zip(talk).map(|(agent, talk)| {
-                let seat = state
-                    .seats
-                    .get(conversation)
-                    .and_then(|s| s.get(agent_id))
-                    .cloned()
-                    .unwrap_or_default();
+                let seats = state.seats.get(conversation);
+                let seat = seats
+                    .and_then(|s| s.get(&seat_key(agent_id, thread)))
+                    .cloned();
+                // A new thread forks the agent's session in the conversation from where it stood
+                // when the thread's message was posted, so it knows what was said up to there.
+                let fork = match (&seat, thread.is_empty()) {
+                    (None, false) => {
+                        let at = state
+                            .messages
+                            .get(conversation)
+                            .and_then(|m| m.iter().position(|m| m.id == thread));
+                        seats
+                            .and_then(|s| s.get(agent_id))
+                            .filter(|s| s.engine == family(&agent.engine) && s.engine == "claude")
+                            .zip(at)
+                            .and_then(|(s, at)| s.marks.iter().rfind(|m| m.seen <= at).cloned())
+                    }
+                    _ => None,
+                };
                 let seen = state.messages.get(conversation).map_or(0, Vec::len);
                 (
-                    context(&state, &self.root, &agent, &talk),
+                    context(&state, &self.root, &agent, &talk, thread, fork.as_ref()),
                     agent,
-                    seat,
+                    seat.unwrap_or_default(),
+                    fork,
                     seen,
                 )
             })
         };
         let result = match prepared {
             None => Err("This agent or conversation is gone".to_owned()),
-            Some((prompt, agent, seat, seen)) => {
+            Some((prompt, agent, seat, fork, seen)) => {
                 let folder = self.root.join("agents").join(&agent.id);
                 let picture = avatar(&folder).map(|(_, _, changed)| changed);
-                let outcome = self.run(conversation, &agent, &seat, &prompt).await;
+                let outcome = self
+                    .run(conversation, thread, &agent, &seat, fork.as_ref(), &prompt)
+                    .await;
                 // An agent that set its picture shows it from now on.
                 if avatar(&folder).map(|(_, _, changed)| changed) != picture {
                     self.emit(json!({"type":"agents"}));
                 }
                 let mut state = self.state.lock().unwrap();
-                if let Ok((session, _)) = &outcome {
+                if let Ok((session, _, last)) = &outcome {
+                    let mut marks = seat.marks.clone();
+                    // The conversation's session marks where it stood, for threads to fork.
+                    if thread.is_empty() && !last.is_empty() {
+                        marks.push(Mark {
+                            seen,
+                            session: session.clone(),
+                            uuid: last.clone(),
+                        });
+                        let extra = marks.len().saturating_sub(MARKS);
+                        marks.drain(..extra);
+                    }
                     state
                         .seats
                         .entry(conversation.to_owned())
                         .or_default()
                         .insert(
-                            agent.id.clone(),
+                            seat_key(&agent.id, thread),
                             Seat {
                                 session: session.clone(),
                                 engine: family(&agent.engine).into(),
                                 seen,
+                                marks,
                             },
                         );
                     self.save_seats(&state, conversation);
                 }
-                outcome.map(|(_, text)| text)
+                outcome.map(|(_, text, _)| text)
             }
         };
         let again = self
@@ -646,13 +751,11 @@ impl Corral {
             .turns
             .remove(&key)
             .and_then(|t| t.again);
-        self.emit(
-            json!({"type":"status","conversation":conversation,"agent":agent_id,"status":null}),
-        );
+        self.emit(json!({"type":"status","conversation":conversation,"agent":agent_id,"thread":thread,"status":null}));
         match result {
             Ok(text) if text.trim().is_empty() || text.trim() == "NOTHING" => {}
             Ok(text) => {
-                let _ = self.post(conversation, agent_id, text.trim(), chain);
+                let _ = self.post(conversation, agent_id, text.trim(), chain, thread);
             }
             Err(e) => {
                 let name = self
@@ -668,35 +771,36 @@ impl Corral {
                     CORRAL,
                     &format!("@{name} could not reply: {}", clip(&e, 300)),
                     chain,
+                    thread,
                 );
             }
         }
         if let Some(chain) = again {
-            self.wake(conversation, agent_id, chain);
+            self.wake(conversation, agent_id, thread, chain);
         }
     }
-    fn status(&self, conversation: &str, agent: &str, status: String) {
-        if let Some(turn) = self
-            .state
-            .lock()
-            .unwrap()
-            .turns
-            .get_mut(&(conversation.to_owned(), agent.to_owned()))
-        {
+    fn status(&self, conversation: &str, agent: &str, thread: &str, status: String) {
+        if let Some(turn) = self.state.lock().unwrap().turns.get_mut(&(
+            conversation.to_owned(),
+            agent.to_owned(),
+            thread.to_owned(),
+        )) {
             turn.status = status.clone();
         }
-        self.emit(
-            json!({"type":"status","conversation":conversation,"agent":agent,"status":status}),
-        );
+        self.emit(json!({"type":"status","conversation":conversation,"agent":agent,"thread":thread,"status":status}));
     }
-    /// Runs the agent's engine for one turn in its home folder; returns its session and reply.
+    /// Runs the agent's engine for one turn in its home folder; returns its session, its reply,
+    /// and its last message's id. A first turn with `fork` continues that session as it stood
+    /// then, under a new id.
     async fn run(
         &self,
         conversation: &str,
+        thread: &str,
         agent: &Agent,
         seat: &Seat,
+        fork: Option<&Mark>,
         prompt: &str,
-    ) -> Result<(String, String), String> {
+    ) -> Result<(String, String, String), String> {
         let person = person();
         let codex = agent.engine == "codex";
         // A session from another engine cannot be resumed; the agent starts afresh.
@@ -759,6 +863,17 @@ impl Corral {
             }
             if resume {
                 args.extend(["--resume".into(), seat.session.clone()]);
+            } else if let Some(mark) = fork {
+                session = uuid::Uuid::new_v4().to_string();
+                args.extend([
+                    "--resume".into(),
+                    mark.session.clone(),
+                    "--resume-session-at".into(),
+                    mark.uuid.clone(),
+                    "--fork-session".into(),
+                    "--session-id".into(),
+                    session.clone(),
+                ]);
             } else {
                 session = uuid::Uuid::new_v4().to_string();
                 args.extend(["--session-id".into(), session.clone()]);
@@ -767,6 +882,10 @@ impl Corral {
         let mut child = Command::new(program)
             .args(&args)
             .current_dir(&agent.home)
+            // Claude Code's own memory is per folder, shared with the person's sessions there;
+            // a Corral agent keeps its memory in its Corral folder instead, the same for every
+            // engine, and does not write chat into the project's.
+            .env("CLAUDE_CODE_DISABLE_AUTO_MEMORY", "1")
             .env_remove("CLAUDECODE")
             .env_remove("CLAUDE_CODE_ENTRYPOINT")
             .env_remove("CLAUDE_CODE_SESSION_ID")
@@ -797,6 +916,7 @@ impl Corral {
         });
         let mut lines = BufReader::new(stdout).lines();
         let mut reply = String::new();
+        let mut last = String::new();
         let mut failure: Option<String> = None;
         while let Ok(Some(line)) = lines.next_line().await {
             let Ok(event) = serde_json::from_str::<Value>(&line) else {
@@ -811,7 +931,10 @@ impl Corral {
                 session = id;
             }
             if let Some(status) = read.status {
-                self.status(conversation, &agent.id, status);
+                self.status(conversation, &agent.id, thread, status);
+            }
+            if let Some(uuid) = read.uuid {
+                last = uuid;
             }
             if let Some(text) = read.reply {
                 reply = text;
@@ -832,15 +955,16 @@ impl Corral {
                 stderr
             });
         }
-        Ok((session, reply))
+        Ok((session, reply, last))
     }
-    /// Adds a message to a conversation and wakes whoever it calls on.
+    /// Adds a message to a conversation, or to a thread in it, and wakes whoever it calls on.
     fn post(
         &self,
         conversation: &str,
         author: &str,
         text: &str,
         chain: u32,
+        thread: &str,
     ) -> anyhow::Result<Message> {
         let message = Message {
             id: uuid::Uuid::new_v4().to_string(),
@@ -848,6 +972,7 @@ impl Corral {
             author: author.to_owned(),
             text: text.to_owned(),
             chain,
+            thread: thread.to_owned(),
         };
         let (wake, joined, stopped) = {
             let mut state = self.state.lock().unwrap();
@@ -885,16 +1010,19 @@ impl Corral {
                     "Agents have mentioned each other {MAX_CHAIN} times in a row, so Corral stopped there. Mention one to carry on."
                 ),
                 0,
+                thread,
             );
         }
         for agent in wake {
-            self.wake(conversation, &agent, message.chain + 1);
+            self.wake(conversation, &agent, thread, message.chain + 1);
         }
         Ok(message)
     }
     /// Who a message wakes: the agent in a direct message from the person, and in a channel
     /// the agents it mentions (or every agent for @here), adding mentioned agents who are not
-    /// members yet. Agents mentioning agents stop after `MAX_CHAIN` replies in a row.
+    /// members yet. In a thread, the person's reply that mentions no one wakes the agents in it:
+    /// whoever wrote the message it hangs from, and every agent that has replied. Agents
+    /// mentioning agents stop after `MAX_CHAIN` replies in a row.
     fn targets(
         &self,
         state: &mut Workspace,
@@ -913,13 +1041,25 @@ impl Corral {
         let everyone = named
             .iter()
             .any(|n| n == "here" || n == "channel" || n == "everyone");
+        let mentioned: Vec<String> = named
+            .iter()
+            .filter_map(|n| by_name.get(n).cloned())
+            .collect();
         let mut wake: Vec<String> = if (talk.kind == "dm" && message.author == YOU) || everyone {
             talk.members.clone()
+        } else if !message.thread.is_empty() && message.author == YOU && mentioned.is_empty() {
+            let mut inside: Vec<String> = Vec::new();
+            for m in state.messages.get(&talk.id).into_iter().flatten() {
+                if (m.id == message.thread || m.thread == message.thread)
+                    && state.agents.contains_key(&m.author)
+                    && !inside.contains(&m.author)
+                {
+                    inside.push(m.author.clone());
+                }
+            }
+            inside
         } else {
-            named
-                .iter()
-                .filter_map(|n| by_name.get(n).cloned())
-                .collect()
+            mentioned
         };
         wake.retain(|id| *id != message.author && state.agents.contains_key(id));
         if message.author != YOU && message.chain >= MAX_CHAIN {
@@ -949,26 +1089,24 @@ impl Corral {
         (wake, joined, false)
     }
     fn stop(&self, conversation: &str) {
-        let jobs: Vec<(String, tokio::task::AbortHandle)> = {
+        let jobs: Vec<(String, String, tokio::task::AbortHandle)> = {
             let mut state = self.state.lock().unwrap();
-            let keys: Vec<(String, String)> = state
+            let keys: Vec<TurnKey> = state
                 .turns
                 .keys()
-                .filter(|(c, _)| c == conversation)
+                .filter(|(c, _, _)| c == conversation)
                 .cloned()
                 .collect();
             keys.into_iter()
                 .filter_map(|key| {
                     let turn = state.turns.remove(&key)?;
-                    Some((key.1, turn.job?))
+                    Some((key.1, key.2, turn.job?))
                 })
                 .collect()
         };
-        for (agent, job) in jobs {
+        for (agent, thread, job) in jobs {
             job.abort();
-            self.emit(
-                json!({"type":"status","conversation":conversation,"agent":agent,"status":null}),
-            );
+            self.emit(json!({"type":"status","conversation":conversation,"agent":agent,"thread":thread,"status":null}));
         }
     }
     fn summary(&self, state: &Workspace, conversation: &Conversation) -> Value {
@@ -976,8 +1114,8 @@ impl Corral {
         let working: Vec<Value> = state
             .turns
             .iter()
-            .filter(|((c, _), _)| *c == conversation.id)
-            .map(|((_, a), t)| json!({"agent":a,"status":t.status}))
+            .filter(|((c, _, _), _)| *c == conversation.id)
+            .map(|((_, a, thread), t)| json!({"agent":a,"thread":thread,"status":t.status}))
             .collect();
         json!({
             "id": conversation.id,
@@ -986,7 +1124,7 @@ impl Corral {
             "topic": conversation.topic,
             "members": conversation.members,
             "created": conversation.created,
-            "last": messages.and_then(|m| m.last()),
+            "last": messages.and_then(|m| m.iter().rev().find(|m| m.thread.is_empty())),
             "count": messages.map_or(0, Vec::len),
             "working": working,
         })
@@ -1011,6 +1149,8 @@ fn family(engine: &str) -> &'static str {
 #[derive(Default, Debug, PartialEq)]
 struct Read {
     session: Option<String>,
+    /// The id of a message the agent wrote, for a thread to fork from later.
+    uuid: Option<String>,
     status: Option<String>,
     reply: Option<String>,
     failure: Option<String>,
@@ -1041,6 +1181,7 @@ fn read_claude(event: &Value) -> Read {
             read.session = event["session_id"].as_str().map(str::to_owned);
         }
         Some("assistant") if event["parent_tool_use_id"].is_null() => {
+            read.uuid = event["uuid"].as_str().map(str::to_owned);
             for block in event["message"]["content"].as_array().into_iter().flatten() {
                 if block["type"] == "tool_use" {
                     read.status = Some(tool_status(
@@ -1140,8 +1281,8 @@ pub async fn overview(State(corral): State<Corral>) -> Result<Json<Value>, ApiEr
             let working: Vec<Value> = state
                 .turns
                 .iter()
-                .filter(|((_, id), _)| *id == a.id)
-                .map(|((c, _), t)| json!({"conversation":c,"status":t.status}))
+                .filter(|((_, id, _), _)| *id == a.id)
+                .map(|((c, _, thread), t)| json!({"conversation":c,"thread":thread,"status":t.status}))
                 .collect();
             let mut value = json!(a);
             value["working"] = json!(working);
@@ -1331,10 +1472,10 @@ pub async fn delete_agent(
     }
     {
         let mut state = corral.state.lock().unwrap();
-        let jobs: Vec<(String, String)> = state
+        let jobs: Vec<TurnKey> = state
             .turns
             .keys()
-            .filter(|(_, a)| *a == id)
+            .filter(|(_, a, _)| *a == id)
             .cloned()
             .collect();
         for key in jobs {
@@ -1536,6 +1677,9 @@ pub async fn read(
 #[derive(Deserialize)]
 pub struct SendForm {
     text: String,
+    /// The message a reply in a thread hangs from.
+    #[serde(default)]
+    thread: String,
 }
 pub async fn send(
     State(corral): State<Corral>,
@@ -1549,10 +1693,27 @@ pub async fn send(
             "A message is 1 byte to 64 KiB",
         ));
     }
-    if !corral.state.lock().unwrap().conversations.contains_key(&id) {
-        return Err(not_found());
+    {
+        let state = corral.state.lock().unwrap();
+        if !state.conversations.contains_key(&id) {
+            return Err(not_found());
+        }
+        // A thread hangs from a message in the conversation itself, not from another reply.
+        if !form.thread.is_empty()
+            && !state
+                .messages
+                .get(&id)
+                .is_some_and(|m| m.iter().any(|m| m.id == form.thread && m.thread.is_empty()))
+        {
+            return Err(refuse(
+                StatusCode::BAD_REQUEST,
+                "No such message to reply to",
+            ));
+        }
     }
-    let message = corral.post(&id, YOU, text, 0).map_err(error)?;
+    let message = corral
+        .post(&id, YOU, text, 0, &form.thread)
+        .map_err(error)?;
     Ok(Json(json!(message)))
 }
 pub async fn stop(State(corral): State<Corral>, Path(id): Path<String>) -> Json<Value> {
@@ -1641,6 +1802,13 @@ mod tests {
             author: author.into(),
             text: text.into(),
             chain,
+            thread: String::new(),
+        }
+    }
+    fn reply(author: &str, text: &str, thread: &str) -> Message {
+        Message {
+            thread: thread.into(),
+            ..message(author, text, 0)
         }
     }
 
@@ -1730,7 +1898,7 @@ mod tests {
         )
         .unwrap();
         let state = corral.state.lock().unwrap();
-        let text = context(&state, &root, &alex, &infra);
+        let text = context(&state, &root, &alex, &infra, "", None);
         assert!(text.starts_with("<corral>\nYou are @alex in #infra, with @you, @sam.\n"));
         // Only what is new and not its own.
         assert!(!text.contains("old news") && !text.contains("my earlier reply"));
@@ -1746,6 +1914,80 @@ mod tests {
         // It answers like a person in a chat, not with a report.
         assert!(brief.contains("one to three short sentences, under about 50 words"));
         assert!(brief.contains("No headings, bold labels, bullet points, or numbered lists."));
+        drop(state);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_thread_starts_from_the_conversation_as_it_stood_at_its_message() {
+        let (corral, root) = corral();
+        let alex = agent(&corral, "alex");
+        let infra = channel(&corral, "infra", vec![alex.id.clone()]);
+        let messages = vec![
+            message(YOU, "@alex check the certs", 0),
+            message(&alex.id, "Certs are fine.", 1),
+            message(YOU, "@alex and the backups?", 0),
+            message(&alex.id, "Backups ran at 3am.", 1),
+            message(YOU, "@alex what about disk space", 0),
+            message(&alex.id, "Disk is 40% full.", 1),
+        ];
+        let (backups, later) = (messages[3].id.clone(), messages[4].id.clone());
+        {
+            let mut state = corral.state.lock().unwrap();
+            let mut all = messages.clone();
+            all.push(reply(YOU, "were they the full backups?", &backups));
+            state.messages.insert(infra.id.clone(), all);
+            let mark = |seen: usize, uuid: &str| Mark {
+                seen,
+                session: "s1".into(),
+                uuid: uuid.into(),
+            };
+            state.seats.entry(infra.id.clone()).or_default().insert(
+                alex.id.clone(),
+                Seat {
+                    session: "s1".into(),
+                    engine: "claude".into(),
+                    seen: 5,
+                    marks: vec![mark(0, "u0"), mark(2, "u2"), mark(4, "u4")],
+                },
+            );
+        }
+        let state = corral.state.lock().unwrap();
+        let seat = &state.seats[&infra.id][&alex.id];
+        // The fork is the latest point at or before the thread's message: after "Certs are
+        // fine", before the backups question.
+        let at = state.messages[&infra.id]
+            .iter()
+            .position(|m| m.id == backups)
+            .unwrap();
+        let fork = seat.marks.iter().rfind(|m| m.seen <= at).unwrap();
+        assert_eq!(fork.uuid, "u2");
+        let text = context(&state, &root, &alex, &infra, &backups, Some(fork));
+        assert!(text.starts_with("<corral>\nYou are @alex in a thread in #infra"));
+        assert!(text.contains("before the message this thread replies to:\n"));
+        assert!(text.contains("@you: @alex and the backups?\n"));
+        assert!(text.contains("The thread replies to this message:\n"));
+        assert!(text.contains("@alex: Backups ran at 3am.\n"));
+        assert!(text.contains("@you: were they the full backups?\n"));
+        // Nothing said after the thread's message.
+        assert!(!text.contains("disk space") && !text.contains("Disk is"));
+        assert!(text.contains("Reply in the thread in #infra"));
+        drop(state);
+        // In the thread, a reply that mentions no one wakes the agent it hangs from.
+        let mut state = corral.state.lock().unwrap();
+        let talk = state.conversations[&infra.id].clone();
+        let (wake, _, _) = corral.targets(
+            &mut state,
+            &talk,
+            &reply(YOU, "and last night's?", &backups),
+        );
+        assert_eq!(wake, std::slice::from_ref(&alex.id));
+        // In the conversation itself, the same words wake no one.
+        let (wake, _, _) = corral.targets(&mut state, &talk, &message(YOU, "and last night's?", 0));
+        assert!(wake.is_empty());
+        // A thread on the person's own message wakes no one until an agent is mentioned.
+        let (wake, _, _) = corral.targets(&mut state, &talk, &reply(YOU, "hm", &later));
+        assert!(wake.is_empty());
         drop(state);
         fs::remove_dir_all(root).unwrap();
     }
@@ -1784,6 +2026,10 @@ mod tests {
         assert_eq!(
             read_claude(&json!({"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"npm test"}}]}})).status,
             Some("Bash · npm test".into())
+        );
+        assert_eq!(
+            read_claude(&json!({"type":"assistant","uuid":"u9","parent_tool_use_id":null,"message":{"content":[]}})).uuid,
+            Some("u9".into())
         );
         assert_eq!(
             read_claude(&json!({"type":"result","subtype":"success","result":"Done."})).reply,

@@ -99,9 +99,9 @@ async function setup(page, { width = 402, height = 874 } = {}, before) {
   });
   await page.route(/\/api\/corral\/conversations\/[^/]+\/messages$/, r => {
     const id = r.request().url().split('/').at(-2);
-    const { text } = r.request().postDataJSON();
-    state.sent.push({ id, text });
-    const m = msg('you', text, 9);
+    const { text, thread } = r.request().postDataJSON();
+    state.sent.push(thread ? { id, text, thread } : { id, text });
+    const m = { ...msg('you', text, 9), id: 'sent' + state.sent.length, thread: thread || '' };
     state.messages[id].push(m);
     return r.fulfill({ json: m });
   });
@@ -315,4 +315,48 @@ test('an agent with a picture shows it in the sidebar and beside its messages', 
   expect(asked.length).toBe(1);
   expect(asked[0].client).toBe('1');
   expect(asked[0].url).toContain(`/api/corral/agents/${ALEX}/avatar?v=1761650000000`);
+});
+
+test('a reply in a thread stays in the thread, and the message shows how many it has', async ({
+  page,
+}) => {
+  const { app, state, emit } = await setup(page);
+  await app.getByRole('listitem').filter({ hasText: 'infra' }).click();
+  const list = app.locator('.corral-messages');
+  // An older message's menu offers a thread.
+  await list.locator('.corral-text', { hasText: 'On it.' }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Reply in thread' }).click();
+  await expect(app.locator('.corral-title')).toHaveText('Thread');
+  await expect(app.locator('.corral-subtitle')).toHaveText('#infra');
+  await expect(list.locator('.corral-text')).toHaveCount(1);
+  await expect(list.locator('.corral-divider')).toHaveText('No replies yet');
+  await app.getByRole('button', { name: 'Write a message' }).click();
+  const field = app.locator('textarea.native-input');
+  await field.fill('Which certs, exactly?');
+  await field.press('Enter');
+  await expect
+    .poll(() => state.sent)
+    .toEqual([{ id: INFRA, text: 'Which certs, exactly?', thread: 'm2' }]);
+  await expect(list).toContainText('Which certs, exactly?');
+  // The agent answers in the thread, with a working line there.
+  emit({ type: 'status', conversation: INFRA, agent: ALEX, thread: 'm2', status: 'thinking' });
+  await expect(app.locator('.corral-working')).toHaveText(/@alex is thinking/);
+  emit({ type: 'status', conversation: INFRA, agent: ALEX, thread: 'm2', status: null });
+  emit({
+    type: 'message',
+    conversation: INFRA,
+    message: { ...msg(ALEX, 'The api and web ones.', 5), id: 'r1', thread: 'm2' },
+  });
+  await expect(list).toContainText('The api and web ones.');
+  await expect(list.locator('.corral-divider')).toHaveText('2 replies');
+  await page.screenshot({ path: 'artifacts/browser/corral-thread.png' });
+  // Back in the channel, the replies are not in the timeline; the message says how many.
+  await app.getByRole('button', { name: 'Back to #infra' }).click();
+  await expect(app.locator('.corral-title')).toHaveText('#infra');
+  await expect(list).not.toContainText('The api and web ones.');
+  const replies = list.locator('.corral-replies');
+  await expect(replies).toContainText('2 replies');
+  await replies.click();
+  await expect(app.locator('.corral-title')).toHaveText('Thread');
+  await expect(list).toContainText('The api and web ones.');
 });

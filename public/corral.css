@@ -148,8 +148,8 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 7px;
   color: var(--theme-background);
   font-size: 12px;
@@ -196,8 +196,8 @@
   gap: 10px;
 }
 .corral-group .corral-avatar {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: 9px;
   font-size: 14px;
 }
@@ -235,6 +235,58 @@
 .corral-text a,
 .corral-note a {
   color: var(--theme-accent);
+}
+/* Reply in thread: a key on hover, and how many replies a message has. */
+.corral-text {
+  position: relative;
+}
+.corral-reply-key {
+  position: absolute;
+  top: -4px;
+  right: 0;
+  display: none;
+  padding: 2px 8px;
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  background: var(--theme-surface-raised);
+  color: var(--theme-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.pointer-mouse .corral-text:hover > .corral-reply-key,
+.corral-reply-key:focus-visible {
+  display: block;
+}
+.corral-replies {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 2px 8px 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--theme-accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.corral-replies time {
+  font-weight: 400;
+  color: var(--theme-secondary);
+}
+.corral-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--theme-secondary);
+}
+.corral-divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid color-mix(in srgb, var(--theme-border) 60%, transparent);
 }
 .corral-mention {
   padding: 0 2px;
