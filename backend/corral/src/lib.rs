@@ -103,7 +103,12 @@ fn home_folder(typed: &str) -> anyhow::Result<PathBuf> {
     if !path.is_dir() {
         anyhow::bail!("Choose a home folder");
     }
-    Ok(path)
+    // Windows gives `\\?\C:\…`, which programs started there need as plain `C:\…`.
+    Ok(path
+        .to_str()
+        .and_then(|p| p.strip_prefix(r"\\?\"))
+        .filter(|p| p.as_bytes().get(1) == Some(&b':'))
+        .map_or(path.clone(), PathBuf::from))
 }
 /// Where a Corral keeps its files, and how a turn's `corral` command reaches it.
 pub struct Setup {
@@ -1789,6 +1794,7 @@ pub async fn delete_agent(
         }
     }
     let _ = fs::remove_dir_all(corral.root.join("agents").join(&id));
+    corral.forget_visits(&id);
     corral.emit(json!({"type":"agents"}));
     Ok(Json(json!({"deleted": true})))
 }

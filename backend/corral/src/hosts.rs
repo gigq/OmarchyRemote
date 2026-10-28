@@ -423,6 +423,19 @@ impl Corral {
 
 // ---- What a host offers the Corral whose agents it runs: its agents, and their turns ----
 
+impl Corral {
+    /// Forgets a deleted agent's sessions in other hosts' conversations.
+    pub(crate) fn forget_visits(&self, agent: &str) {
+        let visits = self.root.join("visits.json");
+        let _state = self.state.lock().unwrap();
+        let Some(mut all) = read_json::<HashMap<String, Seat>>(&visits) else {
+            return;
+        };
+        all.retain(|key, _| !key.ends_with(&format!(" {agent}")));
+        let _ = write_json(&visits, &all);
+    }
+}
+
 /// This host's agents and engines, for another host's Corral.
 pub async fn host_listing(State(corral): State<Corral>) -> Json<Value> {
     let engines = corral.engines().await;

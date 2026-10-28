@@ -22,6 +22,11 @@ be unique across machines; an agent whose name is taken already shows as `@name-
 
 ### Set up a machine
 
+`scripts/corral-host.sh SSH_HOST [NAME]` does all of this from the person's host, for a Mac or a
+Windows machine it can reach over SSH and Tailscale: it builds `corral` with Zig, copies it there,
+runs it at login on the machine's Tailscale address, and adds the machine to `hosts.json` with its
+key. Run it again to update the program. By hand:
+
 1. Build `corral` for it, from this repository:
 
    ```sh
