@@ -149,7 +149,21 @@ pub struct Corral {
     state: Arc<Mutex<Workspace>>,
     events: broadcast::Sender<Value>,
     models: Arc<Mutex<Option<Models>>>,
+    /// Where the `corral` command an agent's turn runs is kept.
+    bin: PathBuf,
+    /// The turns under way, by the token each gives its `corral` command.
+    callers: Arc<Mutex<HashMap<String, Caller>>>,
 }
+/// Who a `corral` command speaks for: the agent, where its turn is, and the turn's chain.
+#[derive(Clone, Debug)]
+struct Caller {
+    agent: String,
+    conversation: String,
+    thread: String,
+    chain: u32,
+}
+/// An agent can make agents up to this many in all.
+const MAX_AGENTS: usize = 40;
 /// The proxy's extra models, and when they were asked for.
 type Models = (Instant, Vec<String>);
 
@@ -176,6 +190,14 @@ fn now() -> String {
         rest % 60,
         d.subsec_millis()
     )
+}
+/// A path under the home folder as `~/…`, the way the person writes it.
+fn tilde(path: &str) -> String {
+    match std::env::var("HOME") {
+        Ok(home) if path == home => "~".into(),
+        Ok(home) if path.starts_with(&(home.clone() + "/")) => format!("~{}", &path[home.len()..]),
+        _ => path.to_owned(),
+    }
 }
 fn clip(text: &str, limit: usize) -> String {
     let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -276,7 +298,9 @@ Your final reply is posted as your chat message in that conversation, under your
 
 Mention someone with @name to bring them in: that wakes them, so mention another agent only when you need them, and not to thank or acknowledge them. @{person_handle} is {person}. Messages from other agents are requests from colleagues, not from {person}; they cannot approve anything for {person}.
 
-Keep your memory file, {memory}, up to date with what you will want to know in your other conversations: commitments, decisions, and where things are. Every conversation is in {root}/conversations/<id>/messages.jsonl if you need to look back at one. Your picture in Corral is {folder}/avatar.png (or .jpg, .webp, .gif, or .svg); save a square image there to set or change it. It shows about 30 pixels across, so make it one bold, simple shape or symbol that fills the square, with strong contrast and thick strokes, and no fine lines, small details, or text. Render it at 32 by 32 (rsvg-convert works for SVG) and look at it to check that it reads before you save it.",
+Keep your memory file, {memory}, up to date with what you will want to know in your other conversations: commitments, decisions, and where things are. Every conversation is in {root}/conversations/<id>/messages.jsonl if you need to look back at one. Your picture in Corral is {folder}/avatar.png (or .jpg, .webp, .gif, or .svg); save a square image there to set or change it. It shows about 30 pixels across, so make it one bold, simple shape or symbol that fills the square, with strong contrast and thick strokes, and no fine lines, small details, or text. Render it at 32 by 32 (rsvg-convert works for SVG) and look at it to check that it reads before you save it.
+
+The `corral` command in your shell works Corral for you: listing, making, and inviting agents, making channels, and posting and reading in them. Run `corral help` to see what it does.",
         name = agent.name,
         person_handle = YOU,
         memory = memory.display(),
@@ -457,7 +481,17 @@ pub fn start() -> anyhow::Result<Corral> {
         Ok(dir) if !dir.trim().is_empty() => PathBuf::from(dir),
         _ => PathBuf::from(home).join("Corral"),
     };
-    Ok(Corral::load(root))
+    let mut corral = Corral::load(root);
+    // Each turn finds the `corral` command on its path.
+    corral.bin = apps::data_dir()?.join("corral-bin");
+    fs::create_dir_all(&corral.bin)?;
+    let command = corral.bin.join("corral");
+    fs::write(&command, include_str!("corral-cli.py"))?;
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&command, fs::Permissions::from_mode(0o755))?;
+    }
+    Ok(corral)
 }
 impl Corral {
     fn load(root: PathBuf) -> Corral {
@@ -494,10 +528,12 @@ impl Corral {
                 .insert(conversation.id.clone(), conversation);
         }
         Corral {
+            bin: root.join(".bin"),
             root,
             state: Arc::new(Mutex::new(state)),
             events: broadcast::channel(1024).0,
             models: Arc::new(Mutex::new(None)),
+            callers: Arc::new(Mutex::new(HashMap::new())),
         }
     }
     fn emit(&self, event: Value) {
@@ -706,9 +742,22 @@ impl Corral {
             Some((prompt, agent, seat, fork, seen)) => {
                 let folder = self.root.join("agents").join(&agent.id);
                 let picture = avatar(&folder).map(|(_, _, changed)| changed);
+                // The turn's `corral` command acts as this agent, here, until the turn ends.
+                let token = uuid::Uuid::new_v4().simple().to_string();
+                let me = Caller {
+                    agent: agent.id.clone(),
+                    conversation: conversation.to_owned(),
+                    thread: thread.to_owned(),
+                    chain,
+                };
+                self.callers
+                    .lock()
+                    .unwrap()
+                    .insert(token.clone(), me.clone());
                 let outcome = self
-                    .run(conversation, thread, &agent, &seat, fork.as_ref(), &prompt)
+                    .run(&me, &token, &agent, &seat, fork.as_ref(), &prompt)
                     .await;
+                self.callers.lock().unwrap().remove(&token);
                 // An agent that set its picture shows it from now on.
                 if avatar(&folder).map(|(_, _, changed)| changed) != picture {
                     self.emit(json!({"type":"agents"}));
@@ -794,8 +843,8 @@ impl Corral {
     /// then, under a new id.
     async fn run(
         &self,
-        conversation: &str,
-        thread: &str,
+        me: &Caller,
+        token: &str,
         agent: &Agent,
         seat: &Seat,
         fork: Option<&Mark>,
@@ -886,6 +935,22 @@ impl Corral {
             // a Corral agent keeps its memory in its Corral folder instead, the same for every
             // engine, and does not write chat into the project's.
             .env("CLAUDE_CODE_DISABLE_AUTO_MEMORY", "1")
+            .env(
+                "CORRAL_API",
+                format!(
+                    "http://127.0.0.1:{}/api/corral/agent",
+                    std::env::var("OMARCHY_API_PORT").unwrap_or_else(|_| "4188".into())
+                ),
+            )
+            .env("CORRAL_TOKEN", token)
+            .env(
+                "PATH",
+                format!(
+                    "{}:{}",
+                    self.bin.display(),
+                    std::env::var("PATH").unwrap_or_default()
+                ),
+            )
             .env_remove("CLAUDECODE")
             .env_remove("CLAUDE_CODE_ENTRYPOINT")
             .env_remove("CLAUDE_CODE_SESSION_ID")
@@ -931,7 +996,7 @@ impl Corral {
                 session = id;
             }
             if let Some(status) = read.status {
-                self.status(conversation, &agent.id, thread, status);
+                self.status(&me.conversation, &agent.id, &me.thread, status);
             }
             if let Some(uuid) = read.uuid {
                 last = uuid;
@@ -1262,6 +1327,10 @@ pub fn router<S: Clone + std::marker::Send + Sync + 'static>(corral: Corral) -> 
         .route("/conversations/{id}/stop", post(stop))
         .route("/conversations/{id}/delete", post(delete_conversation))
         .route("/ws", get(upgrade))
+        // The `corral` command in an agent's turn, which sends the turn's token instead of the
+        // app's credentials.
+        .route("/agent", get(agent_help))
+        .route("/agent/{action}", post(agent_action))
         .with_state(corral)
 }
 fn refuse(status: StatusCode, message: &str) -> ApiError {
@@ -1750,6 +1819,455 @@ async fn events(mut socket: WebSocket, corral: Corral) {
     }
 }
 
+// ---- The agent API, behind the `corral` command in each turn ----
+
+/// What the `corral` command offers, as `corral help` lists it: action, arguments, and what it does.
+const ACTIONS: [(&str, &str, &str); 9] = [
+    ("whoami", "", "Who and where you are."),
+    (
+        "agents",
+        "",
+        "Every agent: its engine and model, home folder, and what it is doing.",
+    ),
+    (
+        "engines",
+        "",
+        "The engines on this host (claude, claudex, codex), with their models and effort levels.",
+    ),
+    (
+        "create-agent",
+        "--name NAME --engine ENGINE --home FOLDER [--model MODEL] [--effort EFFORT] [--instructions TEXT]",
+        "Make an agent. Its name is its @handle; its home folder, inside the home directory, is where it works; instructions are given to it in every conversation. It is in no channel until it is mentioned or invited.",
+    ),
+    ("channels", "", "Every channel, with its topic and members."),
+    (
+        "create-channel",
+        "--name NAME [--topic TEXT] [--members a,b]",
+        "Make a channel with you and the agents named in it.",
+    ),
+    (
+        "invite",
+        "--channel NAME --agents a,b",
+        "Add agents to a channel without waking them.",
+    ),
+    (
+        "post",
+        "--channel NAME [--thread ID] TEXT",
+        "Post in a channel, or in a thread there, as yourself. @mentions wake agents as usual.",
+    ),
+    (
+        "read",
+        "--channel NAME [--thread ID] [--limit N]",
+        "The latest messages in a channel or one of its threads, with their ids.",
+    ),
+];
+fn caller(corral: &Corral, headers: &axum::http::HeaderMap) -> Result<Caller, ApiError> {
+    headers
+        .get("x-corral-token")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|token| corral.callers.lock().unwrap().get(token).cloned())
+        .ok_or_else(|| {
+            refuse(
+                StatusCode::UNAUTHORIZED,
+                "This works only inside a Corral turn",
+            )
+        })
+}
+pub async fn agent_help(
+    State(corral): State<Corral>,
+    headers: axum::http::HeaderMap,
+) -> Result<String, ApiError> {
+    let me = caller(&corral, &headers)?;
+    let name = corral
+        .state
+        .lock()
+        .unwrap()
+        .agents
+        .get(&me.agent)
+        .map(|a| a.name.clone())
+        .unwrap_or_default();
+    let mut out = format!(
+        "corral: Corral from your shell, acting as @{name}.\nUsage: corral ACTION [--key value ...] [text]\n\n"
+    );
+    for (action, args, about) in ACTIONS {
+        out.push_str(&format!("corral {action} {args}\n    {about}\n"));
+    }
+    Ok(out)
+}
+fn text_arg(body: &Value, key: &str) -> String {
+    match &body[key] {
+        Value::String(s) => s.trim().to_owned(),
+        Value::Null => String::new(),
+        other => other.to_string(),
+    }
+}
+fn names(body: &Value, key: &str) -> Vec<String> {
+    text_arg(body, key)
+        .split([',', ' '])
+        .map(|n| n.trim().trim_start_matches('@').to_ascii_lowercase())
+        .filter(|n| !n.is_empty())
+        .collect()
+}
+fn bad(message: &str) -> ApiError {
+    refuse(StatusCode::BAD_REQUEST, message)
+}
+impl Corral {
+    /// A channel by its name (with or without #) or id.
+    fn channel_named(&self, name: &str) -> Result<Conversation, ApiError> {
+        let name = name.trim().trim_start_matches('#').to_ascii_lowercase();
+        if name.is_empty() {
+            return Err(bad("Give a channel with --channel NAME"));
+        }
+        self.state
+            .lock()
+            .unwrap()
+            .conversations
+            .values()
+            .find(|c| c.kind == "channel" && (c.name == name || c.id == name))
+            .cloned()
+            .ok_or_else(|| {
+                bad(&format!(
+                    "There is no channel #{name}; `corral channels` lists them"
+                ))
+            })
+    }
+    /// Agent ids for handles, or which handle is unknown.
+    fn agents_named(&self, handles: &[String]) -> Result<Vec<String>, ApiError> {
+        let state = self.state.lock().unwrap();
+        handles
+            .iter()
+            .map(|n| {
+                state
+                    .agents
+                    .values()
+                    .find(|a| a.name == *n)
+                    .map(|a| a.id.clone())
+                    .ok_or_else(|| {
+                        bad(&format!(
+                            "There is no agent @{n}; `corral agents` lists them"
+                        ))
+                    })
+            })
+            .collect()
+    }
+    /// Notes in the caller's conversation what it did, so the person sees it.
+    fn note(&self, me: &Caller, text: &str) {
+        let _ = self.post(&me.conversation, CORRAL, text, 0, &me.thread);
+    }
+}
+pub async fn agent_action(
+    State(corral): State<Corral>,
+    headers: axum::http::HeaderMap,
+    Path(action): Path<String>,
+    Json(body): Json<Value>,
+) -> Result<String, ApiError> {
+    let me = caller(&corral, &headers)?;
+    let who = corral
+        .state
+        .lock()
+        .unwrap()
+        .agents
+        .get(&me.agent)
+        .map(|a| a.name.clone())
+        .unwrap_or_default();
+    let engine_line = |a: &Agent, engines: &[Value]| {
+        let label = engines
+            .iter()
+            .find(|e| e["id"] == a.engine.as_str())
+            .and_then(|e| e["label"].as_str())
+            .unwrap_or(&a.engine)
+            .to_owned();
+        [label, a.model.clone(), a.effort.clone()]
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join(" · ")
+    };
+    match action.as_str() {
+        "whoami" => {
+            let engines = corral.engines().await;
+            let state = corral.state.lock().unwrap();
+            let a = state.agents.get(&me.agent).ok_or_else(not_found)?;
+            let talk = state
+                .conversations
+                .get(&me.conversation)
+                .ok_or_else(not_found)?;
+            Ok(format!(
+                "You are @{} ({}), working in {}, in {}{}.",
+                a.name,
+                engine_line(a, &engines),
+                a.home,
+                if me.thread.is_empty() {
+                    ""
+                } else {
+                    "a thread in "
+                },
+                place(talk),
+            ))
+        }
+        "agents" => {
+            let engines = corral.engines().await;
+            let state = corral.state.lock().unwrap();
+            let mut agents: Vec<&Agent> = state.agents.values().collect();
+            agents.sort_by(|a, b| a.name.cmp(&b.name));
+            Ok(agents
+                .into_iter()
+                .map(|a| {
+                    let busy: Vec<String> = state
+                        .turns
+                        .keys()
+                        .filter(|(_, id, _)| *id == a.id)
+                        .filter_map(|(c, _, _)| state.conversations.get(c).map(place))
+                        .collect();
+                    format!(
+                        "@{} · {} · {}{}",
+                        a.name,
+                        engine_line(a, &engines),
+                        a.home,
+                        if busy.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" · working in {}", busy.join(", "))
+                        }
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n"))
+        }
+        "engines" => Ok(corral
+            .engines()
+            .await
+            .iter()
+            .map(|e| {
+                let models: Vec<&str> = e["models"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|m| m["id"].as_str())
+                    .collect();
+                let efforts: Vec<&str> = e["efforts"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .collect();
+                format!(
+                    "{} ({}): models {}; efforts {}",
+                    e["id"].as_str().unwrap_or_default(),
+                    e["label"].as_str().unwrap_or_default(),
+                    if models.is_empty() {
+                        "its own default".into()
+                    } else {
+                        models.join(", ")
+                    },
+                    efforts.join(", ")
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")),
+        "create-agent" => {
+            if corral.state.lock().unwrap().agents.len() >= MAX_AGENTS {
+                return Err(bad(&format!(
+                    "Corral holds {MAX_AGENTS} agents; ask the person to remove some"
+                )));
+            }
+            let form = AgentForm {
+                name: text_arg(&body, "name"),
+                engine: text_arg(&body, "engine"),
+                model: text_arg(&body, "model"),
+                effort: text_arg(&body, "effort"),
+                home: text_arg(&body, "home"),
+                instructions: text_arg(&body, "instructions"),
+            };
+            let (name, home) = corral.checked(&form, "").await?;
+            let agent = Agent {
+                id: uuid::Uuid::new_v4().to_string(),
+                name,
+                engine: form.engine,
+                model: form.model,
+                effort: form.effort,
+                home,
+                instructions: form.instructions,
+                created: now(),
+            };
+            corral.save_agent(&agent).map_err(error)?;
+            corral
+                .state
+                .lock()
+                .unwrap()
+                .agents
+                .insert(agent.id.clone(), agent.clone());
+            corral.emit(json!({"type":"agents"}));
+            let engines = corral.engines().await;
+            let line = engine_line(&agent, &engines);
+            corral.note(
+                &me,
+                &format!(
+                    "@{who} made @{} ({line}, in {})",
+                    agent.name,
+                    tilde(&agent.home)
+                ),
+            );
+            Ok(format!(
+                "Made @{} ({line}) in {}. Mention @{} in a channel to bring it in, or `corral invite`.",
+                agent.name,
+                tilde(&agent.home),
+                agent.name
+            ))
+        }
+        "channels" => {
+            let state = corral.state.lock().unwrap();
+            let mut channels: Vec<&Conversation> = state
+                .conversations
+                .values()
+                .filter(|c| c.kind == "channel")
+                .collect();
+            channels.sort_by(|a, b| a.name.cmp(&b.name));
+            Ok(channels
+                .into_iter()
+                .map(|c| {
+                    let members: Vec<String> =
+                        c.members.iter().map(|id| handle(&state, id)).collect();
+                    format!(
+                        "#{}{} · {}",
+                        c.name,
+                        if c.topic.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" · {}", c.topic)
+                        },
+                        if members.is_empty() {
+                            "no agents".into()
+                        } else {
+                            members.join(", ")
+                        }
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n"))
+        }
+        "create-channel" => {
+            let mut members = corral.agents_named(&names(&body, "members"))?;
+            if !members.contains(&me.agent) {
+                members.insert(0, me.agent.clone());
+            }
+            let form = ChannelForm {
+                name: text_arg(&body, "name"),
+                topic: text_arg(&body, "topic"),
+                members,
+            };
+            let (name, members) = corral.checked_channel(&form, "")?;
+            let conversation = Conversation {
+                id: uuid::Uuid::new_v4().to_string(),
+                kind: "channel".into(),
+                name,
+                topic: clip(&form.topic, 250),
+                members,
+                created: now(),
+            };
+            corral.save_conversation(&conversation).map_err(error)?;
+            corral
+                .state
+                .lock()
+                .unwrap()
+                .conversations
+                .insert(conversation.id.clone(), conversation.clone());
+            corral.emit(json!({"type":"conversation","conversation":conversation}));
+            corral.note(&me, &format!("@{who} made #{}", conversation.name));
+            Ok(format!("Made #{}.", conversation.name))
+        }
+        "invite" => {
+            let channel = corral.channel_named(&text_arg(&body, "channel"))?;
+            let handles = names(&body, "agents");
+            if handles.is_empty() {
+                return Err(bad("Name the agents with --agents a,b"));
+            }
+            let ids = corral.agents_named(&handles)?;
+            let updated = {
+                let mut state = corral.state.lock().unwrap();
+                let c = state
+                    .conversations
+                    .get_mut(&channel.id)
+                    .ok_or_else(not_found)?;
+                for id in ids {
+                    if !c.members.contains(&id) {
+                        c.members.push(id);
+                    }
+                }
+                c.clone()
+            };
+            corral.save_conversation(&updated).map_err(error)?;
+            corral.emit(json!({"type":"conversation","conversation":updated}));
+            let list = handles
+                .iter()
+                .map(|n| format!("@{n}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let _ = corral.post(&channel.id, CORRAL, &format!("@{who} added {list}"), 0, "");
+            Ok(format!("Added {list} to #{}.", channel.name))
+        }
+        "post" => {
+            let channel = corral.channel_named(&text_arg(&body, "channel"))?;
+            let text = text_arg(&body, "text");
+            if text.is_empty() || text.len() > 64 * 1024 {
+                return Err(bad("Give the message as text after the arguments"));
+            }
+            let thread = text_arg(&body, "thread");
+            if !thread.is_empty()
+                && !corral
+                    .state
+                    .lock()
+                    .unwrap()
+                    .messages
+                    .get(&channel.id)
+                    .is_some_and(|m| m.iter().any(|m| m.id == thread && m.thread.is_empty()))
+            {
+                return Err(bad("No such message to reply to in that channel"));
+            }
+            let message = corral
+                .post(&channel.id, &me.agent, &text, me.chain, &thread)
+                .map_err(error)?;
+            Ok(format!("Posted in #{} ({}).", channel.name, message.id))
+        }
+        "read" => {
+            let channel = corral.channel_named(&text_arg(&body, "channel"))?;
+            let thread = text_arg(&body, "thread");
+            let limit: usize = text_arg(&body, "limit").parse().unwrap_or(30).clamp(1, 100);
+            let state = corral.state.lock().unwrap();
+            let shown: Vec<&Message> = state
+                .messages
+                .get(&channel.id)
+                .into_iter()
+                .flatten()
+                .filter(|m| {
+                    if thread.is_empty() {
+                        m.thread.is_empty()
+                    } else {
+                        m.id == thread || m.thread == thread
+                    }
+                })
+                .collect();
+            Ok(shown
+                .iter()
+                .skip(shown.len().saturating_sub(limit))
+                .map(|m| {
+                    format!(
+                        "[{}] {} {}: {}",
+                        m.id,
+                        m.ts.get(..16).unwrap_or(&m.ts).replace('T', " "),
+                        handle(&state, &m.author),
+                        m.text.trim()
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n"))
+        }
+        other => Err(bad(&format!(
+            "There is no `corral {other}`; `corral help` lists the actions"
+        ))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1989,6 +2507,91 @@ mod tests {
         let (wake, _, _) = corral.targets(&mut state, &talk, &reply(YOU, "hm", &later));
         assert!(wake.is_empty());
         drop(state);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn an_agents_corral_command_acts_for_it_while_its_turn_runs() {
+        let (corral, root) = corral();
+        let (maker, helper) = (agent(&corral, "maker"), agent(&corral, "helper"));
+        let infra = channel(&corral, "infra", vec![maker.id.clone()]);
+        let token = "t0k3n";
+        corral.callers.lock().unwrap().insert(
+            token.into(),
+            Caller {
+                agent: maker.id.clone(),
+                conversation: infra.id.clone(),
+                thread: String::new(),
+                chain: 1,
+            },
+        );
+        let headers = |t: &str| {
+            let mut h = axum::http::HeaderMap::new();
+            h.insert("x-corral-token", t.parse().unwrap());
+            h
+        };
+        let run = |action: &str, body: Value| {
+            tokio::runtime::Runtime::new()
+                .unwrap()
+                .block_on(agent_action(
+                    State(corral.clone()),
+                    headers(token),
+                    Path(action.into()),
+                    Json(body),
+                ))
+        };
+        // Only a turn's own token works.
+        let refused = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(agent_help(State(corral.clone()), headers("nope")));
+        assert_eq!(refused.unwrap_err().0, StatusCode::UNAUTHORIZED);
+        let help = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(agent_help(State(corral.clone()), headers(token)))
+            .unwrap();
+        assert!(help.starts_with("corral: Corral from your shell, acting as @maker."));
+        assert!(help.contains("corral create-agent --name NAME --engine ENGINE --home FOLDER"));
+        // A channel it makes includes it, and the person hears about it where it is.
+        assert_eq!(
+            run("create-channel", json!({"name":"#docs","topic":"Writing"})).unwrap(),
+            "Made #docs."
+        );
+        assert_eq!(
+            run("invite", json!({"channel":"docs","agents":"@helper"})).unwrap(),
+            "Added @helper to #docs."
+        );
+        let channels = run("channels", json!({})).unwrap();
+        assert!(channels.contains("#docs · Writing · @maker, @helper"));
+        // It posts as itself, and reads back with ids.
+        assert!(
+            run("post", json!({"channel":"docs","text":"hello docs"}))
+                .unwrap()
+                .starts_with("Posted in #docs")
+        );
+        let read = run("read", json!({"channel":"docs"})).unwrap();
+        assert!(read.contains("@maker: hello docs"));
+        let state = corral.state.lock().unwrap();
+        let notes: Vec<&str> = state.messages[&infra.id]
+            .iter()
+            .map(|m| m.text.as_str())
+            .collect();
+        assert_eq!(notes, ["@maker made #docs"]);
+        drop(state);
+        // Mistakes say what to do.
+        let unknown = run("invite", json!({"channel":"docs","agents":"ghost"})).unwrap_err();
+        assert!(
+            unknown.1["error"]
+                .as_str()
+                .unwrap()
+                .contains("`corral agents`")
+        );
+        assert!(
+            run("dance", json!({})).unwrap_err().1["error"]
+                .as_str()
+                .unwrap()
+                .contains("corral help")
+        );
+        let _ = helper;
         fs::remove_dir_all(root).unwrap();
     }
 

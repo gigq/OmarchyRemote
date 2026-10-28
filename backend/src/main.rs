@@ -65,6 +65,11 @@ async fn authorize(
     next: Next,
 ) -> Response {
     let headers = request.headers();
+    // An agent's `corral` command, on this host, sends its turn's token, which Corral checks.
+    let path = request.uri().path();
+    if path == "/api/corral/agent" || path.starts_with("/api/corral/agent/") {
+        return next.run(request).await;
+    }
     if headers.get("x-omarchy-proxy").and_then(|v| v.to_str().ok()) != Some(app.token.as_str()) {
         return StatusCode::UNAUTHORIZED.into_response();
     }

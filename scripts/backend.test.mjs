@@ -264,6 +264,13 @@ test('Corral lists its engines, checks agents, and keeps channels and their mess
     await api(`corral/conversations/${channel.id}/delete`, {});
   }
   assert.ok(!(await api('corral')).conversations.some(c => c.id === channel.id));
+  // An agent's `corral` command needs its turn's token; the app's own headers are not enough.
+  const agentApi = await fetch(`${base}/api/corral/agent/agents`, {
+    method: 'POST',
+    headers: { 'X-Hyprland-Client': '1', 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  assert.equal(agentApi.status, 401);
 });
 
 test('a Herdr pane is renamed by its tab and closed with its tab', async () => {
