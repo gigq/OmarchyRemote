@@ -13,6 +13,7 @@ import {
   screen,
   session,
   shell as desktop,
+  systemPreferences,
 } from 'electron';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -378,12 +379,19 @@ class DesktopApp {
   }
   guardPermissions() {
     const shellAllowed = ['clipboard-read', 'clipboard-sanitized-write', 'fullscreen'];
-    this.shellSession.setPermissionRequestHandler((contents, permission, done, details) =>
-      done(shellAllowed.includes(permission) && this.allowed(details.requestingUrl))
-    );
+    // The host's shell may use the microphone, for dictation and Voice, but never the camera.
+    const audio = types => types.length > 0 && types.every(type => type === 'audio');
+    this.shellSession.setPermissionRequestHandler((contents, permission, done, details) => {
+      if (!this.allowed(details.requestingUrl)) return done(false);
+      if (permission === 'media' && audio(details.mediaTypes || []))
+        return this.microphone().then(done);
+      done(shellAllowed.includes(permission));
+    });
     this.shellSession.setPermissionCheckHandler(
-      (contents, permission, requestingOrigin) =>
-        shellAllowed.includes(permission) && this.allowed(requestingOrigin)
+      (contents, permission, requestingOrigin, details) =>
+        this.allowed(requestingOrigin) &&
+        (shellAllowed.includes(permission) ||
+          (permission === 'media' && details?.mediaType === 'audio'))
     );
     // Websites get harmless capabilities; anything personal asks first, like a browser.
     const ask = ['media', 'geolocation', 'notifications', 'clipboard-read'];
@@ -411,6 +419,11 @@ class DesktopApp {
     this.pageSession.setUserAgent(
       this.pageSession.getUserAgent().replace(/ (Electron|omarchy-remote-desktop)\/\S+/g, '')
     );
+  }
+  /* The system's say over the microphone: macOS asks the person once; elsewhere it is open. */
+  microphone() {
+    if (process.platform !== 'darwin') return Promise.resolve(true);
+    return systemPreferences.askForMediaAccess('microphone').catch(() => false);
   }
   openExternal(url) {
     if (website(url) || url.startsWith('mailto:')) desktop.openExternal(url).catch(() => {});

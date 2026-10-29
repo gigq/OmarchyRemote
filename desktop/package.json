@@ -64,7 +64,10 @@
         "dmg"
       ],
       "category": "public.app-category.developer-tools",
-      "icon": "../public/icons/icon-512.png"
+      "icon": "../public/icons/icon-512.png",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Dictation and Voice send what you say to your host to be transcribed."
+      }
     },
     "win": {
       "target": [

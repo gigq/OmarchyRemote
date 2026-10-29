@@ -207,3 +207,27 @@ test('Files saves through a save dialog and the weather widget falls back to a c
     await app.close();
   }
 });
+
+test('the shell can use the microphone for dictation, but not the camera', async ({ profile }) => {
+  // Chromium's stand-in devices, so the test needs no real microphone or camera.
+  const { app, window } = await launch(profile, {}, ['--use-fake-device-for-media-stream']);
+  await window.getByLabel('Name').fill('Loopback QA');
+  await window.getByLabel('Address').fill(HOST);
+  await window.getByRole('button', { name: 'Save host' }).click();
+  await window.getByRole('button', { name: 'Loopback QA 127.0.0.1:4187' }).click();
+  await expect(window).toHaveURL(HOST + '/native/');
+  const asked = await window.evaluate(async () => {
+    const ask = async constraints => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        stream.getTracks().forEach(track => track.stop());
+        return 'allowed';
+      } catch (e) {
+        return e.name;
+      }
+    };
+    return { audio: await ask({ audio: true }), video: await ask({ video: true }) };
+  });
+  expect(asked).toEqual({ audio: 'allowed', video: 'NotAllowedError' });
+  await app.close();
+});
