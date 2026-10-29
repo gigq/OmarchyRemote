@@ -85,6 +85,7 @@ async function setup(page, { width = 402, height = 874 } = {}, before) {
         ],
         machine: 'linuxbox',
         hosts: state.hosts || [],
+        background: state.background || [],
         agents: state.agents,
         conversations: state.conversations.map(c => ({
           ...c,
@@ -705,4 +706,36 @@ test('with room, Activity sits beside the conversation', async ({ page }) => {
   await page.reload();
   await page.getByText('corral', { exact: true }).first().click();
   await expect(page.locator('#remote-corral-app .corral-details')).toBeVisible();
+});
+
+test('work an agent left running shows apart from a turn under way', async ({ page }) => {
+  const { app, emit } = await setup(page, {}, (page, state) => {
+    state.background = [
+      { conversation: INFRA, agent: ALEX, thread: '', command: 'bash tools/render.sh' },
+    ];
+  });
+  const channel = app.locator('.corral-row:not(.corral-agent-row)').filter({ hasText: 'infra' });
+  await expect(channel.locator('.corral-busy.background')).toBeVisible();
+  const alex = app.locator('.corral-agent-row').filter({ hasText: 'alex' });
+  await expect(alex.locator('.corral-row-status')).toHaveText(
+    'running in the background in #infra'
+  );
+  await expect(alex.locator('.corral-busy.background')).toBeVisible();
+  await channel.click();
+  const line = app.locator('.corral-working');
+  await expect(line).toHaveText(/@alex · in the background: bash tools\/render\.sh/);
+  await expect(line).toHaveClass(/background/);
+  // Background work is the agent's own; Stop is for a turn under way.
+  await expect(line.getByRole('button', { name: 'Stop' })).toBeHidden();
+  await page.screenshot({ path: 'artifacts/browser/corral-background.png' });
+  // A turn under way shows green, with Stop, and the background work beside it.
+  emit({ type: 'status', conversation: INFRA, agent: SAM, status: 'thinking' });
+  await expect(line).not.toHaveClass(/background/);
+  await expect(line.getByRole('button', { name: 'Stop' })).toBeVisible();
+  await expect(line).toHaveText(/@sam is thinking….*@alex · in the background/);
+  emit({ type: 'status', conversation: INFRA, agent: SAM, status: null });
+  // When it finishes, the line and the dots go.
+  emit({ type: 'background', background: [] });
+  await expect(line).toBeHidden();
+  await expect(app.locator('.corral-busy')).toHaveCount(0);
 });

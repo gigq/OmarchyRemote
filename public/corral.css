@@ -114,6 +114,22 @@
 .corral-row[aria-current='true'] {
   background: color-mix(in srgb, var(--theme-accent) 22%, transparent);
 }
+/* Work an agent left running after its turn: amber, and slower. */
+.corral-busy.background {
+  background: var(--theme-yellow);
+  animation-duration: 3s;
+}
+.corral-working.background > span {
+  animation: none;
+}
+.corral-working.background::before {
+  content: '';
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--theme-yellow);
+}
 /* Agents grouped by the folder their homes share. */
 .corral-group-head {
   display: flex;

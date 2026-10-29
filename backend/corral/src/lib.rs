@@ -33,6 +33,7 @@ use tokio::{
     sync::broadcast,
 };
 
+mod background;
 mod hosts;
 pub use hosts::Host;
 use hosts::{host_listing, host_turn};
@@ -239,6 +240,8 @@ struct Workspace {
     turns: HashMap<TurnKey, Turn>,
     /// When other hosts' agents last changed their pictures, by agent.
     pictures: HashMap<String, u64>,
+    /// What agents left running after their turns, by place: the command it started.
+    background: HashMap<TurnKey, String>,
 }
 #[derive(Clone)]
 pub struct Corral {
@@ -261,6 +264,8 @@ pub struct Corral {
 }
 /// One run of an agent's engine: what it is told, and where its `corral` command reaches.
 struct Job<'a> {
+    /// The place it is for, which every process of the turn carries as `CORRAL_PLACE`.
+    place: TurnKey,
     agent: &'a Agent,
     seat: &'a Seat,
     fork: Option<&'a Mark>,
@@ -643,6 +648,9 @@ pub fn start(setup: Setup) -> anyhow::Result<Corral> {
     corral.name = setup.name;
     corral.public = setup.public;
     corral.connect();
+    // Asked once, before any turn needs it.
+    background::scoped();
+    corral.watch_background();
     Ok(corral)
 }
 impl Corral {
@@ -912,6 +920,7 @@ impl Corral {
                     let memory = fs::read_to_string(folder.join("memory.md")).unwrap_or_default();
                     let prompt = finish(&parts.0, &memory, &parts.1);
                     let job = Job {
+                        place: key.clone(),
                         agent: &agent,
                         seat: &seat,
                         fork: fork.as_ref(),
@@ -1020,6 +1029,7 @@ impl Corral {
         status: impl Fn(String),
     ) -> Result<(String, String, String), String> {
         let Job {
+            place,
             agent,
             seat,
             fork,
@@ -1110,9 +1120,19 @@ impl Corral {
             ),
         )
         .map_err(|e| e.to_string())?;
-        let mut command_line = Command::new(&program);
+        // On a systemd host the turn runs in a scope of its own, so what it leaves running in the
+        // background outlives the service that started it, as when the service restarts.
+        let mut command_line = if background::scoped() {
+            let mut c = Command::new("systemd-run");
+            c.args(["--user", "--scope", "--quiet", "--collect", "--"])
+                .arg(&program);
+            c
+        } else {
+            Command::new(&program)
+        };
         command_line
             .args(&args)
+            .env("CORRAL_PLACE", background::tag(&place))
             .current_dir(&agent.home)
             // Claude Code's own memory is per folder, shared with the person's sessions there;
             // a Corral agent keeps its memory in its Corral folder instead, the same for every
@@ -1554,6 +1574,7 @@ pub async fn overview(State(corral): State<Corral>) -> Result<Json<Value>, ApiEr
         "person": person(),
         "machine": corral.name,
         "hosts": corral.host_summary(),
+        "background": background::list(&state),
         "folder": corral.root.display().to_string(),
         "engines": engines,
         "agents": agents,

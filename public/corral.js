@@ -13,6 +13,12 @@
   const SEEN = 'omarchy-corral-seen';
   const PANEL_ICON =
     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/><path d="M15 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4z" fill="currentColor" stroke="none"/></svg>';
+  // An agent at work: green for a turn under way, amber for work it left running in the background.
+  function dot(background = false) {
+    const d = node('span', background ? 'corral-busy background' : 'corral-busy');
+    d.title = background ? 'Running in the background' : 'Working';
+    return d;
+  }
   // When a message was sent: the time today, otherwise the day.
   function when(ts) {
     const d = new Date(ts);
@@ -160,6 +166,8 @@
       root.classList.add('corral-app');
       this.data = { agents: [], conversations: [], engines: [], person: 'you' };
       this.working = new Map();
+      // What agents left running after their turns, by `conversation agent thread`.
+      this.background = new Map();
       this.messages = [];
       // Agents' pictures, loaded once per version, as blob URLs.
       this.pictures = new Map();
@@ -356,6 +364,11 @@
         this.renderWorking();
         this.renderSide();
         if (this.detailsOpen) this.renderActivity();
+      } else if (e.type === 'background') {
+        this.setBackground(e.background);
+        this.renderWorking();
+        this.renderSide();
+        if (this.detailsOpen) this.renderActivity();
       } else if (e.type === 'resync') {
         this.resume();
       } else if (e.type === 'removed' && e.conversation === this.openId) {
@@ -375,6 +388,7 @@
         for (const c of this.data.conversations)
           for (const w of c.working || [])
             this.working.set([c.id, w.agent, w.thread || ''].join(' '), w.status);
+        this.setBackground(this.data.background);
         this.error = '';
       } catch (e) {
         this.error = e.message;
@@ -411,8 +425,9 @@
         row.setAttribute('role', 'listitem');
         row.setAttribute('aria-current', String(c.id === this.openId));
         row.append(node('span', 'corral-hash', '#'), node('span', 'corral-row-name', c.name));
-        if ([...this.working.keys()].some(k => k.startsWith(c.id + ' ')))
-          row.append(node('span', 'corral-busy', ''));
+        if ([...this.working.keys()].some(k => k.startsWith(c.id + ' '))) row.append(dot());
+        else if ([...this.background.keys()].some(k => k.startsWith(c.id + ' ')))
+          row.append(dot(true));
         contextMenu(row, () => ({
           title: '#' + c.name,
           items: [
@@ -435,18 +450,26 @@
         const row = button('', () => this.direct(a.id), 'corral-row corral-agent-row');
         row.setAttribute('role', 'listitem');
         row.setAttribute('aria-current', String(!!dm && dm.id === this.openId));
-        const busy = [...this.working.keys()].filter(k => k.split(' ')[1] === a.id);
-        const where = busy.map(k => this.conversation(k.split(' ')[0])).filter(Boolean);
+        const places = keys =>
+          [...keys]
+            .filter(k => k.split(' ')[1] === a.id)
+            .map(k => this.conversation(k.split(' ')[0]))
+            .filter(Boolean);
+        const where = places(this.working.keys());
+        const waiting = places(this.background.keys());
         const status = where.length
           ? 'working in ' + where.map(c => this.label(c)).join(', ')
-          : [this.engineLabel(a.engine), a.model].filter(Boolean).join(' · ');
+          : waiting.length
+            ? 'running in the background in ' + waiting.map(c => this.label(c)).join(', ')
+            : [this.engineLabel(a.engine), a.model].filter(Boolean).join(' · ');
         const text = node('span', 'corral-row-text');
         text.append(
           node('span', 'corral-row-name', a.name),
           node('span', 'corral-row-status', status)
         );
         row.append(this.face(a), text);
-        if (where.length) row.append(node('span', 'corral-busy', ''));
+        if (where.length) row.append(dot());
+        else if (waiting.length) row.append(dot(true));
         contextMenu(row, () => ({
           title: '@' + a.name,
           items: [
@@ -459,7 +482,7 @@
             },
           ],
         }));
-        agentRows.set(a.id, { row, busy: where.length > 0 });
+        agentRows.set(a.id, { row, busy: where.length > 0, waiting: waiting.length > 0 });
       }
       // Another host's agents group under its name; this host's, whose home folders share a
       // parent, under that folder. Groups collapse; an agent alone in its folder stands alone.
@@ -502,8 +525,8 @@
           node('span', 'corral-count', String(members.length))
         );
         if (host && !host.online) head.append(node('span', 'corral-offline', 'not reachable'));
-        if (shut && members.some(m => agentRows.get(m.id).busy))
-          head.append(node('span', 'corral-busy', ''));
+        if (shut && members.some(m => agentRows.get(m.id).busy)) head.append(dot());
+        else if (shut && members.some(m => agentRows.get(m.id).waiting)) head.append(dot(true));
         const group = node('div', 'corral-folder-group');
         group.setAttribute('role', 'group');
         group.setAttribute('aria-label', label);
@@ -678,10 +701,13 @@
         const m = item.message;
         const key = item.conversation + '/' + item.thread;
         const fresh = m.author !== 'you' && m.ts > (this.seen[key] || '');
-        const busy = [...this.working.keys()].some(k => {
-          const [conv, , thread = ''] = k.split(' ');
-          return conv === item.conversation && thread === item.thread;
-        });
+        const here = keys =>
+          [...keys].some(k => {
+            const [conv, , thread = ''] = k.split(' ');
+            return conv === item.conversation && thread === item.thread;
+          });
+        const busy = here(this.working.keys());
+        const waiting = here(this.background.keys());
         const row = button('', () => this.goTo(item), 'corral-activity-row');
         row.setAttribute('role', 'listitem');
         row.classList.toggle('fresh', fresh);
@@ -695,7 +721,8 @@
           node('span', 'corral-row-name', (item.thread ? 'Thread in ' : '') + this.label(c)),
           node('time', '', when(m.ts))
         );
-        if (busy) where.append(node('span', 'corral-busy', ''));
+        if (busy) where.append(dot());
+        else if (waiting) where.append(dot(true));
         const text = node('span', 'corral-row-text');
         text.append(where);
         if (item.root)
@@ -881,16 +908,34 @@
     // What agents are doing here: in the thread when one is open, or in the conversation, where
     // work in its threads is marked as such.
     renderWorking() {
-      const busy = [...this.working.entries()]
-        .map(([k, status]) => [...k.split(' '), status])
-        .filter(([c, , t]) => c === this.openId && (!this.threadId || t === this.threadId));
-      this.workingLine.hidden = !this.openId || !busy.length;
-      this.workingText.textContent = busy
-        .map(([, agent, t, status]) => {
-          const name = '@' + this.author(agent) + (t && !this.threadId ? ' in a thread' : '');
-          return status === 'thinking' ? `${name} is thinking…` : `${name} · ${status}`;
-        })
-        .join('   ');
+      const here = map =>
+        [...map.entries()]
+          .map(([k, value]) => [...k.split(' '), value])
+          .filter(([c, , t]) => c === this.openId && (!this.threadId || t === this.threadId));
+      const name = (agent, t) =>
+        '@' + this.author(agent) + (t && !this.threadId ? ' in a thread' : '');
+      const busy = here(this.working);
+      const waiting = here(this.background).filter(
+        ([c, agent, t]) => !this.working.has([c, agent, t].join(' '))
+      );
+      this.workingLine.hidden = !this.openId || (!busy.length && !waiting.length);
+      // Only a turn under way stops; background work is the agent's to manage.
+      this.stopKey.hidden = !busy.length;
+      this.workingLine.classList.toggle('background', !busy.length);
+      this.workingText.textContent = [
+        ...busy.map(([, agent, t, status]) =>
+          status === 'thinking' ? `${name(agent, t)} is thinking…` : `${name(agent, t)} · ${status}`
+        ),
+        ...waiting.map(
+          ([, agent, t, command]) => `${name(agent, t)} · in the background: ${command}`
+        ),
+      ].join('   ');
+      this.workingText.title = this.workingText.textContent;
+    }
+    setBackground(list = []) {
+      this.background = new Map(
+        list.map(b => [[b.conversation, b.agent, b.thread || ''].join(' '), b.command])
+      );
     }
     // Names to mention, offered while an @word is being typed.
     suggest() {

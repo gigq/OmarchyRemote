@@ -533,6 +533,11 @@ pub async fn host_turn(
             visit.api.clone()
         };
         let job = Job {
+            place: (
+                format!("{}:{}", visit.home, visit.conversation),
+                agent.id.clone(),
+                visit.thread.clone(),
+            ),
             agent: &shown,
             seat: &seat,
             fork: None,
