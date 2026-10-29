@@ -40,4 +40,33 @@ npm run dist           # the current platform's targets: dmg on macOS, NSIS inst
 
 Build each platform on that platform. macOS and Windows builds are unsigned until you configure signing for electron-builder with your own identity, kept out of the repository.
 
+### Linux ARM64 on Omarchy
+
+Build on the ARM64 machine itself. Electron's ARM64 runtime is downloaded by the
+builder; the Rust host backend must also be compiled on that machine. On Arch-based
+systems the host's theme importer needs Pillow, and the package builder's bundled
+Ruby needs the compatibility `libcrypt.so.1` library:
+
+```sh
+sudo pacman -S --needed python-pillow libxcrypt-compat
+# From the repository root:
+npm ci
+npm --prefix desktop ci
+cargo build --locked --release --manifest-path backend/Cargo.toml
+npm --prefix desktop run dist:linux -- --arm64
+sudo pacman -U desktop/dist/omarchy-remote-0.1.0-aarch64.pacman
+```
+
+This produces both `desktop/dist/omarchy-remote-0.1.0-arm64.AppImage` and the
+native `aarch64.pacman` package. The pacman package adds Omarchy Remote to the app
+launcher. Configure the backend and web services using the host installation steps
+in the root README; packaging the client alone does not start a host.
+
+Canvas, Corral, Muster, Chat, Herdr, CodexBar, and Settings can each have their own
+launcher through **Settings → app windows**. Canvas and Corral are served by the
+shared Rust backend: they need no separate application server or architecture-specific
+frontend build. Keep the backend and web shell at the same source revision. Their
+agent commands must be installed and authenticated on this host; installing a
+launcher does not transfer credentials or conversations from another machine.
+
 Herdr’s folder button uses the OS default file manager when the selected server’s `/api/state` host ID matches the local backend’s `~/.local/share/omarchy-remote/settings.sqlite3`. The database is read-only and never created by the client. Missing identities, remote hosts, non-directory paths, and OS opener failures fall back to the in-app Files view. The `shellFolders` bridge is available only to the trusted host shell, not embedded websites.

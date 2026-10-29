@@ -59,6 +59,11 @@ Herdr’s wide-mode sidebar can be resized by dragging its divider, or hidden wi
 
 ## Install on the host
 
+On Arch-based hosts, install `python-pillow` for theme background conversion before
+running `deploy/install.sh`. Linux ARM64 desktop builds also need
+`libxcrypt-compat` for Electron's package builder; see
+[the ARM64 packaging instructions](desktop/README.md#linux-arm64-on-omarchy).
+
 1. Clone and build:
 
    ```sh
