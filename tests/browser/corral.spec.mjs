@@ -739,3 +739,60 @@ test('work an agent left running shows apart from a turn under way', async ({ pa
   await expect(line).toBeHidden();
   await expect(app.locator('.corral-busy')).toHaveCount(0);
 });
+
+test('the filter narrows Activity to the agent or room open, until pressed again', async ({
+  page,
+}) => {
+  const WEB = 'c4444444-4444-4444-8444-444444444444';
+  const item = (conversation, thread, author, text, minute, agents) => ({
+    conversation,
+    thread,
+    message: { id: 'x' + minute, ts: `2026-10-28T10:${minute}:00.000Z`, author, text },
+    root: thread
+      ? { id: thread, ts: '2026-10-28T10:01:00.000Z', author: 'you', text: 'certs?' }
+      : null,
+    agents,
+    replies: thread ? 1 : 0,
+  });
+  const { app } = await setup(page, { width: 1400, height: 900 }, (page, state) => {
+    state.conversations.push({
+      id: WEB,
+      kind: 'channel',
+      name: 'web',
+      topic: '',
+      members: [SAM],
+      working: [],
+    });
+    state.messages[WEB] = [msg(SAM, 'Deployed.', 7)];
+    state.activity = [
+      item(INFRA, 'm1', ALEX, 'All three renewed.', 30, [ALEX]),
+      item(WEB, '', SAM, 'Deployed.', 20, [SAM]),
+      item(DM, '', ALEX, 'Backups done.', 10, [ALEX]),
+    ];
+  });
+  const places = app.locator('.corral-activity-place .corral-row-name');
+  const filter = app.getByRole('button', { name: 'Filter Activity' });
+  // Nothing open: nothing to filter by.
+  await app.getByRole('button', { name: 'Activity', exact: true }).click();
+  await expect(places).toHaveText(['Thread in #infra', '#web', '@alex']);
+  await expect(filter).toBeDisabled();
+  // In alex's direct message, the filter keeps what alex is part of.
+  await app.locator('.corral-agent-row').filter({ hasText: 'alex' }).click();
+  await filter.click();
+  await expect(filter).toHaveAttribute('aria-pressed', 'true');
+  await expect(app.locator('.corral-filter-note')).toHaveText('Only @alex');
+  await expect(places).toHaveText(['Thread in #infra', '@alex']);
+  await page.screenshot({ path: 'artifacts/browser/corral-activity-filter.png' });
+  // Opening a row keeps the filter on what it was pressed for.
+  await app.getByRole('list', { name: 'Activity' }).getByRole('listitem').first().click();
+  await expect(app.locator('.corral-title')).toHaveText('Thread');
+  await expect(places).toHaveText(['Thread in #infra', '@alex']);
+  // Pressed again, everything shows; in a room, it keeps the room and its agents.
+  await filter.click();
+  await expect(places).toHaveCount(3);
+  await expect(app.locator('.corral-filter-note')).toBeHidden();
+  await app.locator('.corral-row:not(.corral-agent-row)').filter({ hasText: 'web' }).click();
+  await filter.click();
+  await expect(app.locator('.corral-filter-note')).toHaveText("Only #web's agents");
+  await expect(places).toHaveText(['#web']);
+});

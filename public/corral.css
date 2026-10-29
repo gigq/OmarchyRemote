@@ -562,3 +562,25 @@
 .corral-activity-row.fresh .corral-activity-place .corral-row-name {
   color: var(--theme-accent);
 }
+.corral-filter-key svg {
+  display: block;
+  margin: auto;
+}
+.corral-filter-key[aria-pressed='true'] {
+  color: var(--theme-accent);
+  border-color: currentColor;
+  background: color-mix(in srgb, var(--theme-accent) 18%, transparent);
+}
+.corral-filter-key:disabled {
+  opacity: 0.4;
+}
+.corral-filter-note {
+  flex: none;
+  margin: 0;
+  padding: 0 8px 6px;
+  font-size: 12px;
+  color: var(--theme-accent);
+}
+.corral-filter-note[hidden] {
+  display: none;
+}

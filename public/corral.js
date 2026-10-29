@@ -11,6 +11,10 @@
   // Whether the details panel is open, and when each place was last looked at, on this device.
   const DETAILS = 'omarchy-corral-details';
   const SEEN = 'omarchy-corral-seen';
+  // What Activity is narrowed to: an agent, or a room's agents.
+  const FILTER = 'omarchy-corral-activity-filter';
+  const FILTER_ICON =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>';
   const PANEL_ICON =
     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/><path d="M15 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4z" fill="currentColor" stroke="none"/></svg>';
   // An agent at work: green for a turn under way, amber for work it left running in the background.
@@ -258,11 +262,21 @@
       const detailsBar = node('div', 'corral-bar');
       const shut = button('×', () => this.toggleDetails(false), 'keycap corral-back');
       shut.setAttribute('aria-label', 'Close Activity');
-      detailsBar.append(node('h2', 'corral-heading', 'Activity'), shut);
+      // Narrows Activity to the agent or room open when it is pressed, until pressed again.
+      this.filterKey = button(
+        '',
+        () => this.toggleFilter(),
+        'keycap corral-back corral-filter-key'
+      );
+      this.filterKey.innerHTML = FILTER_ICON;
+      this.filterKey.setAttribute('aria-label', 'Filter Activity');
+      detailsBar.append(node('h2', 'corral-heading', 'Activity'), this.filterKey, shut);
+      this.filterNote = node('p', 'corral-filter-note');
       this.activityList = node('div', 'corral-side-scroll corral-activity');
       this.activityList.setAttribute('role', 'list');
       this.activityList.setAttribute('aria-label', 'Activity');
-      this.details.append(detailsBar, this.activityList);
+      this.details.append(detailsBar, this.filterNote, this.activityList);
+      this.filter = storage.read(FILTER, null);
       this.activity = [];
       this.detailsOpen = !!storage.read(DETAILS, false);
       this.seen = storage.read(SEEN, {}) || {};
@@ -692,12 +706,57 @@
       storage.write(SEEN, this.seen);
       if (this.detailsOpen) this.renderActivity();
     }
+    // The agent or room open now, as a filter: a direct message filters to its agent.
+    filterHere() {
+      const c = this.conversation(this.openId);
+      if (!c) return null;
+      return c.kind === 'dm' ? { kind: 'agent', id: c.members[0] } : { kind: 'room', id: c.id };
+    }
+    toggleFilter() {
+      this.filter = this.filter ? null : this.filterHere();
+      storage.write(FILTER, this.filter);
+      this.renderActivity();
+    }
+    // What the filter is, for a person; null once its agent or room is gone.
+    filterName() {
+      const f = this.filter;
+      if (f?.kind === 'agent' && this.agent(f.id)) return '@' + this.author(f.id);
+      const room = f?.kind === 'room' && this.conversation(f.id);
+      return room ? `${this.label(room)}'s agents` : null;
+    }
+    // Whether a place belongs in Activity as filtered: one the agent wrote in or is the direct
+    // message with, or for a room, the room itself and anywhere its agents are.
+    kept(item, c) {
+      const f = this.filter;
+      if (!f) return true;
+      const agents = new Set(f.kind === 'agent' ? [f.id] : this.conversation(f.id)?.members || []);
+      return (
+        item.conversation === f.id ||
+        (item.agents || []).some(a => agents.has(a)) ||
+        (c.kind === 'dm' && agents.has(c.members[0]))
+      );
+    }
     renderActivity() {
       if (this.details.hidden && !this.detailsOpen) return;
+      // A filter whose agent or room was deleted goes, once the workspace has loaded.
+      if (this.filter && this.data.conversations.length && !this.filterName()) {
+        this.filter = null;
+        storage.write(FILTER, null);
+      }
+      const name = this.filter && this.filterName();
+      this.filterKey.setAttribute('aria-pressed', String(!!this.filter));
+      this.filterKey.disabled = !this.filter && !this.filterHere();
+      this.filterKey.title = this.filter
+        ? 'Show all activity'
+        : this.filterHere()
+          ? 'Show only activity for the agent or room open'
+          : 'Open an agent or a room to filter by it';
+      this.filterNote.hidden = !name;
+      this.filterNote.textContent = name ? 'Only ' + name : '';
       const rows = [];
       for (const item of this.activity) {
         const c = this.conversation(item.conversation);
-        if (!c) continue;
+        if (!c || !this.kept(item, c)) continue;
         const m = item.message;
         const key = item.conversation + '/' + item.thread;
         const fresh = m.author !== 'you' && m.ts > (this.seen[key] || '');
@@ -748,7 +807,12 @@
       }
       if (!rows.length)
         rows.push(
-          node('p', 'corral-empty', this.activityError || 'Conversations show here as they go.')
+          node(
+            'p',
+            'corral-empty',
+            this.activityError ||
+              (name ? `Nothing yet for ${name}.` : 'Conversations show here as they go.')
+          )
         );
       this.activityList.replaceChildren(...rows);
     }
@@ -774,6 +838,8 @@
       this.details.hidden = !this.detailsOpen || (!wide && !this.sheet.hidden);
       for (const key of this.root.querySelectorAll('.corral-panel-key'))
         key.setAttribute('aria-pressed', String(this.detailsOpen));
+      if (this.detailsOpen && this.filterKey)
+        this.filterKey.disabled = !this.filter && !this.filterHere();
       this.backKey.hidden = wide && !this.threadId;
       this.sidePanelKey.hidden = !this.main.hidden;
       this.followVoice();

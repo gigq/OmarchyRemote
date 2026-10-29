@@ -2069,8 +2069,9 @@ pub async fn response(
 /// How many places the activity list shows.
 const ACTIVITY: usize = 200;
 /// Every place a conversation is going, latest first: each channel and direct message, and each
-/// thread in them, with its latest message (shortened) and, for a thread, the message it hangs
-/// from and how many replies it has. Corral's own notes do not count.
+/// thread in them, with its latest message (shortened), the agents who have written there, and,
+/// for a thread, the message it hangs from and how many replies it has. Corral's own notes do not
+/// count.
 fn activity_of(state: &Workspace) -> Vec<Value> {
     let brief = |m: &Message| json!({"id": m.id, "ts": m.ts, "author": m.author, "text": clip(&m.text, 300)});
     let mut items: Vec<(String, Value)> = Vec::new();
@@ -2087,6 +2088,18 @@ fn activity_of(state: &Workspace) -> Vec<Value> {
             let root = (!thread.is_empty())
                 .then(|| messages.iter().find(|r| r.id == thread))
                 .flatten();
+            let mut agents: Vec<&str> = Vec::new();
+            for m in messages.iter().filter(|m| {
+                if thread.is_empty() {
+                    m.thread.is_empty()
+                } else {
+                    m.id == thread || m.thread == thread
+                }
+            }) {
+                if m.author != YOU && m.author != CORRAL && !agents.contains(&m.author.as_str()) {
+                    agents.push(&m.author);
+                }
+            }
             items.push((
                 last.ts.clone(),
                 json!({
@@ -2094,6 +2107,7 @@ fn activity_of(state: &Workspace) -> Vec<Value> {
                     "thread": thread,
                     "message": brief(last),
                     "root": root.map(brief),
+                    "agents": agents,
                     "replies": if thread.is_empty() { 0 } else { count },
                 }),
             ));
@@ -3216,6 +3230,7 @@ mod tests {
         assert_eq!(items[0]["message"]["text"], "Details: all three.");
         assert_eq!(items[0]["root"]["text"], "@alex certs?");
         assert_eq!(items[0]["replies"], 1);
+        assert_eq!(items[0]["agents"], json!([alex.id]));
         assert_eq!(items[1]["thread"], "");
         assert_eq!(items[1]["message"]["id"], json!(answered.id));
         assert!(items[1]["root"].is_null());
