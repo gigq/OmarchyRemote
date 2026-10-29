@@ -108,6 +108,9 @@ async function setup(page, { width = 402, height = 874 } = {}, before) {
     return r.fulfill({ json: m });
   });
   await page.route('**/api/corral/dm', r => r.fulfill({ json: state.conversations[1] }));
+  await page.route('**/api/corral/activity', r =>
+    r.fulfill({ json: { items: state.activity || [] } })
+  );
   await page.route('**/api/corral/agents', r => {
     const body = r.request().postDataJSON();
     state.created.push(body);
@@ -610,4 +613,93 @@ test("another host's agents group under it, and a new agent can be made there", 
         host: 'winbox',
       },
     ]);
+});
+
+test('Activity lists every conversation and thread by its latest message, and opens one', async ({
+  page,
+}) => {
+  const { app, state, emit } = await setup(page, {}, (page, state) => {
+    state.messages[INFRA].push({ ...msg(ALEX, 'All three renewed.', 5), id: 'r1', thread: 'm1' });
+    state.activity = [
+      {
+        conversation: INFRA,
+        thread: 'm1',
+        message: {
+          id: 'r1',
+          ts: '2026-10-28T10:05:00.000Z',
+          author: ALEX,
+          text: 'All three renewed.',
+        },
+        root: {
+          id: 'm1',
+          ts: '2026-10-28T10:01:00.000Z',
+          author: 'you',
+          text: '@alex can you rotate the certs?',
+        },
+        replies: 1,
+      },
+      {
+        conversation: INFRA,
+        thread: '',
+        message: { id: 'm2', ts: '2026-10-28T10:02:00.000Z', author: ALEX, text: 'On it.' },
+        root: null,
+        replies: 0,
+      },
+    ];
+  });
+  // The sidebar's panel key opens Activity in the conversation's place on a phone.
+  await app.getByRole('button', { name: 'Activity' }).first().click();
+  const list = app.getByRole('list', { name: 'Activity' });
+  await expect(list.getByRole('listitem')).toHaveCount(2);
+  await expect(list.locator('.corral-activity-place .corral-row-name')).toHaveText([
+    'Thread in #infra',
+    '#infra',
+  ]);
+  await expect(list.locator('.corral-activity-root')).toHaveText(
+    'Justin: @alex can you rotate the certs?'
+  );
+  // Replies not looked at yet stand out.
+  await expect(list.locator('.fresh')).toHaveCount(2);
+  await page.screenshot({ path: 'artifacts/browser/corral-activity.png' });
+  // A row opens its thread, as its message's Reply would.
+  await list.getByRole('listitem').first().click();
+  await expect(app.locator('.corral-title')).toHaveText('Thread');
+  await expect(app.locator('.corral-messages')).toContainText('All three renewed.');
+  await expect(app.locator('.corral-details')).toBeHidden();
+  // Seen now; a new reply elsewhere brings the list up to date.
+  await app.getByRole('button', { name: 'Activity' }).last().click();
+  await expect(list.locator('.fresh')).toHaveCount(1);
+  state.activity.unshift({
+    conversation: DM,
+    thread: '',
+    message: { id: 'd1', ts: '2026-10-28T10:09:00.000Z', author: ALEX, text: 'Backups done.' },
+    root: null,
+    replies: 0,
+  });
+  emit({ type: 'message', conversation: DM, message: msg(ALEX, 'Backups done.', 9) });
+  await expect(list.locator('.corral-activity-place .corral-row-name').first()).toHaveText('@alex');
+});
+
+test('with room, Activity sits beside the conversation', async ({ page }) => {
+  const { app, state } = await setup(page, { width: 1400, height: 900 }, (page, state) => {
+    state.activity = [
+      {
+        conversation: INFRA,
+        thread: '',
+        message: { id: 'm2', ts: '2026-10-28T10:02:00.000Z', author: ALEX, text: 'On it.' },
+        root: null,
+        replies: 0,
+      },
+    ];
+  });
+  await app.getByRole('button', { name: 'Activity' }).first().click();
+  await app.getByRole('list', { name: 'Activity' }).getByRole('listitem').click();
+  await expect(app.locator('.corral-title')).toHaveText('#infra');
+  await expect(app.locator('.corral-details')).toBeVisible();
+  await expect(app.locator('.corral-side')).toBeVisible();
+  await page.screenshot({ path: 'artifacts/browser/corral-activity-wide.png' });
+  // The panel stays open across visits.
+  await page.reload();
+  await page.getByText('corral', { exact: true }).first().click();
+  await expect(page.locator('#remote-corral-app .corral-details')).toBeVisible();
 });

@@ -6,7 +6,8 @@
 }
 .corral-side,
 .corral-main,
-.corral-sheet {
+.corral-sheet,
+.corral-details {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -21,7 +22,8 @@
 }
 .corral-side[hidden],
 .corral-main[hidden],
-.corral-sheet[hidden] {
+.corral-sheet[hidden],
+.corral-details[hidden] {
   display: none;
 }
 .corral-bar {
@@ -462,4 +464,85 @@
   inset: 0;
   z-index: 5;
   background: var(--theme-background);
+}
+/* The details panel: beside the conversation when there is room, in its place otherwise. */
+.corral-app.corral-roomy .corral-details {
+  flex: none;
+  width: 300px;
+  padding-left: 8px;
+  border-left: 1px solid color-mix(in srgb, var(--theme-border) 60%, transparent);
+}
+.corral-panel-key svg {
+  display: block;
+  margin: auto;
+}
+.corral-panel-key[aria-pressed='true'] {
+  color: var(--theme-accent);
+  border-color: currentColor;
+}
+.corral-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.corral-activity-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--theme-foreground);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.corral-activity-row:hover {
+  background: color-mix(in srgb, var(--theme-surface-raised) 70%, transparent);
+}
+.corral-activity-row[aria-current='true'] {
+  background: color-mix(in srgb, var(--theme-accent) 22%, transparent);
+}
+.corral-activity-place {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.corral-activity-place .corral-row-name {
+  font-size: 12px;
+  color: var(--theme-secondary);
+}
+.corral-activity-place time {
+  flex: none;
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--theme-secondary);
+}
+.corral-activity-root {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-left: 6px;
+  border-left: 2px solid color-mix(in srgb, var(--theme-border) 80%, transparent);
+  font-size: 12px;
+  color: var(--theme-secondary);
+}
+.corral-activity-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow-wrap: anywhere;
+}
+/* A reply that came in since the place was last looked at. */
+.corral-activity-row.fresh .corral-activity-text {
+  font-weight: 600;
+}
+.corral-activity-row.fresh .corral-activity-place .corral-row-name {
+  color: var(--theme-accent);
 }

@@ -8,6 +8,19 @@
   const OPEN = 'omarchy-corral-open';
   // Folders whose agents the sidebar shows collapsed.
   const COLLAPSED = 'omarchy-corral-collapsed';
+  // Whether the details panel is open, and when each place was last looked at, on this device.
+  const DETAILS = 'omarchy-corral-details';
+  const SEEN = 'omarchy-corral-seen';
+  const PANEL_ICON =
+    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>';
+  // When a message was sent: the time today, otherwise the day.
+  function when(ts) {
+    const d = new Date(ts);
+    if (Number.isNaN(+d)) return '';
+    return d.toDateString() === new Date().toDateString()
+      ? time(ts)
+      : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
   async function request(path, body) {
     const response = await fetch(
       '/api/corral' + path,
@@ -153,7 +166,7 @@
       // The sidebar: channels, then a direct message with each agent.
       this.side = node('section', 'corral-side');
       const sideBar = node('div', 'corral-bar');
-      sideBar.append(node('h2', 'corral-heading', 'Corral'));
+      sideBar.append(node('h2', 'corral-heading', 'Corral'), this.panelKey());
       this.channelList = node('div', 'corral-list');
       this.channelList.setAttribute('role', 'list');
       this.agentList = node('div', 'corral-list');
@@ -188,7 +201,8 @@
       titles.append(this.title, this.subtitle);
       this.settingsKey = button('', () => this.editOpen(), 'keycap corral-settings');
       this.settingsKey.textContent = '⋯';
-      bar.append(this.backKey, titles, this.settingsKey);
+      this.mainPanelKey = this.panelKey();
+      bar.append(this.backKey, titles, this.mainPanelKey, this.settingsKey);
       this.list = node('div', 'corral-messages');
       // At the latest message, the list stays there as it changes size: when a working line
       // appears under it, a message arrives, or the keyboard comes and goes.
@@ -227,7 +241,21 @@
       this.main.hidden = true;
       this.sheet = node('section', 'corral-sheet');
       this.sheet.hidden = true;
-      root.append(this.side, this.main, this.sheet);
+      // The details panel, on the right as in an editor: for now, Activity, every place a
+      // conversation is going with its latest message, newest first.
+      this.details = node('section', 'corral-details');
+      const detailsBar = node('div', 'corral-bar');
+      const shut = button('×', () => this.toggleDetails(false), 'keycap corral-back');
+      shut.setAttribute('aria-label', 'Close Activity');
+      detailsBar.append(node('h2', 'corral-heading', 'Activity'), shut);
+      this.activityList = node('div', 'corral-side-scroll corral-activity');
+      this.activityList.setAttribute('role', 'list');
+      this.activityList.setAttribute('aria-label', 'Activity');
+      this.details.append(detailsBar, this.activityList);
+      this.activity = [];
+      this.detailsOpen = !!storage.read(DETAILS, false);
+      this.seen = storage.read(SEEN, {}) || {};
+      root.append(this.side, this.main, this.sheet, this.details);
       // The shell gives the composer focus only while a conversation shows.
       this.detail = this.main;
       this.nativeInput = bridge.createInput(this.main, true, text => this.send(text), {
@@ -272,6 +300,8 @@
       this.voiceChanged();
       this.resized = new ResizeObserver(() => {
         this.root.classList.toggle('corral-wide', this.root.clientWidth >= 700);
+        // Room for the details panel beside the conversation.
+        this.root.classList.toggle('corral-roomy', this.root.clientWidth >= 1000);
         this.layout();
       });
       this.resized.observe(root);
@@ -280,6 +310,7 @@
     }
     connect() {
       this.socket();
+      if (this.detailsOpen) this.loadActivity();
       this.refresh().then(() => {
         const open = storage.get(OPEN);
         if (open && this.conversation(open)) this.open(open);
@@ -288,6 +319,7 @@
     resume() {
       if (!this.ws || this.ws.readyState > 1) this.socket();
       this.refresh();
+      if (this.detailsOpen) this.loadActivity();
       if (this.openId) this.open(this.openId);
     }
     socket() {
@@ -310,13 +342,17 @@
           this.messages.push(e.message);
           this.renderMessages(true);
         }
+        // What arrives where you are looking counts as seen.
+        if (this.showing(e.conversation, e.message.thread || '')) this.markSeen();
         this.renderSide();
+        if (this.detailsOpen) this.activityLater();
       } else if (e.type === 'status') {
         const key = [e.conversation, e.agent, e.thread || ''].join(' ');
         if (e.status) this.working.set(key, e.status);
         else this.working.delete(key);
         this.renderWorking();
         this.renderSide();
+        if (this.detailsOpen) this.renderActivity();
       } else if (e.type === 'resync') {
         this.resume();
       } else if (e.type === 'removed' && e.conversation === this.openId) {
@@ -520,7 +556,8 @@
         this.sideStatus.textContent = e.message;
       }
     }
-    async open(id) {
+    // Opens a conversation, or with `thread`, that thread in it, which alone counts as seen.
+    async open(id, thread = '') {
       this.closeSheet();
       this.threadId = null;
       this.openId = id;
@@ -531,6 +568,7 @@
       this.renderHeader();
       this.renderMessages();
       this.renderSide();
+      if (!thread) this.markSeen();
       try {
         const data = await request('/conversations/' + encodeURIComponent(id));
         if (this.openId !== id) return;
@@ -539,6 +577,7 @@
           this.working.set([id, w.agent, w.thread || ''].join(' '), w.status);
         this.renderMessages();
         this.renderWorking();
+        if (thread) this.openThread(thread);
       } catch (e) {
         if (this.openId === id) this.list.replaceChildren(node('p', 'corral-empty', e.message));
       }
@@ -552,6 +591,7 @@
       this.renderHeader();
       this.renderMessages();
       this.renderWorking();
+      this.markSeen();
     }
     closeThread() {
       this.threadId = null;
@@ -560,6 +600,7 @@
       this.renderHeader();
       this.renderMessages();
       this.renderWorking();
+      this.markSeen();
     }
     close() {
       this.threadId = null;
@@ -577,6 +618,117 @@
       this.voiceTarget = target;
       this.dictation.voice.changeThread();
     }
+    panelKey() {
+      const key = button('', () => this.toggleDetails(), 'keycap corral-settings corral-panel-key');
+      key.innerHTML = PANEL_ICON;
+      key.setAttribute('aria-label', 'Activity');
+      key.title = 'Activity: the latest in every conversation and thread';
+      return key;
+    }
+    toggleDetails(open = !this.detailsOpen) {
+      this.detailsOpen = open;
+      storage.write(DETAILS, open);
+      if (open) this.loadActivity();
+      this.layout();
+    }
+    async loadActivity() {
+      try {
+        this.activity = (await request('/activity')).items || [];
+        this.activityError = '';
+      } catch (e) {
+        this.activityError = e.message;
+      }
+      this.renderActivity();
+    }
+    // Several messages at once load the list once.
+    activityLater() {
+      clearTimeout(this.activityTimer);
+      this.activityTimer = setTimeout(() => this.loadActivity(), 300);
+    }
+    // Whether a place (a conversation, or a thread in it) is on screen.
+    showing(conversation, thread) {
+      return (
+        !this.main.hidden &&
+        !document.hidden &&
+        conversation === this.openId &&
+        thread === (this.threadId || '')
+      );
+    }
+    // The place on screen counts as read up to now, on this device.
+    markSeen() {
+      if (!this.openId) return;
+      this.seen[this.openId + '/' + (this.threadId || '')] = new Date().toISOString();
+      const keys = Object.keys(this.seen);
+      // The most recent few hundred places are enough.
+      if (keys.length > 400)
+        for (const k of keys.sort((a, b) => this.seen[a].localeCompare(this.seen[b])).slice(0, 100))
+          delete this.seen[k];
+      storage.write(SEEN, this.seen);
+      if (this.detailsOpen) this.renderActivity();
+    }
+    renderActivity() {
+      if (this.details.hidden && !this.detailsOpen) return;
+      const rows = [];
+      for (const item of this.activity) {
+        const c = this.conversation(item.conversation);
+        if (!c) continue;
+        const m = item.message;
+        const key = item.conversation + '/' + item.thread;
+        const fresh = m.author !== 'you' && m.ts > (this.seen[key] || '');
+        const busy = [...this.working.keys()].some(k => {
+          const [conv, , thread = ''] = k.split(' ');
+          return conv === item.conversation && thread === item.thread;
+        });
+        const row = button('', () => this.goTo(item), 'corral-activity-row');
+        row.setAttribute('role', 'listitem');
+        row.classList.toggle('fresh', fresh);
+        row.setAttribute(
+          'aria-current',
+          String(item.conversation === this.openId && item.thread === (this.threadId || ''))
+        );
+        const name = this.author(m.author);
+        const where = node('div', 'corral-activity-place');
+        where.append(
+          node('span', 'corral-row-name', (item.thread ? 'Thread in ' : '') + this.label(c)),
+          node('time', '', when(m.ts))
+        );
+        if (busy) where.append(node('span', 'corral-busy', ''));
+        const text = node('span', 'corral-row-text');
+        text.append(where);
+        if (item.root)
+          text.append(
+            node(
+              'span',
+              'corral-activity-root',
+              `${this.author(item.root.author)}: ${item.root.text}`
+            )
+          );
+        text.append(node('span', 'corral-activity-text', `${name}: ${m.text}`));
+        if (item.replies)
+          text.append(
+            node(
+              'span',
+              'corral-row-status',
+              `${item.replies} ${item.replies === 1 ? 'reply' : 'replies'}`
+            )
+          );
+        row.append(this.face(this.agent(m.author), m.author === 'you' ? 'you' : name, name), text);
+        if (fresh) row.setAttribute('aria-label', `New: ${this.label(c)}, ${name}: ${m.text}`);
+        rows.push(row);
+      }
+      if (!rows.length)
+        rows.push(
+          node('p', 'corral-empty', this.activityError || 'Conversations show here as they go.')
+        );
+      this.activityList.replaceChildren(...rows);
+    }
+    // Opens a place from Activity as if it were opened from the sidebar or its message.
+    async goTo(item) {
+      if (!this.root.classList.contains('corral-roomy')) this.toggleDetails(false);
+      if (item.conversation !== this.openId || (this.threadId && !item.thread))
+        await this.open(item.conversation, item.thread);
+      else if (item.thread) this.openThread(item.thread);
+    }
     voiceChanged() {
       const voice = this.dictation?.voice;
       if (!voice) return;
@@ -585,9 +737,16 @@
     // One view at a time on a phone; both side by side when there is room.
     layout() {
       const wide = this.root.classList.contains('corral-wide');
-      this.main.hidden = !this.openId || !this.sheet.hidden;
-      this.side.hidden = !wide && (!!this.openId || !this.sheet.hidden);
+      // Without room beside the conversation, the details panel takes its place.
+      const over = this.detailsOpen && !this.root.classList.contains('corral-roomy');
+      this.main.hidden = !this.openId || !this.sheet.hidden || over;
+      this.side.hidden = !wide && (!!this.openId || !this.sheet.hidden || over);
+      this.details.hidden = !this.detailsOpen || (!wide && !this.sheet.hidden);
+      for (const key of this.root.querySelectorAll('.corral-panel-key'))
+        key.setAttribute('aria-pressed', String(this.detailsOpen));
       this.backKey.hidden = wide && !this.threadId;
+      // The sidebar's panel key serves while the sidebar shows.
+      this.mainPanelKey.hidden = !this.side.hidden;
       this.followVoice();
     }
     renderHeader() {
@@ -1124,6 +1283,10 @@
         this.closeSheet();
         return true;
       }
+      if (this.detailsOpen && !this.root.classList.contains('corral-roomy')) {
+        this.toggleDetails(false);
+        return true;
+      }
       if (this.threadId) {
         this.closeThread();
         return true;
@@ -1153,6 +1316,7 @@
       this.disposed = true;
       clearTimeout(this.retry);
       clearTimeout(this.refreshTimer);
+      clearTimeout(this.activityTimer);
       this.ws?.close();
       this.resized.disconnect();
       this.listResized.disconnect();

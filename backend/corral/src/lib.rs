@@ -1500,6 +1500,7 @@ pub fn router<S: Clone + std::marker::Send + Sync + 'static>(corral: Corral) -> 
         .route("/conversations/{id}/stop", post(stop))
         .route("/conversations/{id}/response", get(response))
         .route("/conversations/{id}/delete", post(delete_conversation))
+        .route("/activity", get(activity))
         .route("/ws", get(upgrade))
         // The `corral` command in an agent's turn, which sends the turn's token instead of the
         // app's credentials.
@@ -2043,6 +2044,46 @@ pub async fn response(
     Ok(Json(
         voice_state(&state, &id, &query.thread).ok_or_else(not_found)?,
     ))
+}
+/// How many places the activity list shows.
+const ACTIVITY: usize = 200;
+/// Every place a conversation is going, latest first: each channel and direct message, and each
+/// thread in them, with its latest message (shortened) and, for a thread, the message it hangs
+/// from and how many replies it has. Corral's own notes do not count.
+fn activity_of(state: &Workspace) -> Vec<Value> {
+    let brief = |m: &Message| json!({"id": m.id, "ts": m.ts, "author": m.author, "text": clip(&m.text, 300)});
+    let mut items: Vec<(String, Value)> = Vec::new();
+    for (id, messages) in &state.messages {
+        if !state.conversations.contains_key(id) {
+            continue;
+        }
+        let mut latest: HashMap<&str, (&Message, usize)> = HashMap::new();
+        for m in messages.iter().filter(|m| m.author != CORRAL) {
+            let entry = latest.entry(m.thread.as_str()).or_insert((m, 0));
+            *entry = (m, entry.1 + 1);
+        }
+        for (thread, (last, count)) in latest {
+            let root = (!thread.is_empty())
+                .then(|| messages.iter().find(|r| r.id == thread))
+                .flatten();
+            items.push((
+                last.ts.clone(),
+                json!({
+                    "conversation": id,
+                    "thread": thread,
+                    "message": brief(last),
+                    "root": root.map(brief),
+                    "replies": if thread.is_empty() { 0 } else { count },
+                }),
+            ));
+        }
+    }
+    items.sort_by(|a, b| b.0.cmp(&a.0));
+    items.truncate(ACTIVITY);
+    items.into_iter().map(|(_, v)| v).collect()
+}
+pub async fn activity(State(corral): State<Corral>) -> Json<Value> {
+    Json(json!({"items": activity_of(&corral.state.lock().unwrap())}))
 }
 #[derive(Deserialize)]
 pub struct SendForm {
@@ -3128,6 +3169,35 @@ mod tests {
                 .values()
                 .all(|a| a.host.is_empty())
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn activity_lists_each_place_by_its_latest_message() {
+        let (corral, root) = corral();
+        let alex = agent(&corral, "alex");
+        let talk = channel(&corral, "infra", vec![alex.id.clone()]);
+        let mut asked = message(YOU, "@alex certs?", 0);
+        asked.ts = "2026-10-29T10:00:00.000Z".into();
+        let mut answered = message(&alex.id, "Renewed.", 1);
+        answered.ts = "2026-10-29T10:01:00.000Z".into();
+        let mut threaded = reply(&alex.id, "Details: all three.", &asked.id);
+        threaded.ts = "2026-10-29T10:05:00.000Z".into();
+        let mut note = message(CORRAL, "@alex joined", 0);
+        note.ts = "2026-10-29T10:09:00.000Z".into();
+        corral.state.lock().unwrap().messages.insert(
+            talk.id.clone(),
+            vec![asked.clone(), answered.clone(), threaded.clone(), note],
+        );
+        let items = activity_of(&corral.state.lock().unwrap());
+        // The thread's reply is newest; Corral's note does not count.
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0]["thread"], json!(asked.id));
+        assert_eq!(items[0]["message"]["text"], "Details: all three.");
+        assert_eq!(items[0]["root"]["text"], "@alex certs?");
+        assert_eq!(items[0]["replies"], 1);
+        assert_eq!(items[1]["thread"], "");
+        assert_eq!(items[1]["message"]["id"], json!(answered.id));
+        assert!(items[1]["root"].is_null());
         fs::remove_dir_all(root).unwrap();
     }
 }
