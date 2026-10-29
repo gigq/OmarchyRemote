@@ -33,6 +33,24 @@
     logic.openApp('web');
     return true;
   }
+  // Opens a web address in the system's own browser: the native apps send a new window there.
+  function outside(raw) {
+    const url = webURL(raw);
+    if (url) window.open(url, '_blank', 'noopener');
+    return !!url;
+  }
+  // A link's menu items, for an app's context menu: open it here or in the system browser, or
+  // copy it. None for an element that is not in a web link.
+  function menuItems(pressed) {
+    const link = pressed?.closest?.('a[href]');
+    const url = link && webURL(link.href);
+    if (!url) return [];
+    return [
+      { label: 'Open in the Omarchy browser', run: () => open(url) },
+      { label: 'Open in the default browser', run: () => outside(url) },
+      { label: 'Copy link', run: () => navigator.clipboard?.writeText(url).catch(() => {}) },
+    ];
+  }
   // Has clicks on a container's links open in the browser window instead of leaving the app.
   function capture(container) {
     container.addEventListener('click', e => {
@@ -61,12 +79,10 @@
       this.reloadKey = key('↻', 'Reload', () => this.command('reload').catch(() => {}));
       this.address = node('span', 'web-address');
       this.address.setAttribute('role', 'status');
-      const outside = key('↗', 'Open in the system browser', () =>
-        window.open(this.url, '_blank', 'noopener')
-      );
+      const outsideKey = key('↗', 'Open in the system browser', () => outside(this.url));
       const close = key('×', 'Close', () => HyprlandApps.logic?.closeApp('web'));
       const bar = node('div', 'web-bar');
-      bar.append(this.backKey, this.forwardKey, this.reloadKey, this.address, outside, close);
+      bar.append(this.backKey, this.forwardKey, this.reloadKey, this.address, outsideKey, close);
       this.page = node('div', 'web-page');
       this.status = node('div', 'webapp-status');
       this.status.setAttribute('role', 'status');
@@ -230,5 +246,5 @@
   }
 
   HyprlandApps.provide('web', { create: (root, host) => new LinkBrowser(root, host) });
-  window.HyprlandLinks = { open, capture };
+  window.HyprlandLinks = { open, outside, capture, menuItems };
 })();

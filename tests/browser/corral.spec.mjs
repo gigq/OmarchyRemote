@@ -929,3 +929,71 @@ test('Search narrows to the messages with every word as you type, and opens one'
   await field.fill('');
   await expect(app.locator('.corral-details .corral-empty')).toContainText('Search every message');
 });
+
+test('a link in a message has its own menu items, and any message copies its text', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.copied = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: async text => window.copied.push(text) },
+    });
+    window.openedTabs = [];
+    window.open = url => {
+      window.openedTabs.push(url);
+      return null;
+    };
+  });
+  const { app } = await setup(page);
+  await app.getByRole('listitem').filter({ hasText: 'infra' }).first().click();
+  const list = app.locator('.corral-messages');
+  await list.getByRole('link', { name: 'https://example.com/certs' }).click({ button: 'right' });
+  await expect(page.getByRole('menuitem')).toHaveText([
+    'Open in the Omarchy browser',
+    'Open in the default browser',
+    'Copy link',
+    'Copy text',
+    'Reply in thread',
+    'Delete',
+  ]);
+  await page.getByRole('menuitem', { name: 'Copy link' }).click();
+  await list.getByRole('link', { name: 'https://example.com/certs' }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Open in the default browser' }).click();
+  // Elsewhere in a message, only its own items; Copy text copies it as written.
+  await list.locator('.corral-text', { hasText: 'On it.' }).click({ button: 'right' });
+  await expect(page.getByRole('menuitem')).toHaveText(['Copy text', 'Reply in thread', 'Delete']);
+  await page.getByRole('menuitem', { name: 'Copy text' }).click();
+  expect(await page.evaluate(() => window.copied)).toEqual([
+    'https://example.com/certs',
+    'On it. **Done** for `api` and `web`.',
+  ]);
+  expect(await page.evaluate(() => window.openedTabs)).toEqual(['https://example.com/certs']);
+});
+
+test.describe('on a computer', () => {
+  test.use({ isMobile: false, hasTouch: false, viewport: { width: 1280, height: 800 } });
+
+  test('message text can be selected, and the menu copies the selection', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.copied = [];
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: async text => window.copied.push(text) },
+      });
+    });
+    const { app } = await setup(page, { width: 1280, height: 800 });
+    await app.getByRole('listitem').filter({ hasText: 'infra' }).first().click();
+    const said = app.locator('.corral-text', { hasText: 'On it.' });
+    await expect(said).toHaveCSS('user-select', 'text');
+    // A drag across the words selects them.
+    const box = await said.boundingBox();
+    await page.mouse.move(box.x + 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 60, box.y + box.height / 2, { steps: 5 });
+    await page.mouse.up();
+    const selected = await page.evaluate(() => window.getSelection().toString());
+    expect(selected.length).toBeGreaterThan(2);
+    await said.click({ button: 'right', position: { x: 10, y: box.height / 2 } });
+    await page.getByRole('menuitem', { name: 'Copy selection' }).click();
+    expect(await page.evaluate(() => window.copied)).toEqual([selected.trim()]);
+  });
+});

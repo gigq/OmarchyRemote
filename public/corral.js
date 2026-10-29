@@ -1079,9 +1079,9 @@
         if (m.author === 'corral') {
           const note = node('div', 'corral-note');
           markdown(note, m.text, names);
-          contextMenu(note, () => ({
+          contextMenu(note, pressed => ({
             title: 'Corral',
-            items: [this.deleteItem(m, 0)],
+            items: [...this.textItems(m, note, pressed), this.deleteItem(m, 0)],
           }));
           items.push(note);
           last = null;
@@ -1125,9 +1125,10 @@
           answer.setAttribute('aria-label', 'Reply in thread');
           text.append(answer);
           const these = replies.get(m.id);
-          contextMenu(text, () => ({
+          contextMenu(text, pressed => ({
             title: this.author(m.author),
             items: [
+              ...this.textItems(m, text, pressed),
               { label: 'Reply in thread', run: () => this.openThread(m.id) },
               this.deleteItem(m, these?.length || 0),
             ],
@@ -1140,9 +1141,12 @@
             last = null;
           }
         } else {
-          contextMenu(text, () => ({
+          contextMenu(text, pressed => ({
             title: this.author(m.author),
-            items: [this.deleteItem(m, m.id === thread ? replies.get(thread)?.length || 0 : 0)],
+            items: [
+              ...this.textItems(m, text, pressed),
+              this.deleteItem(m, m.id === thread ? replies.get(thread)?.length || 0 : 0),
+            ],
           }));
         }
         if (thread && m.id === thread) {
@@ -1203,6 +1207,21 @@
         ),
       ].join('   ');
       this.workingText.title = this.workingText.textContent;
+    }
+    // A message's menu starts with what it was pressed on: a link's own items, then copying what
+    // is selected in it, or the whole message, which is how a touch screen copies text.
+    textItems(m, element, pressed) {
+      const copy = text => navigator.clipboard?.writeText(text).catch(() => {});
+      const selection = window.getSelection?.();
+      const selected =
+        selection && !selection.isCollapsed && element.contains(selection.anchorNode)
+          ? selection.toString().trim()
+          : '';
+      return [
+        ...(window.HyprlandLinks?.menuItems(pressed) || []),
+        ...(selected ? [{ label: 'Copy selection', run: () => copy(selected) }] : []),
+        { label: 'Copy text', run: () => copy(m.text) },
+      ];
     }
     // Delete, for any message: the person's, an agent's, or Corral's. One a thread hangs from
     // takes its replies with it.

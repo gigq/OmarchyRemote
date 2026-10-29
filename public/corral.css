@@ -655,3 +655,15 @@
     background: transparent;
   }
 }
+/* Messages have menus, which make their text unselectable for a long press; with a mouse or a
+   trackpad it is selectable again, and touch copies from the menu. */
+@media (pointer: fine) {
+  .corral-messages .has-context-menu {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+}
+.desktop-class .corral-messages .has-context-menu {
+  -webkit-user-select: text;
+  user-select: text;
+}

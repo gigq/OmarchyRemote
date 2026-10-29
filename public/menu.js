@@ -151,14 +151,16 @@
     return result;
   }
 
-  /* Gives `target` a menu; `menu()` returns { title, items } when it opens. A long press that
-     opened a menu does not also click the target. */
+  /* Gives `target` a menu; `menu(pressed)` returns { title, items } when it opens, given the
+     element pressed in it (a link, say). A long press that opened a menu does not also click the
+     target. */
   function contextMenu(target, menu) {
     let timer = 0;
     let start = null;
     let held = false;
+    let pressed = target;
     const show = (x, y) => {
-      const spec = menu();
+      const spec = menu(pressed);
       if (spec) open({ ...spec, x, y, returnFocus: target });
     };
     target.classList.add('has-context-menu');
@@ -168,12 +170,14 @@
       e.preventDefault();
       e.stopPropagation();
       if (held) return;
+      pressed = e.target;
       show(e.clientX, e.clientY);
     });
     target.addEventListener('pointerdown', e => {
       held = false;
       if (e.pointerType === 'mouse' || !e.isPrimary) return;
       start = { x: e.clientX, y: e.clientY };
+      pressed = e.target;
       clearTimeout(timer);
       timer = setTimeout(() => {
         held = true;
@@ -200,6 +204,7 @@
     target.addEventListener('keydown', e => {
       if (e.key !== 'ContextMenu' && !(e.key === 'F10' && e.shiftKey)) return;
       e.preventDefault();
+      pressed = document.activeElement || target;
       const box = target.getBoundingClientRect();
       show(box.left + 16, box.bottom);
     });
