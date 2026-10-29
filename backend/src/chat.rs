@@ -945,6 +945,18 @@ impl Chats {
         }
     }
     /// The agents this set can run: Canvas needs Claude's streaming protocol, so not Codex.
+    /// The agent a turn runs as. Canvas runs Claude through Claude X wherever it is installed,
+    /// so pages keep coming when the Claude account's own usage runs out.
+    fn engine<'a>(&self, agent: &'a str) -> &'a str {
+        if self.kind == Kind::Canvas
+            && agent == "claude"
+            && apps::resolve_program("claudex").is_ok()
+        {
+            "claudex"
+        } else {
+            agent
+        }
+    }
     fn installed(&self) -> Vec<(&'static str, &'static str, &'static str)> {
         installed()
             .into_iter()
@@ -1059,7 +1071,7 @@ impl Chats {
         }
         let command = AGENTS
             .iter()
-            .find(|(id, _, _)| *id == agent_of(&live.conversation))
+            .find(|(id, _, _)| *id == self.engine(agent_of(&live.conversation)))
             .map_or("claude", |(_, _, command)| *command);
         let mut child = Command::new(apps::resolve_program(command)?)
             .args(&args)
@@ -1222,7 +1234,7 @@ impl Chats {
         args.extend(self.agent_args(conversation)?);
         let command = AGENTS
             .iter()
-            .find(|(id, _, _)| *id == agent_of(conversation))
+            .find(|(id, _, _)| *id == self.engine(agent_of(conversation)))
             .map_or("claude", |(_, _, command)| *command);
         Ok(Command::new(apps::resolve_program(command)?)
             .args(&args)
@@ -1541,6 +1553,7 @@ pub async fn status(State(chats): State<Chats>) -> Result<Json<Value>, ApiError>
     let root = chats.root().map_err(error)?;
     prepare(&root).map_err(error)?;
     let agents = chats.installed();
+    let default = agents.first().map(|(id, _, _)| chats.engine(id));
     let running = chats.running.lock().unwrap();
     let chats: Vec<Value> = list(&root)
         .into_iter()
@@ -1576,7 +1589,7 @@ pub async fn status(State(chats): State<Chats>) -> Result<Json<Value>, ApiError>
     Ok(Json(json!({
         "folder": tilde(&root),
         "available": !agents.is_empty(),
-        "agent": agents.first().map(|(id, _, _)| *id),
+        "agent": default,
         "agents": offered,
         "models": models().iter().map(|(id, label)| json!({"id":id,"label":label})).collect::<Vec<_>>(),
         "efforts": EFFORTS,
@@ -1711,6 +1724,7 @@ pub async fn send(
         .or_else(|| current.clone())
         .or_else(|| agents.first().map(|(id, _, _)| (*id).to_owned()))
         .unwrap_or_else(|| "claude".into());
+    let agent = chats.engine(&agent).to_owned();
     if let Some(current) = &current
         && *current != agent
         && !(claude_family(current) && claude_family(&agent))
@@ -3388,6 +3402,20 @@ mod tests {
             archive_dir(&config, &root, &again.join(FILE)).unwrap(),
             root.join("archives").join(format!("{name}-2"))
         );
+    }
+
+    #[test]
+    fn canvas_runs_claude_through_claude_x_where_it_is_installed() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let (chat, canvas) = runtime.block_on(async { (start(Kind::Chat), start(Kind::Canvas)) });
+        let claudex = apps::resolve_program("claudex").is_ok();
+        assert_eq!(
+            canvas.engine("claude"),
+            if claudex { "claudex" } else { "claude" }
+        );
+        assert_eq!(canvas.engine("claudex"), "claudex");
+        // Chat runs the agent each chat was started with.
+        assert_eq!(chat.engine("claude"), "claude");
     }
 
     #[test]
