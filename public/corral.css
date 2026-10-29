@@ -593,3 +593,65 @@
   color: var(--theme-secondary);
   font-style: italic;
 }
+/* The details panel's panels, as tabs. */
+.corral-tabs {
+  display: flex;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+.corral-tab {
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--theme-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.corral-tab:hover {
+  color: var(--theme-foreground);
+}
+.corral-tab.active {
+  background: color-mix(in srgb, var(--theme-accent) 22%, transparent);
+  color: var(--theme-foreground);
+}
+.corral-search {
+  flex: none;
+  box-sizing: border-box;
+  width: auto;
+  margin: 0 8px 8px;
+}
+.corral-search[hidden],
+.corral-activity[hidden] {
+  display: none;
+}
+.corral-hit {
+  padding: 0 1px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--theme-yellow) 40%, transparent);
+  color: inherit;
+}
+.corral-activity-text .corral-name {
+  font-weight: 600;
+}
+.corral-filter-count {
+  margin: 0 8px 4px;
+  font-size: 11px;
+  color: var(--theme-secondary);
+}
+/* A message opened from Search, lit for a moment. */
+.corral-text.revealed {
+  animation: corral-reveal 2.4s ease-out;
+}
+@keyframes corral-reveal {
+  0%,
+  30% {
+    background: color-mix(in srgb, var(--theme-accent) 30%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}

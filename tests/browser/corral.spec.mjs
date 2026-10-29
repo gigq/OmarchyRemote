@@ -119,6 +119,21 @@ async function setup(page, { width = 402, height = 874 } = {}, before) {
     (state.deleted ||= []).push(...gone);
     return r.fulfill({ json: { deleted: gone } });
   });
+  await page.route(/\/api\/corral\/search\?/, r => {
+    const q = new URL(r.request().url()).searchParams.get('q').toLowerCase();
+    state.searched = [...(state.searched || []), q];
+    const items = [];
+    for (const [conversation, list] of Object.entries(state.messages))
+      for (const m of list)
+        if (q.split(/\s+/).every(w => m.text.toLowerCase().includes(w)))
+          items.push({
+            conversation,
+            thread: m.thread || '',
+            message: m,
+            agents: m.author === 'you' ? [] : [m.author],
+          });
+    return r.fulfill({ json: { items: items.reverse() } });
+  });
   await page.route('**/api/corral/activity', r =>
     r.fulfill({ json: { items: state.activity || [] } })
   );
@@ -659,7 +674,7 @@ test('Activity lists every conversation and thread by its latest message, and op
     ];
   });
   // The sidebar's panel key opens Activity in the conversation's place on a phone.
-  await app.getByRole('button', { name: 'Activity' }).first().click();
+  await app.getByRole('button', { name: 'Activity and Search' }).first().click();
   const list = app.getByRole('list', { name: 'Activity' });
   await expect(list.getByRole('listitem')).toHaveCount(2);
   await expect(list.locator('.corral-activity-place .corral-row-name')).toHaveText([
@@ -678,7 +693,7 @@ test('Activity lists every conversation and thread by its latest message, and op
   await expect(app.locator('.corral-messages')).toContainText('All three renewed.');
   await expect(app.locator('.corral-details')).toBeHidden();
   // Seen now; a new reply elsewhere brings the list up to date.
-  await app.getByRole('button', { name: 'Activity' }).last().click();
+  await app.getByRole('button', { name: 'Activity and Search' }).last().click();
   await expect(list.locator('.fresh')).toHaveCount(1);
   state.activity.unshift({
     conversation: DM,
@@ -703,14 +718,16 @@ test('with room, Activity sits beside the conversation', async ({ page }) => {
       },
     ];
   });
-  await app.getByRole('button', { name: 'Activity' }).first().click();
+  await app.getByRole('button', { name: 'Activity and Search' }).first().click();
   await app.getByRole('list', { name: 'Activity' }).getByRole('listitem').click();
   await expect(app.locator('.corral-title')).toHaveText('#infra');
   await expect(app.locator('.corral-details')).toBeVisible();
   await expect(app.locator('.corral-side')).toBeVisible();
   // Its key is in the conversation's bar, beside the panel, not over the sidebar.
-  await expect(app.getByRole('button', { name: 'Activity', exact: true })).toHaveCount(1);
-  await expect(app.locator('.corral-main').getByRole('button', { name: 'Activity' })).toBeVisible();
+  await expect(app.getByRole('button', { name: 'Activity and Search' })).toHaveCount(1);
+  await expect(
+    app.locator('.corral-main').getByRole('button', { name: 'Activity and Search' })
+  ).toBeVisible();
   await page.screenshot({ path: 'artifacts/browser/corral-activity-wide.png' });
   // The panel stays open across visits.
   await page.reload();
@@ -781,9 +798,9 @@ test('the filter narrows Activity to the agent or room open, until pressed again
     ];
   });
   const places = app.locator('.corral-activity-place .corral-row-name');
-  const filter = app.getByRole('button', { name: 'Filter Activity' });
+  const filter = app.getByRole('button', { name: 'Filter to the agent or room open' });
   // Nothing open: nothing to filter by.
-  await app.getByRole('button', { name: 'Activity', exact: true }).click();
+  await app.getByRole('button', { name: 'Activity and Search' }).click();
   await expect(places).toHaveText(['Thread in #infra', '#web', '@alex']);
   await expect(filter).toBeDisabled();
   // In alex's direct message, the filter keeps what alex is part of.
@@ -872,4 +889,43 @@ test('a thread stays open when Corral reconnects, and after a reload', async ({ 
   // The shell reopens Corral after a reload, and Corral its thread.
   await page.reload();
   await expect(page.locator('#remote-corral-app .corral-title')).toHaveText('Thread');
+});
+
+test('Search narrows to the messages with every word as you type, and opens one', async ({
+  page,
+}) => {
+  const { app, state } = await setup(page, { width: 1400, height: 900 }, (page, state) => {
+    state.messages[INFRA].push({
+      ...msg(ALEX, 'Rotated the API certs too.', 5),
+      id: 'r1',
+      thread: 'm1',
+    });
+    state.messages[DM] = [msg(ALEX, 'Backups ran at 3am.', 6)];
+  });
+  await app.getByRole('button', { name: 'Activity and Search' }).click();
+  await app.getByRole('tab', { name: 'Search' }).click();
+  await expect(app.getByRole('tab', { name: 'Search' })).toHaveAttribute('aria-selected', 'true');
+  const field = app.getByRole('searchbox', { name: 'Search messages' });
+  // Touch devices tap the field, so the keyboard does not cover the panel unasked.
+  await field.click();
+  const results = app.getByRole('list', { name: 'Search results' });
+  await field.pressSequentially('certs');
+  await expect(results.getByRole('listitem')).toHaveCount(2);
+  await expect(results.locator('.corral-hit').first()).toHaveText('certs');
+  // Every word, in any order.
+  await field.pressSequentially(' api');
+  await expect(results.getByRole('listitem')).toHaveCount(1);
+  await expect(results.locator('.corral-row-name')).toHaveText('Thread in #infra');
+  await page.screenshot({ path: 'artifacts/browser/corral-search.png' });
+  // A result opens where it is, and is lit.
+  await results.getByRole('listitem').click();
+  await expect(app.locator('.corral-title')).toHaveText('Thread');
+  await expect(app.locator('.corral-text.revealed')).toContainText('Rotated the API certs too.');
+  // The panel remembers it was on Search.
+  await page.reload();
+  await expect(
+    page.locator('#remote-corral-app').getByRole('tab', { name: 'Search' })
+  ).toHaveAttribute('aria-selected', 'true');
+  await field.fill('');
+  await expect(app.locator('.corral-details .corral-empty')).toContainText('Search every message');
 });

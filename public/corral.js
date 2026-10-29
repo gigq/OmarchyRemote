@@ -13,6 +13,12 @@
   const SEEN = 'omarchy-corral-seen';
   // What Activity is narrowed to: an agent, or a room's agents.
   const FILTER = 'omarchy-corral-activity-filter';
+  // Which panel the details panel shows: Activity or Search.
+  const PANEL = 'omarchy-corral-panel';
+  const PANELS = [
+    ['activity', 'Activity'],
+    ['search', 'Search'],
+  ];
   const FILTER_ICON =
     '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>';
   const PANEL_ICON =
@@ -263,7 +269,17 @@
       this.details = node('section', 'corral-details');
       const detailsBar = node('div', 'corral-bar');
       const shut = button('×', () => this.toggleDetails(false), 'keycap corral-back');
-      shut.setAttribute('aria-label', 'Close Activity');
+      shut.setAttribute('aria-label', 'Close the panel');
+      // Its panels, one at a time.
+      this.tabs = node('div', 'corral-tabs');
+      this.tabs.setAttribute('role', 'tablist');
+      this.tabs.setAttribute('aria-label', 'Panel');
+      for (const [id, label] of PANELS) {
+        const tab = button(label, () => this.showPanel(id), 'corral-tab');
+        tab.setAttribute('role', 'tab');
+        tab.dataset.panel = id;
+        this.tabs.append(tab);
+      }
       // Narrows Activity to the agent or room open when it is pressed, until pressed again.
       this.filterKey = button(
         '',
@@ -271,16 +287,38 @@
         'keycap corral-back corral-filter-key'
       );
       this.filterKey.innerHTML = FILTER_ICON;
-      this.filterKey.setAttribute('aria-label', 'Filter Activity');
-      detailsBar.append(node('h2', 'corral-heading', 'Activity'), this.filterKey, shut);
+      this.filterKey.setAttribute('aria-label', 'Filter to the agent or room open');
+      detailsBar.append(this.tabs, this.filterKey, shut);
       this.filterNote = node('p', 'corral-filter-note');
       this.activityList = node('div', 'corral-side-scroll corral-activity');
       this.activityList.setAttribute('role', 'list');
       this.activityList.setAttribute('aria-label', 'Activity');
-      this.details.append(detailsBar, this.filterNote, this.activityList);
+      // Search: every message, narrowed as you type.
+      this.searchField = node('input', 'corral-input corral-search');
+      this.searchField.type = 'search';
+      this.searchField.placeholder = 'Search messages';
+      this.searchField.setAttribute('aria-label', 'Search messages');
+      this.searchField.autocapitalize = 'none';
+      this.searchField.spellcheck = false;
+      this.searchField.addEventListener('input', () => this.searchLater());
+      this.searchList = node('div', 'corral-side-scroll corral-activity');
+      this.searchList.setAttribute('role', 'list');
+      this.searchList.setAttribute('aria-label', 'Search results');
+      this.results = [];
+      this.details.append(
+        detailsBar,
+        this.searchField,
+        this.filterNote,
+        this.activityList,
+        this.searchList
+      );
+      this.panel = PANELS.some(([id]) => id === storage.read(PANEL, ''))
+        ? storage.read(PANEL)
+        : 'activity';
       this.filter = storage.read(FILTER, null);
       this.activity = [];
       this.detailsOpen = !!storage.read(DETAILS, false);
+      this.showPanel(this.panel, false);
       this.seen = storage.read(SEEN, {}) || {};
       root.append(this.side, this.main, this.sheet, this.details);
       // The shell gives the composer focus only while a conversation shows.
@@ -337,7 +375,7 @@
     }
     connect() {
       this.socket();
-      if (this.detailsOpen) this.loadActivity();
+      if (this.detailsOpen) this.showPanel(this.panel);
       this.refresh().then(() => {
         // The conversation, or the thread in it, open last time.
         const [open, thread = ''] = String(storage.get(OPEN) || '').split('/');
@@ -375,6 +413,7 @@
         if (this.showing(e.conversation, e.message.thread || '')) this.markSeen();
         this.renderSide();
         if (this.detailsOpen) this.activityLater();
+        if (this.detailsOpen && this.panel === 'search' && this.searchAsked) this.searchLater();
       } else if (e.type === 'status') {
         const key = [e.conversation, e.agent, e.thread || ''].join(' ');
         if (e.status) this.working.set(key, e.status);
@@ -674,15 +713,125 @@
     panelKey() {
       const key = button('', () => this.toggleDetails(), 'keycap corral-settings corral-panel-key');
       key.innerHTML = PANEL_ICON;
-      key.setAttribute('aria-label', 'Activity');
-      key.title = 'Activity panel: the latest in every conversation and thread';
+      key.setAttribute('aria-label', 'Activity and Search');
+      key.title = 'Activity and Search: the latest everywhere, and every message';
       return key;
     }
     toggleDetails(open = !this.detailsOpen) {
       this.detailsOpen = open;
       storage.write(DETAILS, open);
-      if (open) this.loadActivity();
       this.layout();
+      if (open) this.showPanel(this.panel);
+    }
+    // Shows one of the details panel's panels; `load` fetches what it lists.
+    showPanel(id, load = true) {
+      this.panel = id;
+      storage.write(PANEL, id);
+      for (const tab of this.tabs.children) {
+        const on = tab.dataset.panel === id;
+        tab.setAttribute('aria-selected', String(on));
+        tab.classList.toggle('active', on);
+      }
+      const searching = id === 'search';
+      this.activityList.hidden = searching;
+      this.searchField.hidden = !searching;
+      this.searchList.hidden = !searching;
+      if (!load) return;
+      if (searching) {
+        this.renderSearch();
+        // Ready to type, except where a keyboard would cover the panel.
+        if (window.matchMedia?.('(pointer: fine)').matches) this.searchField.focus();
+      } else this.loadActivity();
+    }
+    // Typing narrows the results once it pauses.
+    searchLater() {
+      clearTimeout(this.searchTimer);
+      this.searchTimer = setTimeout(() => this.runSearch(), 150);
+    }
+    async runSearch() {
+      const query = this.searchField.value.trim();
+      const asked = (this.searchAsked = query);
+      if (!query) {
+        this.results = [];
+        this.searchError = '';
+        return this.renderSearch();
+      }
+      try {
+        const { items } = await request('/search?q=' + encodeURIComponent(query));
+        if (asked !== this.searchAsked) return;
+        this.results = items || [];
+        this.searchError = '';
+      } catch (e) {
+        this.searchError = e.message;
+      }
+      this.renderSearch();
+    }
+    // The words searched for, highlighted where they are in a result's text.
+    highlighted(text) {
+      const words = this.searchAsked
+        ?.split(/\s+/)
+        .map(w => w.replace(/^[@#]+/, ''))
+        .filter(Boolean)
+        .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+      const out = node('span', 'corral-activity-text');
+      if (!words?.length) {
+        out.textContent = text;
+        return out;
+      }
+      const pattern = new RegExp(`(${words.join('|')})`, 'gi');
+      for (const part of text.split(pattern))
+        out.append(
+          part && new RegExp(`^(${words.join('|')})$`, 'i').test(part)
+            ? node('mark', 'corral-hit', part)
+            : part
+        );
+      return out;
+    }
+    renderSearch() {
+      if (this.panel !== 'search') return;
+      this.renderFilter();
+      const rows = [];
+      for (const item of this.results) {
+        const c = this.conversation(item.conversation);
+        if (!c || !this.kept(item, c)) continue;
+        const m = item.message;
+        const name = this.author(m.author);
+        const row = button('', () => this.goTo(item, m.id), 'corral-activity-row');
+        row.setAttribute('role', 'listitem');
+        const where = node('div', 'corral-activity-place');
+        where.append(
+          node('span', 'corral-row-name', (item.thread ? 'Thread in ' : '') + this.label(c)),
+          node('time', '', when(m.ts))
+        );
+        const text = node('span', 'corral-row-text');
+        const said = this.highlighted(m.text);
+        said.prepend(node('span', 'corral-name', name + ': '));
+        text.append(where, said);
+        row.append(this.face(this.agent(m.author), m.author === 'you' ? 'you' : name, name), text);
+        rows.push(row);
+      }
+      const query = this.searchField.value.trim();
+      const name = this.filter && this.filterName();
+      if (!rows.length)
+        rows.push(
+          node(
+            'p',
+            'corral-empty',
+            this.searchError ||
+              (!query
+                ? 'Search every message in every conversation and thread: all the words, in any order.'
+                : `No messages${name ? ' for ' + name : ''} with ${query}.`)
+          )
+        );
+      else
+        rows.unshift(
+          node(
+            'p',
+            'corral-filter-count',
+            `${rows.length}${this.results.length >= 200 ? '+' : ''} ${rows.length === 1 ? 'message' : 'messages'}`
+          )
+        );
+      this.searchList.replaceChildren(...rows);
     }
     async loadActivity() {
       try {
@@ -728,7 +877,8 @@
     toggleFilter() {
       this.filter = this.filter ? null : this.filterHere();
       storage.write(FILTER, this.filter);
-      this.renderActivity();
+      if (this.panel === 'search') this.renderSearch();
+      else this.renderActivity();
     }
     // What the filter is, for a person; null once its agent or room is gone.
     filterName() {
@@ -749,8 +899,8 @@
         (c.kind === 'dm' && agents.has(c.members[0]))
       );
     }
-    renderActivity() {
-      if (this.details.hidden && !this.detailsOpen) return;
+    // The filter key and the note saying what it keeps; returns its name, if it is on.
+    renderFilter() {
       // A filter whose agent or room was deleted goes, once the workspace has loaded.
       if (this.filter && this.data.conversations.length && !this.filterName()) {
         this.filter = null;
@@ -760,12 +910,18 @@
       this.filterKey.setAttribute('aria-pressed', String(!!this.filter));
       this.filterKey.disabled = !this.filter && !this.filterHere();
       this.filterKey.title = this.filter
-        ? 'Show all activity'
+        ? 'Show everything'
         : this.filterHere()
-          ? 'Show only activity for the agent or room open'
+          ? 'Show only what is for the agent or room open'
           : 'Open an agent or a room to filter by it';
       this.filterNote.hidden = !name;
       this.filterNote.textContent = name ? 'Only ' + name : '';
+      return name;
+    }
+    renderActivity() {
+      if (this.details.hidden && !this.detailsOpen) return;
+      if (this.panel !== 'activity') return;
+      const name = this.renderFilter();
       const rows = [];
       for (const item of this.activity) {
         const c = this.conversation(item.conversation);
@@ -830,11 +986,22 @@
       this.activityList.replaceChildren(...rows);
     }
     // Opens a place from Activity as if it were opened from the sidebar or its message.
-    async goTo(item) {
+    // With `message`, it is shown and lit, as a search result is.
+    async goTo(item, message) {
       if (!this.root.classList.contains('corral-roomy')) this.toggleDetails(false);
       if (item.conversation !== this.openId || (this.threadId && !item.thread))
         await this.open(item.conversation, item.thread);
       else if (item.thread) this.openThread(item.thread);
+      if (message) this.reveal(message);
+    }
+    reveal(id) {
+      const text = this.list.querySelector(`[data-message="${CSS.escape(id)}"]`);
+      if (!text) return;
+      this.pinned = false;
+      text.scrollIntoView({ block: 'center' });
+      text.classList.remove('revealed');
+      void text.offsetWidth;
+      text.classList.add('revealed');
     }
     voiceChanged() {
       const voice = this.dictation?.voice;
@@ -936,6 +1103,7 @@
           last = { ...m, body };
         } else last.ts = m.ts;
         const text = node('div', 'corral-text');
+        text.dataset.message = m.id;
         markdown(text, m.text, names);
         last.body.append(text);
         // Sent, but the agent it is for is still at work: it gets it when that turn ends.

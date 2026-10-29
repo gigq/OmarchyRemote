@@ -1652,6 +1652,7 @@ pub fn router<S: Clone + std::marker::Send + Sync + 'static>(corral: Corral) -> 
         .route("/conversations/{id}/response", get(response))
         .route("/conversations/{id}/delete", post(delete_conversation))
         .route("/activity", get(activity))
+        .route("/search", get(search))
         .route("/ws", get(upgrade))
         // The `corral` command in an agent's turn, which sends the turn's token instead of the
         // app's credentials.
@@ -2248,6 +2249,76 @@ fn activity_of(state: &Workspace) -> Vec<Value> {
     items.sort_by(|a, b| b.0.cmp(&a.0));
     items.truncate(ACTIVITY);
     items.into_iter().map(|(_, v)| v).collect()
+}
+/// How many messages a search gives back.
+const FOUND: usize = 200;
+/// A message's text around the first word found in it, shortened, on one line.
+fn excerpt(text: &str, word: &str) -> String {
+    let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let at = flat.to_ascii_lowercase().find(word).unwrap_or(0);
+    let mut start = at.saturating_sub(80);
+    while !flat.is_char_boundary(start) {
+        start -= 1;
+    }
+    let mut end = (at + word.len() + 220).min(flat.len());
+    while !flat.is_char_boundary(end) {
+        end += 1;
+    }
+    format!(
+        "{}{}{}",
+        if start > 0 { "…" } else { "" },
+        &flat[start..end],
+        if end < flat.len() { "…" } else { "" }
+    )
+}
+/// Messages with every word of `query` in them, or in their author's name, in any order and
+/// any case, newest first: each with where it is and the part of it that matched.
+fn search_of(state: &Workspace, query: &str) -> Vec<Value> {
+    let words: Vec<String> = query
+        .split_whitespace()
+        .map(|w| w.trim_start_matches(['@', '#']).to_ascii_lowercase())
+        .filter(|w| !w.is_empty())
+        .collect();
+    if words.is_empty() {
+        return Vec::new();
+    }
+    let mut found: Vec<(&str, Value)> = Vec::new();
+    for (id, messages) in &state.messages {
+        if !state.conversations.contains_key(id) {
+            continue;
+        }
+        for m in messages {
+            let text = m.text.to_ascii_lowercase();
+            let by = handle(state, &m.author).to_ascii_lowercase();
+            if !words.iter().all(|w| text.contains(w) || by.contains(w)) {
+                continue;
+            }
+            let first = words
+                .iter()
+                .find(|w| text.contains(*w))
+                .map_or("", |w| w.as_str());
+            found.push((
+                &m.ts,
+                json!({
+                    "conversation": id,
+                    "thread": m.thread,
+                    "message": {"id": m.id, "ts": m.ts, "author": m.author, "text": excerpt(&m.text, first)},
+                    "agents": if state.agents.contains_key(&m.author) { vec![&m.author] } else { vec![] },
+                }),
+            ));
+        }
+    }
+    found.sort_by(|a, b| b.0.cmp(a.0));
+    found.truncate(FOUND);
+    found.into_iter().map(|(_, v)| v).collect()
+}
+#[derive(Deserialize)]
+pub struct SearchQuery {
+    #[serde(default)]
+    q: String,
+}
+pub async fn search(State(corral): State<Corral>, Query(query): Query<SearchQuery>) -> Json<Value> {
+    Json(json!({"items": search_of(&corral.state.lock().unwrap(), &query.q)}))
 }
 pub async fn activity(State(corral): State<Corral>) -> Json<Value> {
     Json(json!({"items": activity_of(&corral.state.lock().unwrap())}))
@@ -3684,6 +3755,43 @@ mod tests {
         // A thread on the person's message that mentioned no one wakes no one.
         let (wake, _, _) = corral.targets(&mut state, &talk, &reply(YOU, "hm", &asked.id));
         assert!(wake.is_empty());
+        drop(state);
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn search_finds_every_word_in_any_order_newest_first() {
+        let (corral, root) = corral();
+        let built = agent(&corral, "AsBuilt");
+        let talk = channel(&corral, "MovingRecords", vec![built.id.clone()]);
+        let mut older = message(
+            &built.id,
+            "The 4K render of the Epcot cut is on Jellyfin.",
+            1,
+        );
+        older.ts = "2026-10-29T10:00:00.000Z".into();
+        let mut newer = reply(YOU, "Can you RENDER it in 4k again?", &older.id);
+        newer.ts = "2026-10-29T11:00:00.000Z".into();
+        let other = message(YOU, "lunch?", 0);
+        corral
+            .state
+            .lock()
+            .unwrap()
+            .messages
+            .insert(talk.id.clone(), vec![older.clone(), newer.clone(), other]);
+        let state = corral.state.lock().unwrap();
+        let found = search_of(&state, "4k Render");
+        assert_eq!(found.len(), 2);
+        assert_eq!(found[0]["message"]["id"], json!(newer.id));
+        assert_eq!(found[0]["thread"], json!(older.id));
+        // An agent's name counts, and the message's own text is shown around the match.
+        let found = search_of(&state, "@asbuilt jellyfin");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0]["agents"], json!([built.id]));
+        assert!(search_of(&state, "  ").is_empty());
+        assert_eq!(
+            excerpt(&format!("{} needle here", "word ".repeat(40)), "needle"),
+            format!("…{}needle here", &"word ".repeat(40)[200 - 80..])
+        );
         drop(state);
         fs::remove_dir_all(root).unwrap();
     }
