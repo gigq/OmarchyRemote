@@ -131,9 +131,11 @@ const CORRAL: &str = "corral";
 const MAX_CHAIN: u32 = 6;
 /// The most new messages a turn is given; older ones are in the conversation's file.
 const CATCH_UP: usize = 40;
+/// The engines an agent can run on, as offered: Claude X first, so the default where it is
+/// installed. One whose program is not on the host is not offered.
 const ENGINES: [(&str, &str, &str); 3] = [
-    ("claude", "Claude", "claude"),
     ("claudex", "Claude X", "claudex"),
+    ("claude", "Claude", "claude"),
     ("codex", "Codex", "codex"),
 ];
 const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
@@ -2140,8 +2142,8 @@ const ACTIONS: [(&str, &str, &str); 10] = [
     ),
     (
         "create-agent",
-        "--name NAME --engine ENGINE --home FOLDER [--model MODEL] [--effort EFFORT] [--instructions TEXT] [--host HOST]",
-        "Make an agent, on this machine or on another host's (`corral hosts`). Its name is its @handle; its home folder, inside that machine's home directory, is where it works; instructions are given to it in every conversation. It is in no channel until it is mentioned or invited.",
+        "--name NAME --home FOLDER [--engine ENGINE] [--model MODEL] [--effort EFFORT] [--instructions TEXT] [--host HOST]",
+        "Make an agent, on this machine or on another host's (`corral hosts`). Its engine is the machine's first in `corral engines` unless given. Its name is its @handle; its home folder, inside that machine's home directory, is where it works; instructions are given to it in every conversation. It is in no channel until it is mentioned or invited.",
     ),
     ("channels", "", "Every channel, with its topic and members."),
     (
@@ -2400,14 +2402,28 @@ pub async fn agent_action(
                     "Corral holds {MAX_AGENTS} agents; ask the person to remove some"
                 )));
             }
+            let host = text_arg(&body, "host");
+            let mut engine = text_arg(&body, "engine");
+            if engine.is_empty() {
+                let offered = if host.is_empty() || host == corral.name {
+                    corral.engines().await
+                } else {
+                    corral.host_engines(&host)
+                };
+                engine = offered
+                    .first()
+                    .and_then(|e| e["id"].as_str())
+                    .unwrap_or_default()
+                    .to_owned();
+            }
             let form = AgentForm {
                 name: text_arg(&body, "name"),
-                engine: text_arg(&body, "engine"),
+                engine,
                 model: text_arg(&body, "model"),
                 effort: text_arg(&body, "effort"),
                 home: text_arg(&body, "home"),
                 instructions: text_arg(&body, "instructions"),
-                host: text_arg(&body, "host"),
+                host,
             };
             let (agent, engines) = if !form.host.is_empty() && form.host != corral.name {
                 let agent = corral.create_remote(&form).await?;
@@ -2904,7 +2920,7 @@ mod tests {
             .block_on(agent_help(State(corral.clone()), headers(token)))
             .unwrap();
         assert!(help.starts_with("corral: Corral from your shell, acting as @maker."));
-        assert!(help.contains("corral create-agent --name NAME --engine ENGINE --home FOLDER"));
+        assert!(help.contains("corral create-agent --name NAME --home FOLDER [--engine ENGINE]"));
         // A channel it makes includes it, and the person hears about it where it is.
         assert_eq!(
             run("create-channel", json!({"name":"#docs","topic":"Writing"})).unwrap(),
