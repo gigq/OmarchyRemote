@@ -35,8 +35,10 @@ use tokio::{
 
 mod background;
 mod hosts;
+mod siblings;
 pub use hosts::Host;
 use hosts::{host_listing, host_turn};
+use siblings::Step;
 
 pub type ApiError = (StatusCode, Json<Value>);
 fn error(e: impl std::fmt::Display) -> ApiError {
@@ -226,10 +228,19 @@ fn seat_key(agent: &str, thread: &str) -> String {
 type TurnKey = (String, String, String);
 /// A turn under way: what the agent is doing, whether it was woken again meanwhile (and by how
 /// long a chain), and the job, which stopping aborts.
+#[derive(Default)]
 struct Turn {
     status: String,
     again: Option<u32>,
     job: Option<tokio::task::AbortHandle>,
+    /// What it was woken for, its latest steps, and the files it has changed, which the agent's
+    /// other turns are told.
+    asked: String,
+    steps: Vec<String>,
+    files: Vec<String>,
+    started: String,
+    /// The agent's other places waiting on it, which are woken when it ends.
+    waiters: Vec<TurnKey>,
 }
 #[derive(Default)]
 struct Workspace {
@@ -444,6 +455,8 @@ The `corral` command in your shell works Corral for you: listing, making, and in
 
 For work that takes more than a few minutes (a render, a long build), start it in the background, with `nohup … &` and its output in a log, say that it is running, and end your turn. Corral shows the person it is running, and when it has all ended Corral says so where you started it and wakes you there: check how it went, from its log and outputs, and tell {person} the result.
 
+You can be at work in more than one conversation at once, each a separate session of yours, often in the same folder, and the <corral> block says what your other turns are doing and which files they have changed. If one of them is changing files you need to change, don't change them at the same time: do what doesn't overlap, say what is waiting and on what, run `corral wait`, and end your turn; Corral wakes you here when your other turns end. If the work doesn't overlap, carry on.
+
 You run on {machine} ({os}), in {home_folder}. Agents can run on other machines too, and `corral agents` shows which machine each is on: to get something done on another machine, mention the agent there rather than reaching it yourself.",
         name = agent.name,
         person_handle = YOU,
@@ -628,6 +641,11 @@ fn context_parts(
         out.push_str(&elsewhere.join("\n"));
         out.push('\n');
     }
+    out.push_str(&siblings::note(
+        state,
+        &agent.id,
+        &(conversation.id.clone(), agent.id.clone(), thread.to_owned()),
+    ));
     // The last thing it reads, and what a resumed Codex session would otherwise not hear again.
     let ask = format!(
         "Reply in {}{} with a short chat message: one to three sentences, no lists.",
@@ -841,8 +859,8 @@ impl Corral {
                 key.clone(),
                 Turn {
                     status: "thinking".into(),
-                    again: None,
-                    job: None,
+                    started: now(),
+                    ..Turn::default()
                 },
             );
         }
@@ -893,8 +911,22 @@ impl Corral {
                     _ => None,
                 };
                 let seen = state.messages.get(conversation).map_or(0, Vec::len);
+                // What it was woken for: the latest message there from someone else.
+                let asked = state
+                    .messages
+                    .get(conversation)
+                    .into_iter()
+                    .flatten()
+                    .rev()
+                    .find(|m| {
+                        m.author != agent.id
+                            && (m.thread == thread || (!thread.is_empty() && m.id == thread))
+                    })
+                    .map(|m| format!("{}: {}", handle(&state, &m.author), clip(&m.text, 160)))
+                    .unwrap_or_default();
                 (
                     context_parts(&state, &self.root, &agent, &talk, thread, fork.as_ref()),
+                    asked,
                     agent,
                     seat.unwrap_or_default(),
                     fork,
@@ -904,7 +936,10 @@ impl Corral {
         };
         let result = match prepared {
             None => Err("This agent or conversation is gone".to_owned()),
-            Some((parts, agent, seat, fork, seen)) => {
+            Some((parts, asked, agent, seat, fork, seen)) => {
+                if let Some(turn) = self.state.lock().unwrap().turns.get_mut(&key) {
+                    turn.asked = asked;
+                }
                 let folder = self.root.join("agents").join(&agent.id);
                 let picture = avatar(&folder).map(|(_, _, changed)| changed);
                 // The turn's `corral` command acts as this agent, here, until the turn ends.
@@ -916,7 +951,7 @@ impl Corral {
                     chain,
                 };
                 self.callers.lock().unwrap().insert(token.clone(), me);
-                let status = |line| self.status(conversation, &agent.id, thread, line);
+                let status = |step| self.progress(&key, step);
                 // An agent of another host takes its turn there, and keeps its memory there.
                 let outcome = if agent.host.is_empty() {
                     let memory = fs::read_to_string(folder.join("memory.md")).unwrap_or_default();
@@ -977,13 +1012,13 @@ impl Corral {
                 outcome.map(|(_, text, _)| text)
             }
         };
-        let again = self
+        let (again, waiters) = self
             .state
             .lock()
             .unwrap()
             .turns
             .remove(&key)
-            .and_then(|t| t.again);
+            .map_or((None, Vec::new()), |t| (t.again, t.waiters));
         self.emit(json!({"type":"status","conversation":conversation,"agent":agent_id,"thread":thread,"status":null}));
         match result {
             Ok(text) if text.trim().is_empty() || text.trim() == "NOTHING" => {}
@@ -1008,19 +1043,10 @@ impl Corral {
                 );
             }
         }
+        self.release(&key, waiters, false);
         if let Some(chain) = again {
             self.wake(conversation, agent_id, thread, chain);
         }
-    }
-    fn status(&self, conversation: &str, agent: &str, thread: &str, status: String) {
-        if let Some(turn) = self.state.lock().unwrap().turns.get_mut(&(
-            conversation.to_owned(),
-            agent.to_owned(),
-            thread.to_owned(),
-        )) {
-            turn.status = status.clone();
-        }
-        self.emit(json!({"type":"status","conversation":conversation,"agent":agent,"thread":thread,"status":status}));
     }
     /// Runs the agent's engine for one turn in its home folder, telling `status` what it is
     /// doing; returns its session, its reply, and its last message's id. A first turn with `fork`
@@ -1028,7 +1054,7 @@ impl Corral {
     async fn run(
         &self,
         job: Job<'_>,
-        status: impl Fn(String),
+        status: impl Fn(Step),
     ) -> Result<(String, String, String), String> {
         let Job {
             place,
@@ -1189,8 +1215,11 @@ impl Corral {
             if let Some(id) = read.session {
                 session = id;
             }
-            if let Some(line) = read.status {
-                status(line);
+            if read.status.is_some() || !read.files.is_empty() {
+                status(Step {
+                    status: read.status,
+                    files: read.files,
+                });
             }
             if let Some(uuid) = read.uuid {
                 last = uuid;
@@ -1349,7 +1378,7 @@ impl Corral {
         (wake, joined, false)
     }
     fn stop(&self, conversation: &str) {
-        let jobs: Vec<(String, String, tokio::task::AbortHandle)> = {
+        let jobs: Vec<(TurnKey, Turn)> = {
             let mut state = self.state.lock().unwrap();
             let keys: Vec<TurnKey> = state
                 .turns
@@ -1358,15 +1387,16 @@ impl Corral {
                 .cloned()
                 .collect();
             keys.into_iter()
-                .filter_map(|key| {
-                    let turn = state.turns.remove(&key)?;
-                    Some((key.1, key.2, turn.job?))
-                })
+                .filter_map(|key| Some((key.clone(), state.turns.remove(&key)?)))
                 .collect()
         };
-        for (agent, thread, job) in jobs {
-            job.abort();
+        for (key, turn) in jobs {
+            if let Some(job) = turn.job {
+                job.abort();
+            }
+            let (_, agent, thread) = &key;
             self.emit(json!({"type":"status","conversation":conversation,"agent":agent,"thread":thread,"status":null}));
+            self.release(&key, turn.waiters, true);
         }
     }
     fn summary(&self, state: &Workspace, conversation: &Conversation) -> Value {
@@ -1412,6 +1442,8 @@ struct Read {
     /// The id of a message the agent wrote, for a thread to fork from later.
     uuid: Option<String>,
     status: Option<String>,
+    /// Files it changed, from its edit tools.
+    files: Vec<String>,
     reply: Option<String>,
     failure: Option<String>,
 }
@@ -1444,10 +1476,15 @@ fn read_claude(event: &Value) -> Read {
             read.uuid = event["uuid"].as_str().map(str::to_owned);
             for block in event["message"]["content"].as_array().into_iter().flatten() {
                 if block["type"] == "tool_use" {
-                    read.status = Some(tool_status(
-                        block["name"].as_str().unwrap_or("tool"),
-                        &block["input"],
-                    ));
+                    let name = block["name"].as_str().unwrap_or("tool");
+                    if ["Edit", "Write", "MultiEdit", "NotebookEdit"].contains(&name)
+                        && let Some(file) = block["input"]["file_path"]
+                            .as_str()
+                            .or_else(|| block["input"]["notebook_path"].as_str())
+                    {
+                        read.files.push(file.to_owned());
+                    }
+                    read.status = Some(tool_status(name, &block["input"]));
                 }
             }
         }
@@ -1482,7 +1519,15 @@ fn read_codex(event: &Value) -> Read {
                 clip(item["command"].as_str().unwrap_or_default(), 80)
             ));
         }
-        (Some("item.completed"), Some("file_change")) => read.status = Some("Edit".into()),
+        (Some("item.completed"), Some("file_change")) => {
+            read.status = Some("Edit".into());
+            read.files = item["changes"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|c| c["path"].as_str().map(str::to_owned))
+                .collect();
+        }
         (Some("item.completed"), Some("web_search")) => {
             read.status = Some(format!(
                 "Search · {}",
@@ -2201,8 +2246,18 @@ async fn events(mut socket: WebSocket, corral: Corral) {
 // ---- The agent API, behind the `corral` command in each turn ----
 
 /// What the `corral` command offers, as `corral help` lists it: action, arguments, and what it does.
-const ACTIONS: [(&str, &str, &str); 10] = [
+const ACTIONS: [(&str, &str, &str); 12] = [
     ("whoami", "", "Who and where you are."),
+    (
+        "working",
+        "",
+        "Your other turns under way, each a separate session of yours: where, what it was asked, its latest steps, and the files it has changed; and work you left running in the background.",
+    ),
+    (
+        "wait",
+        "",
+        "Be woken here when your other turns end, then end this turn: for work that would change the same files as one of them.",
+    ),
     (
         "agents",
         "",
@@ -2367,7 +2422,24 @@ pub async fn agent_action(
             .collect::<Vec<_>>()
             .join(" · ")
     };
+    let here = (me.conversation.clone(), me.agent.clone(), me.thread.clone());
     match action.as_str() {
+        "working" => Ok(siblings::report(
+            &corral.state.lock().unwrap(),
+            &me.agent,
+            &here,
+        )),
+        "wait" => {
+            let places = corral.wait(&me.agent, &here);
+            Ok(if places.is_empty() {
+                "None of your other turns is running; carry on.".into()
+            } else {
+                format!(
+                    "Corral will wake you here when your turns in {} end. Say what is waiting, then end your turn.",
+                    places.join(", ")
+                )
+            })
+        }
         "whoami" => {
             let engines = corral.engines().await;
             let state = corral.state.lock().unwrap();
@@ -3237,5 +3309,22 @@ mod tests {
         assert_eq!(items[1]["message"]["id"], json!(answered.id));
         assert!(items[1]["root"].is_null());
         fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn a_turns_edits_name_the_files_it_changed() {
+        let edit = json!({"type":"assistant","parent_tool_use_id":null,"uuid":"u1","message":{"content":[
+            {"type":"tool_use","name":"Edit","input":{"file_path":"/w/tools/edit.py"}},
+        ]}});
+        let read = read_claude(&edit);
+        assert_eq!(read.files, ["/w/tools/edit.py"]);
+        assert_eq!(read.status.as_deref(), Some("Edit · /w/tools/edit.py"));
+        let looked = json!({"type":"assistant","parent_tool_use_id":null,"message":{"content":[
+            {"type":"tool_use","name":"Read","input":{"file_path":"/w/README.md"}},
+        ]}});
+        assert!(read_claude(&looked).files.is_empty());
+        let codex = json!({"type":"item.completed","item":{"type":"file_change","changes":[
+            {"path":"/w/a.rs","kind":"update"},{"path":"/w/b.rs","kind":"add"},
+        ]}});
+        assert_eq!(read_codex(&codex).files, ["/w/a.rs", "/w/b.rs"]);
     }
 }

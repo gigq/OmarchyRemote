@@ -321,7 +321,7 @@ impl Corral {
         agent: &Agent,
         (body, ask): (String, String),
         token: &str,
-        status: impl Fn(String),
+        status: impl Fn(Step),
     ) -> Result<(String, String, String), String> {
         let host = self.host(&agent.host)?;
         let visit = json!({
@@ -348,8 +348,16 @@ impl Corral {
             let Ok(event) = serde_json::from_str::<Value>(&line) else {
                 continue;
             };
-            if let Some(line) = event["status"].as_str() {
-                status(line.to_owned());
+            if event.get("status").is_some() || event.get("files").is_some() {
+                status(Step {
+                    status: event["status"].as_str().map(str::to_owned),
+                    files: event["files"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|f| f.as_str().map(str::to_owned))
+                        .collect(),
+                });
             } else if let Some(text) = event["reply"].as_str() {
                 reply = Some(text.to_owned());
             } else if let Some(error) = event["error"].as_str() {
@@ -553,8 +561,8 @@ pub async fn host_turn(
             token: &visit.token,
         };
         let status = tx.clone();
-        let run = corral.run(job, move |line| {
-            let _ = status.send(json!({"status": line}));
+        let run = corral.run(job, move |step: Step| {
+            let _ = status.send(json!({"status": step.status, "files": step.files}));
         });
         tokio::select! {
             outcome = run => match outcome {
