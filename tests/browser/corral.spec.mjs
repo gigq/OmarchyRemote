@@ -697,6 +697,9 @@ test('with room, Activity sits beside the conversation', async ({ page }) => {
   await expect(app.locator('.corral-title')).toHaveText('#infra');
   await expect(app.locator('.corral-details')).toBeVisible();
   await expect(app.locator('.corral-side')).toBeVisible();
+  // Its key is in the conversation's bar, beside the panel, not over the sidebar.
+  await expect(app.getByRole('button', { name: 'Activity', exact: true })).toHaveCount(1);
+  await expect(app.locator('.corral-main').getByRole('button', { name: 'Activity' })).toBeVisible();
   await page.screenshot({ path: 'artifacts/browser/corral-activity-wide.png' });
   // The panel stays open across visits.
   await page.reload();

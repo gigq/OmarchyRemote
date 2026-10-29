@@ -12,7 +12,7 @@
   const DETAILS = 'omarchy-corral-details';
   const SEEN = 'omarchy-corral-seen';
   const PANEL_ICON =
-    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>';
+    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/><path d="M15 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4z" fill="currentColor" stroke="none"/></svg>';
   // When a message was sent: the time today, otherwise the day.
   function when(ts) {
     const d = new Date(ts);
@@ -166,7 +166,10 @@
       // The sidebar: channels, then a direct message with each agent.
       this.side = node('section', 'corral-side');
       const sideBar = node('div', 'corral-bar');
-      sideBar.append(node('h2', 'corral-heading', 'Corral'), this.panelKey());
+      // The panel key lives in the conversation's bar, beside the panel it opens; the sidebar
+      // has one only while no conversation shows.
+      this.sidePanelKey = this.panelKey();
+      sideBar.append(node('h2', 'corral-heading', 'Corral'), this.sidePanelKey);
       this.channelList = node('div', 'corral-list');
       this.channelList.setAttribute('role', 'list');
       this.agentList = node('div', 'corral-list');
@@ -622,7 +625,7 @@
       const key = button('', () => this.toggleDetails(), 'keycap corral-settings corral-panel-key');
       key.innerHTML = PANEL_ICON;
       key.setAttribute('aria-label', 'Activity');
-      key.title = 'Activity: the latest in every conversation and thread';
+      key.title = 'Activity panel: the latest in every conversation and thread';
       return key;
     }
     toggleDetails(open = !this.detailsOpen) {
@@ -745,8 +748,7 @@
       for (const key of this.root.querySelectorAll('.corral-panel-key'))
         key.setAttribute('aria-pressed', String(this.detailsOpen));
       this.backKey.hidden = wide && !this.threadId;
-      // The sidebar's panel key serves while the sidebar shows.
-      this.mainPanelKey.hidden = !this.side.hidden;
+      this.sidePanelKey.hidden = !this.main.hidden;
       this.followVoice();
     }
     renderHeader() {
