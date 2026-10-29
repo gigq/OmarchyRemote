@@ -241,6 +241,8 @@ struct Turn {
     started: String,
     /// The agent's other places waiting on it, which are woken when it ends.
     waiters: Vec<TurnKey>,
+    /// Messages for the agent that came while it worked, which its next turn is given.
+    queued: Vec<String>,
 }
 #[derive(Default)]
 struct Workspace {
@@ -1047,6 +1049,13 @@ impl Corral {
         if let Some(chain) = again {
             self.wake(conversation, agent_id, thread, chain);
         }
+        // What was queued for it is in the turn just started, or no longer waiting on it.
+        self.queue_changed();
+    }
+    /// Tells the app which messages wait for an agent at work.
+    fn queue_changed(&self) {
+        let list = queued(&self.state.lock().unwrap());
+        self.emit(json!({"type":"queued","queued":list}));
     }
     /// Runs the agent's engine for one turn in its home folder, telling `status` what it is
     /// doing; returns its session, its reply, and its last message's id. A first turn with `fork`
@@ -1301,6 +1310,22 @@ impl Corral {
                 thread,
             );
         }
+        // An agent at work there gets the message when its turn ends; until then it is queued.
+        let queued = {
+            let mut state = self.state.lock().unwrap();
+            let mut queued = false;
+            for agent in &wake {
+                let key = (conversation.to_owned(), agent.clone(), thread.to_owned());
+                if let Some(turn) = state.turns.get_mut(&key) {
+                    turn.queued.push(message.id.clone());
+                    queued = true;
+                }
+            }
+            queued
+        };
+        if queued {
+            self.queue_changed();
+        }
         for agent in wake {
             self.wake(conversation, &agent, thread, message.chain + 1);
         }
@@ -1398,6 +1423,7 @@ impl Corral {
             self.emit(json!({"type":"status","conversation":conversation,"agent":agent,"thread":thread,"status":null}));
             self.release(&key, turn.waiters, true);
         }
+        self.queue_changed();
     }
     fn summary(&self, state: &Workspace, conversation: &Conversation) -> Value {
         let messages = state.messages.get(&conversation.id);
@@ -1419,6 +1445,24 @@ impl Corral {
             "working": working,
         })
     }
+}
+/// The messages waiting for an agent at work, each with the agents it waits for.
+fn queued(state: &Workspace) -> Vec<Value> {
+    let mut by: HashMap<&str, (&str, Vec<&str>)> = HashMap::new();
+    for ((conversation, agent, _), turn) in &state.turns {
+        for id in &turn.queued {
+            by.entry(id)
+                .or_insert((conversation, Vec::new()))
+                .1
+                .push(agent);
+        }
+    }
+    let mut list: Vec<Value> = by
+        .into_iter()
+        .map(|(id, (c, agents))| json!({"conversation": c, "message": id, "agents": agents}))
+        .collect();
+    list.sort_by_key(|v| v.to_string());
+    list
 }
 /// The model's own name, as a label: `gemini-3.8-flash-high` is "Gemini 3.8 Flash High".
 fn gemini_label(id: &str) -> String {
@@ -1622,6 +1666,7 @@ pub async fn overview(State(corral): State<Corral>) -> Result<Json<Value>, ApiEr
         "machine": corral.name,
         "hosts": corral.host_summary(),
         "background": background::list(&state),
+        "queued": queued(&state),
         "folder": corral.root.display().to_string(),
         "engines": engines,
         "agents": agents,
@@ -3326,5 +3371,36 @@ mod tests {
             {"path":"/w/a.rs","kind":"update"},{"path":"/w/b.rs","kind":"add"},
         ]}});
         assert_eq!(read_codex(&codex).files, ["/w/a.rs", "/w/b.rs"]);
+    }
+    #[test]
+    fn a_message_for_an_agent_at_work_waits_for_its_next_turn() {
+        let (corral, root) = corral();
+        let alex = agent(&corral, "alex");
+        let talk = channel(&corral, "infra", vec![alex.id.clone()]);
+        let key = (talk.id.clone(), alex.id.clone(), String::new());
+        corral
+            .state
+            .lock()
+            .unwrap()
+            .turns
+            .insert(key.clone(), Turn::default());
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let later = runtime.block_on(async {
+            let later = corral
+                .post(&talk.id, YOU, "@alex and the web certs?", 0, "")
+                .unwrap();
+            corral
+                .post(&talk.id, YOU, "no mention, so nothing waits", 0, "")
+                .unwrap();
+            later
+        });
+        let state = corral.state.lock().unwrap();
+        assert_eq!(state.turns[&key].again, Some(1));
+        assert_eq!(
+            queued(&state),
+            vec![json!({"conversation": talk.id, "message": later.id, "agents": [alex.id]})]
+        );
+        drop(state);
+        fs::remove_dir_all(root).unwrap();
     }
 }

@@ -584,3 +584,12 @@
 .corral-filter-note[hidden] {
   display: none;
 }
+/* A message an agent at work has not been given yet. */
+.corral-text.queued {
+  color: var(--theme-secondary);
+}
+.corral-queued {
+  font-size: 11px;
+  color: var(--theme-secondary);
+  font-style: italic;
+}

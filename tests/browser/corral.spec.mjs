@@ -86,6 +86,7 @@ async function setup(page, { width = 402, height = 874 } = {}, before) {
         machine: 'linuxbox',
         hosts: state.hosts || [],
         background: state.background || [],
+        queued: state.queued || [],
         agents: state.agents,
         conversations: state.conversations.map(c => ({
           ...c,
@@ -795,4 +796,30 @@ test('the filter narrows Activity to the agent or room open, until pressed again
   await filter.click();
   await expect(app.locator('.corral-filter-note')).toHaveText("Only #web's agents");
   await expect(places).toHaveText(['#web']);
+});
+
+test('a message sent while its agent works shows as waiting until it is given', async ({
+  page,
+}) => {
+  const { app, state, emit } = await setup(page);
+  await app.getByRole('listitem').filter({ hasText: 'infra' }).first().click();
+  emit({ type: 'status', conversation: INFRA, agent: ALEX, status: 'Bash · make render' });
+  await app.getByRole('button', { name: 'Write a message' }).click();
+  const field = app.locator('textarea.native-input');
+  await field.fill('@alex and the web certs too');
+  await field.press('Enter');
+  await expect.poll(() => state.sent.length).toBe(1);
+  // Corral says it waits for alex's turn to end.
+  emit({ type: 'queued', queued: [{ conversation: INFRA, message: 'sent1', agents: [ALEX] }] });
+  const sent = app.locator('.corral-text').filter({ hasText: 'and the web certs too' });
+  await expect(sent).toHaveClass(/queued/);
+  await expect(app.locator('.corral-queued')).toHaveText(
+    'Waiting for @alex to finish its current turn'
+  );
+  await expect(app.locator('.corral-text.queued')).toHaveCount(1);
+  await page.screenshot({ path: 'artifacts/browser/corral-queued.png' });
+  // Its next turn starts with it: delivered.
+  emit({ type: 'queued', queued: [] });
+  await expect(sent).not.toHaveClass(/queued/);
+  await expect(app.locator('.corral-queued')).toHaveCount(0);
 });

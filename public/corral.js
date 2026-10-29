@@ -172,6 +172,8 @@
       this.working = new Map();
       // What agents left running after their turns, by `conversation agent thread`.
       this.background = new Map();
+      // Messages waiting for an agent at work, by id: the agents they wait for.
+      this.queued = new Map();
       this.messages = [];
       // Agents' pictures, loaded once per version, as blob URLs.
       this.pictures = new Map();
@@ -378,6 +380,10 @@
         this.renderWorking();
         this.renderSide();
         if (this.detailsOpen) this.renderActivity();
+      } else if (e.type === 'queued') {
+        const before = [...this.queued.keys()].join();
+        this.setQueued(e.queued);
+        if ([...this.queued.keys()].join() !== before) this.renderMessages();
       } else if (e.type === 'background') {
         this.setBackground(e.background);
         this.renderWorking();
@@ -403,6 +409,7 @@
           for (const w of c.working || [])
             this.working.set([c.id, w.agent, w.thread || ''].join(' '), w.status);
         this.setBackground(this.data.background);
+        this.setQueued(this.data.queued);
         this.error = '';
       } catch (e) {
         this.error = e.message;
@@ -921,6 +928,18 @@
         const text = node('div', 'corral-text');
         markdown(text, m.text, names);
         last.body.append(text);
+        // Sent, but the agent it is for is still at work: it gets it when that turn ends.
+        const waiting = this.queued.get(m.id);
+        if (waiting) {
+          text.classList.add('queued');
+          last.body.append(
+            node(
+              'div',
+              'corral-queued',
+              `Waiting for ${waiting.map(a => '@' + this.author(a)).join(', ')} to finish ${waiting.length > 1 ? 'their' : 'its'} current turn`
+            )
+          );
+        }
         last.author = m.author;
         if (!thread) {
           // Reply in thread: on hover, or from the message's menu.
@@ -997,6 +1016,9 @@
         ),
       ].join('   ');
       this.workingText.title = this.workingText.textContent;
+    }
+    setQueued(list = []) {
+      this.queued = new Map(list.map(q => [q.message, q.agents]));
     }
     setBackground(list = []) {
       this.background = new Map(
