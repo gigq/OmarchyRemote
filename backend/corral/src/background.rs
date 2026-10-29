@@ -3,6 +3,10 @@
 //! thread, and keeps it in whatever it starts; whatever still carries it once the turn is over
 //! is that agent's background work there, which the app shows apart from a turn under way.
 //!
+//! When an agent's background work has all ended, Corral says so where the agent started it and
+//! wakes it there, to see how it went and tell the person. What is running is kept in
+//! `background.json`, so work that ends while Corral is restarting still wakes its agent.
+//!
 //! On a systemd host each turn runs in a scope of its own, so that work is not stopped with the
 //! service when it restarts. Processes are found through `/proc`, so this is Linux's for now.
 use super::*;
@@ -103,49 +107,122 @@ pub(crate) fn list(state: &Workspace) -> Vec<Value> {
     list.sort_by_key(|a| a.to_string());
     list
 }
+/// Background work being watched for its end: its command and when it was first seen, in
+/// seconds since 1970.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+struct Job {
+    command: String,
+    since: u64,
+}
+fn seconds() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+/// How long something ran, for a person: "40 s", "12 min", "1 h 4 min".
+fn lasted(secs: u64) -> String {
+    match secs {
+        0..60 => format!("{secs} s"),
+        60..3600 => format!("{} min", secs / 60),
+        _ => format!("{} h {} min", secs / 3600, secs % 3600 / 60),
+    }
+}
+/// Work whose processes have all ended, and is not hidden behind a turn under way there.
+fn ended(
+    jobs: &HashMap<String, Job>,
+    running: &HashMap<TurnKey, Vec<Tagged>>,
+    turns: &[TurnKey],
+) -> Vec<(TurnKey, Job)> {
+    jobs.iter()
+        .filter_map(|(tag, job)| Some((untag(tag)?, job.clone())))
+        .filter(|(place, _)| !running.contains_key(place) && !turns.contains(place))
+        .collect()
+}
 impl Corral {
-    /// Looks for agents' background work now and every few seconds, and tells the app when what
-    /// is running changes. A place counts once it is seen twice, so a turn's last processes
-    /// exiting as it ends are not counted.
+    /// Looks for agents' background work now and every few seconds, tells the app when what is
+    /// running changes, and wakes an agent where its work has ended. A place counts once it is
+    /// seen twice, so a turn's last processes exiting as it ends are not counted.
     pub(crate) fn watch_background(&self) {
         if !cfg!(target_os = "linux") {
             return;
         }
         let corral = self.clone();
+        let saved = self.root.join("background.json");
         tokio::spawn(async move {
             let mut before: HashMap<TurnKey, String> = HashMap::new();
+            let mut jobs: HashMap<String, Job> = read_json(&saved).unwrap_or_default();
             loop {
                 let found = tokio::task::spawn_blocking(tagged)
                     .await
                     .unwrap_or_default();
                 let mut now: HashMap<TurnKey, String> = HashMap::new();
-                let changed = {
+                let (changed, done) = {
                     let mut state = corral.state.lock().unwrap();
-                    for (place, processes) in found {
-                        if state.turns.contains_key(&place)
+                    for (place, processes) in &found {
+                        if state.turns.contains_key(place)
                             || !state.conversations.contains_key(&place.0)
                         {
                             continue;
                         }
-                        now.insert(place, summary(&processes));
+                        now.insert(place.clone(), summary(processes));
                     }
                     let steady: HashMap<TurnKey, String> = now
                         .iter()
                         .filter(|(place, _)| before.contains_key(*place))
                         .map(|(p, c)| (p.clone(), c.clone()))
                         .collect();
+                    let known = jobs.clone();
+                    for (place, command) in &steady {
+                        let job = jobs.entry(tag(place)).or_insert(Job {
+                            command: command.clone(),
+                            since: seconds(),
+                        });
+                        job.command = command.clone();
+                    }
+                    let turns: Vec<TurnKey> = state.turns.keys().cloned().collect();
+                    let done = ended(&jobs, &found, &turns);
+                    for (place, _) in &done {
+                        jobs.remove(&tag(place));
+                    }
+                    // Work in a conversation since deleted is forgotten.
+                    jobs.retain(|t, _| {
+                        untag(t).is_some_and(|p| state.conversations.contains_key(&p.0))
+                    });
+                    if jobs != known
+                        && let Err(e) = write_json(&saved, &jobs)
+                    {
+                        eprintln!("corral: could not save background work: {e}");
+                    }
                     let changed = steady != state.background;
                     state.background = steady;
-                    changed
+                    (changed, done)
                 };
                 before = now;
                 if changed {
                     let list = list(&corral.state.lock().unwrap());
                     corral.emit(json!({"type":"background","background":list}));
                 }
+                for ((conversation, agent, thread), job) in done {
+                    corral.finished(&conversation, &agent, &thread, &job);
+                }
                 tokio::time::sleep(EVERY).await;
             }
         });
+    }
+    /// Says where an agent's background work ended that it has, and wakes the agent there.
+    fn finished(&self, conversation: &str, agent: &str, thread: &str, job: &Job) {
+        let name = match self.state.lock().unwrap().agents.get(agent) {
+            Some(a) => a.name.clone(),
+            None => return,
+        };
+        let note = format!(
+            "Background work @{name} started has finished: `{}`, after {}.",
+            job.command.replace('`', "'"),
+            lasted(seconds().saturating_sub(job.since))
+        );
+        if self.post(conversation, CORRAL, &note, 0, thread).is_ok() {
+            self.wake(conversation, agent, thread, 1);
+        }
     }
 }
 
@@ -170,5 +247,29 @@ mod tests {
             },
         ];
         assert_eq!(summary(&processes), "bash tools/starlight_recut.sh");
+    }
+
+    #[test]
+    fn work_has_ended_when_its_processes_have_and_no_turn_is_there() {
+        let render = ("c1".to_owned(), "a1".to_owned(), "t1".to_owned());
+        let server = ("c2".to_owned(), "a1".to_owned(), String::new());
+        let job = Job {
+            command: "bash render.sh".into(),
+            since: 0,
+        };
+        let jobs = HashMap::from([(tag(&render), job.clone()), (tag(&server), job.clone())]);
+        let running = HashMap::from([(
+            server.clone(),
+            vec![Tagged {
+                pid: 9,
+                parent: 1,
+                command: "npm run dev".into(),
+            }],
+        )]);
+        assert_eq!(ended(&jobs, &running, &[]), vec![(render.clone(), job)]);
+        // While a turn is under way there, its processes hide the work's; it waits for the turn.
+        assert!(ended(&jobs, &running, std::slice::from_ref(&render)).is_empty());
+        assert_eq!(lasted(42), "42 s");
+        assert_eq!(lasted(3840), "1 h 4 min");
     }
 }

@@ -442,6 +442,8 @@ Keep your memory file, {memory}, up to date with what you will want to know in y
 
 The `corral` command in your shell works Corral for you: listing, making, and inviting agents, making channels, and posting and reading in them. Run `corral help` to see what it does.
 
+For work that takes more than a few minutes (a render, a long build), start it in the background, with `nohup … &` and its output in a log, say that it is running, and end your turn. Corral shows the person it is running, and when it has all ended Corral says so where you started it and wakes you there: check how it went, from its log and outputs, and tell {person} the result.
+
 You run on {machine} ({os}), in {home_folder}. Agents can run on other machines too, and `corral agents` shows which machine each is on: to get something done on another machine, mention the agent there rather than reaching it yourself.",
         name = agent.name,
         person_handle = YOU,
