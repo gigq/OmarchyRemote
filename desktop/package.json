@@ -1,7 +1,7 @@
 {
   "name": "omarchy-remote-desktop",
   "productName": "Omarchy Remote",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Desktop client for Omarchy Remote hosts on Linux, macOS and Windows.",
   "license": "MIT",
   "private": true,
