@@ -204,6 +204,13 @@ struct Seat {
     seen: usize,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     marks: Vec<Mark>,
+    /// Where its next turn forks the session from, after the person deleted messages it knew.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    rewind: Option<Mark>,
+    /// Deleted messages it knew but cannot be rewound past, which its next turn is told to
+    /// treat as never said.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    forget: Vec<String>,
 }
 /// Where a session stood after a turn: the messages it had been given, and its last message.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -211,6 +218,9 @@ struct Mark {
     seen: usize,
     session: String,
     uuid: String,
+    /// Where the turn's reply went, after every message the session knows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    known: Option<usize>,
 }
 /// A conversation keeps this many marks per agent; older threads start from a window instead.
 const MARKS: usize = 300;
@@ -570,6 +580,16 @@ fn context_parts(
     if !conversation.topic.is_empty() {
         out.push_str(&format!("Topic: {}\n", conversation.topic));
     }
+    if let Some(seat) = seat
+        && !seat.forget.is_empty()
+    {
+        out.push_str(&format!(
+            "\n@{YOU} deleted these messages here since you last spoke, so treat them as never said:\n"
+        ));
+        for line in &seat.forget {
+            out.push_str(&format!("- {line}\n"));
+        }
+    }
     let at = messages.iter().position(|m| m.id == thread);
     let new: Vec<&Message> = if let (Some(at), None) = (at, seat) {
         // The thread's first turn: the conversation as it stood at the message it hangs from,
@@ -912,6 +932,14 @@ impl Corral {
                     }
                     _ => None,
                 };
+                // After the person deleted messages it knew, the session forks from before them.
+                let fork = seat.as_ref().and_then(|s| s.rewind.clone()).or(fork);
+                let seat = seat.map(|mut s| {
+                    if s.rewind.is_some() {
+                        s.session.clear();
+                    }
+                    s
+                });
                 let seen = state.messages.get(conversation).map_or(0, Vec::len);
                 // What it was woken for: the latest message there from someone else.
                 let asked = state
@@ -981,12 +1009,14 @@ impl Corral {
                 let mut state = self.state.lock().unwrap();
                 if let Ok((session, _, last)) = &outcome {
                     let mut marks = seat.marks.clone();
-                    // The conversation's session marks where it stood, for threads to fork.
-                    if thread.is_empty() && !last.is_empty() {
+                    // Each session marks where it stood, for threads to fork the conversation's
+                    // and for deleting messages to rewind either.
+                    if !last.is_empty() {
                         marks.push(Mark {
                             seen,
                             session: session.clone(),
                             uuid: last.clone(),
+                            known: state.messages.get(conversation).map(Vec::len),
                         });
                         let extra = marks.len().saturating_sub(MARKS);
                         marks.drain(..extra);
@@ -1007,6 +1037,7 @@ impl Corral {
                                 },
                                 seen,
                                 marks,
+                                ..Seat::default()
                             },
                         );
                     self.save_seats(&state, conversation);
@@ -1608,6 +1639,10 @@ pub fn router<S: Clone + std::marker::Send + Sync + 'static>(corral: Corral) -> 
         .route("/dm", post(direct))
         .route("/conversations/{id}", get(read).post(update_conversation))
         .route("/conversations/{id}/messages", post(send))
+        .route(
+            "/conversations/{id}/messages/{message}/delete",
+            post(delete_message),
+        )
         .route("/conversations/{id}/stop", post(stop))
         .route("/conversations/{id}/response", get(response))
         .route("/conversations/{id}/delete", post(delete_conversation))
@@ -2253,6 +2288,114 @@ pub async fn send(
         .post(&id, YOU, text, 0, &form.thread)
         .map_err(error)?;
     Ok(Json(json!(message)))
+}
+/// Deletes a message, and the replies of one a thread hangs from.
+pub async fn delete_message(
+    State(corral): State<Corral>,
+    Path((id, message)): Path<(String, String)>,
+) -> Result<Json<Value>, ApiError> {
+    let gone = corral.delete_messages(&id, &message)?;
+    corral.emit(json!({"type":"deleted","conversation":id,"messages":gone}));
+    Ok(Json(json!({"deleted": gone})))
+}
+impl Corral {
+    /// Deletes a message, with a thread's replies if it starts one, and returns their ids. An
+    /// agent that knew one forgets it: a Claude session's next turn forks from before it, and
+    /// any other is told to treat it as never said. Not while an agent works there, whose turn
+    /// would record where it stood among the messages as they were.
+    fn delete_messages(&self, conversation: &str, message: &str) -> Result<Vec<String>, ApiError> {
+        let mut state = self.state.lock().unwrap();
+        if let Some((_, agent, _)) = state.turns.keys().find(|(c, _, _)| c == conversation) {
+            return Err(refuse(
+                StatusCode::CONFLICT,
+                &format!(
+                    "{} is at work in this conversation; wait for it to finish, or Stop it, then delete",
+                    handle(&state, agent)
+                ),
+            ));
+        }
+        let messages = state.messages.get(conversation).ok_or_else(not_found)?;
+        let target = messages
+            .iter()
+            .find(|m| m.id == message)
+            .ok_or_else(not_found)?;
+        let starts_thread = target.thread.is_empty();
+        let gone: Vec<(usize, Message)> = messages
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| m.id == message || (starts_thread && m.thread == message))
+            .map(|(i, m)| (i, m.clone()))
+            .collect();
+        let kept: Vec<Message> = messages
+            .iter()
+            .filter(|m| !gone.iter().any(|(_, g)| g.id == m.id))
+            .cloned()
+            .collect();
+        let path = self
+            .root
+            .join("conversations")
+            .join(conversation)
+            .join("messages.jsonl");
+        let mut lines = String::new();
+        for m in &kept {
+            lines.push_str(&serde_json::to_string(m).map_err(error)?);
+            lines.push('\n');
+        }
+        let temporary = path.with_extension("tmp");
+        fs::write(&temporary, lines).map_err(error)?;
+        fs::rename(&temporary, &path).map_err(error)?;
+        let said: HashMap<String, String> = gone
+            .iter()
+            .map(|(_, m)| {
+                (
+                    m.id.clone(),
+                    format!("{}: {}", handle(&state, &m.author), clip(&m.text, 160)),
+                )
+            })
+            .collect();
+        state.messages.insert(conversation.to_owned(), kept);
+        // Where each session stood counts messages, so what came after a deleted one moves up.
+        let shift = |n: usize| n - gone.iter().filter(|(i, _)| *i < n).count();
+        if let Some(seats) = state.seats.get_mut(conversation) {
+            // A deleted thread's own seats go with it.
+            if starts_thread {
+                seats.retain(|key, _| !key.ends_with(&format!("/{message}")));
+            }
+            for (key, seat) in seats.iter_mut() {
+                let (agent, thread) = key.split_once('/').unwrap_or((key, ""));
+                // What its session knew of them: what it was given here, and what it said.
+                let knew: Vec<&(usize, Message)> = gone
+                    .iter()
+                    .filter(|(i, m)| {
+                        (m.thread == thread || (!thread.is_empty() && m.id == thread))
+                            && (*i < seat.seen || m.author == agent)
+                    })
+                    .collect();
+                if let Some(first) = knew.iter().map(|(i, _)| *i).min() {
+                    let mark = seat.marks.iter().rposition(|mark| {
+                        mark.seen <= first && mark.known.is_some_and(|k| k < first)
+                    });
+                    match mark {
+                        Some(at) if seat.engine == "claude" => {
+                            seat.marks.truncate(at + 1);
+                            seat.seen = seat.marks[at].seen;
+                            seat.rewind = Some(seat.marks[at].clone());
+                        }
+                        _ => seat
+                            .forget
+                            .extend(knew.iter().map(|(_, m)| said[&m.id].clone())),
+                    }
+                }
+                seat.seen = shift(seat.seen);
+                for mark in seat.marks.iter_mut().chain(seat.rewind.as_mut()) {
+                    mark.seen = shift(mark.seen);
+                    mark.known = mark.known.map(shift);
+                }
+            }
+        }
+        self.save_seats(&state, conversation);
+        Ok(gone.into_iter().map(|(_, m)| m.id).collect())
+    }
 }
 pub async fn stop(State(corral): State<Corral>, Path(id): Path<String>) -> Json<Value> {
     corral.stop(&id);
@@ -3024,6 +3167,7 @@ mod tests {
                 seen,
                 session: "s1".into(),
                 uuid: uuid.into(),
+                known: None,
             };
             state.seats.entry(infra.id.clone()).or_default().insert(
                 alex.id.clone(),
@@ -3032,6 +3176,7 @@ mod tests {
                     engine: "claude".into(),
                     seen: 5,
                     marks: vec![mark(0, "u0"), mark(2, "u2"), mark(4, "u4")],
+                    ..Seat::default()
                 },
             );
         }
@@ -3401,6 +3546,98 @@ mod tests {
             vec![json!({"conversation": talk.id, "message": later.id, "agents": [alex.id]})]
         );
         drop(state);
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn deleting_a_message_rewinds_the_agents_that_knew_it() {
+        let (corral, root) = corral();
+        let alex = agent(&corral, "alex");
+        let codex = agent(&corral, "cody");
+        let talk = channel(&corral, "infra", vec![alex.id.clone(), codex.id.clone()]);
+        let asked = message(YOU, "@alex certs?", 0);
+        let answered = message(&alex.id, "Renewed.", 1);
+        let again = message(YOU, "@alex and web?", 0);
+        let wrong = message(&alex.id, "Web is down.", 1);
+        let threaded = reply(YOU, "in a thread", &asked.id);
+        let mark = |seen, known, uuid: &str| Mark {
+            seen,
+            session: "s1".into(),
+            uuid: uuid.into(),
+            known: Some(known),
+        };
+        {
+            let mut state = corral.state.lock().unwrap();
+            state.messages.insert(
+                talk.id.clone(),
+                vec![asked.clone(), answered, again, wrong.clone(), threaded],
+            );
+            let seats = state.seats.entry(talk.id.clone()).or_default();
+            seats.insert(
+                alex.id.clone(),
+                Seat {
+                    session: "s1".into(),
+                    engine: "claude".into(),
+                    seen: 3,
+                    marks: vec![mark(1, 1, "u1"), mark(3, 3, "u2")],
+                    ..Seat::default()
+                },
+            );
+            seats.insert(
+                codex.id.clone(),
+                Seat {
+                    session: "c1".into(),
+                    engine: "codex".into(),
+                    seen: 5,
+                    ..Seat::default()
+                },
+            );
+            seats.insert(seat_key(&alex.id, &asked.id), Seat::default());
+        }
+        // alex's wrong reply: its session forks from before it, so the question is asked again.
+        assert_eq!(
+            corral.delete_messages(&talk.id, &wrong.id).unwrap(),
+            std::slice::from_ref(&wrong.id)
+        );
+        let state = corral.state.lock().unwrap();
+        let seat = &state.seats[&talk.id][&alex.id];
+        assert_eq!(seat.rewind.as_ref().map(|m| m.uuid.as_str()), Some("u1"));
+        assert_eq!((seat.seen, seat.marks.len()), (1, 1));
+        // Codex cannot be rewound, so it is told; it had been given everything.
+        assert_eq!(
+            state.seats[&talk.id][&codex.id].forget,
+            ["@alex: Web is down."]
+        );
+        assert_eq!(state.seats[&talk.id][&codex.id].seen, 4);
+        assert_eq!(state.messages[&talk.id].len(), 4);
+        drop(state);
+        // A message a thread hangs from goes with its replies and the thread's seats.
+        assert_eq!(
+            corral.delete_messages(&talk.id, &asked.id).unwrap().len(),
+            2
+        );
+        let state = corral.state.lock().unwrap();
+        assert_eq!(state.messages[&talk.id].len(), 2);
+        assert!(!state.seats[&talk.id].contains_key(&seat_key(&alex.id, &asked.id)));
+        let saved = fs::read_to_string(
+            root.join("conversations")
+                .join(&talk.id)
+                .join("messages.jsonl"),
+        )
+        .unwrap();
+        assert_eq!(saved.lines().count(), 2);
+        drop(state);
+        // Not while an agent works there.
+        corral.state.lock().unwrap().turns.insert(
+            (talk.id.clone(), alex.id.clone(), String::new()),
+            Turn::default(),
+        );
+        let first = corral.state.lock().unwrap().messages[&talk.id][0]
+            .id
+            .clone();
+        assert_eq!(
+            corral.delete_messages(&talk.id, &first).unwrap_err().0,
+            StatusCode::CONFLICT
+        );
         fs::remove_dir_all(root).unwrap();
     }
 }

@@ -110,6 +110,15 @@ async function setup(page, { width = 402, height = 874 } = {}, before) {
     return r.fulfill({ json: m });
   });
   await page.route('**/api/corral/dm', r => r.fulfill({ json: state.conversations[1] }));
+  await page.route(/\/api\/corral\/conversations\/[^/]+\/messages\/[^/]+\/delete$/, r => {
+    const [id, , message] = r.request().url().split('/').slice(-4, -1);
+    const gone = state.messages[id]
+      .filter(m => m.id === message || m.thread === message)
+      .map(m => m.id);
+    state.messages[id] = state.messages[id].filter(m => !gone.includes(m.id));
+    (state.deleted ||= []).push(...gone);
+    return r.fulfill({ json: { deleted: gone } });
+  });
   await page.route('**/api/corral/activity', r =>
     r.fulfill({ json: { items: state.activity || [] } })
   );
@@ -822,4 +831,45 @@ test('a message sent while its agent works shows as waiting until it is given', 
   emit({ type: 'queued', queued: [] });
   await expect(sent).not.toHaveClass(/queued/);
   await expect(app.locator('.corral-queued')).toHaveCount(0);
+});
+
+test('any message can be deleted, and a thread goes with the message it hangs from', async ({
+  page,
+}) => {
+  const { app, state } = await setup(page, {}, (page, state) => {
+    state.messages[INFRA].push({ ...msg(ALEX, 'All three renewed.', 5), id: 'r1', thread: 'm1' });
+  });
+  await app.getByRole('listitem').filter({ hasText: 'infra' }).first().click();
+  const list = app.locator('.corral-messages');
+  // An agent's reply.
+  await list.locator('.corral-text', { hasText: 'On it.' }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await expect(page.getByText('Delete this message?')).toBeVisible();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await expect.poll(() => state.deleted).toEqual(['m2']);
+  await expect(list).not.toContainText('On it.');
+  // The message a thread hangs from says how many replies go with it.
+  await list.locator('.corral-text', { hasText: 'rotate the certs' }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await expect(page.getByText('Delete this message and its 1 reply?')).toBeVisible();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await expect.poll(() => state.deleted).toEqual(['m2', 'm1', 'r1']);
+  await expect(list).not.toContainText('rotate the certs');
+});
+
+test('a thread stays open when Corral reconnects, and after a reload', async ({ page }) => {
+  const { app, state } = await setup(page, {}, (page, state) => {
+    state.messages[INFRA].push({ ...msg(ALEX, 'All three renewed.', 5), id: 'r1', thread: 'm1' });
+  });
+  await app.getByRole('listitem').filter({ hasText: 'infra' }).first().click();
+  await app.locator('.corral-replies').click();
+  await expect(app.locator('.corral-title')).toHaveText('Thread');
+  // The host restarts: its socket closes, and Corral reconnects.
+  await state.ws.close();
+  await page.waitForTimeout(2500);
+  await expect(app.locator('.corral-title')).toHaveText('Thread');
+  await expect(app.locator('.corral-messages')).toContainText('All three renewed.');
+  // The shell reopens Corral after a reload, and Corral its thread.
+  await page.reload();
+  await expect(page.locator('#remote-corral-app .corral-title')).toHaveText('Thread');
 });

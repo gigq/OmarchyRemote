@@ -339,15 +339,17 @@
       this.socket();
       if (this.detailsOpen) this.loadActivity();
       this.refresh().then(() => {
-        const open = storage.get(OPEN);
-        if (open && this.conversation(open)) this.open(open);
+        // The conversation, or the thread in it, open last time.
+        const [open, thread = ''] = String(storage.get(OPEN) || '').split('/');
+        if (open && this.conversation(open)) this.open(open, thread);
       });
     }
     resume() {
       if (!this.ws || this.ws.readyState > 1) this.socket();
       this.refresh();
       if (this.detailsOpen) this.loadActivity();
-      if (this.openId) this.open(this.openId);
+      // Reconnecting, as when the host restarts, keeps a thread open.
+      if (this.openId) this.open(this.openId, this.threadId || '');
     }
     socket() {
       clearTimeout(this.retry);
@@ -380,6 +382,8 @@
         this.renderWorking();
         this.renderSide();
         if (this.detailsOpen) this.renderActivity();
+      } else if (e.type === 'deleted') {
+        this.removeMessages(e.conversation, e.messages || []);
       } else if (e.type === 'queued') {
         const before = [...this.queued.keys()].join();
         this.setQueued(e.queued);
@@ -633,6 +637,7 @@
     openThread(id) {
       if (!this.messages.some(m => m.id === id && !m.thread)) return;
       this.threadId = id;
+      storage.set(OPEN, this.openId + '/' + id);
       this.nativeInput.select('corral:' + this.openId + '/' + id);
       this.layout();
       this.renderHeader();
@@ -642,6 +647,7 @@
     }
     closeThread() {
       this.threadId = null;
+      storage.set(OPEN, this.openId);
       this.nativeInput.select('corral:' + this.openId);
       this.layout();
       this.renderHeader();
@@ -906,6 +912,10 @@
         if (m.author === 'corral') {
           const note = node('div', 'corral-note');
           markdown(note, m.text, names);
+          contextMenu(note, () => ({
+            title: 'Corral',
+            items: [this.deleteItem(m, 0)],
+          }));
           items.push(note);
           last = null;
           continue;
@@ -946,11 +956,14 @@
           const answer = button('Reply', () => this.openThread(m.id), 'corral-reply-key');
           answer.setAttribute('aria-label', 'Reply in thread');
           text.append(answer);
+          const these = replies.get(m.id);
           contextMenu(text, () => ({
             title: this.author(m.author),
-            items: [{ label: 'Reply in thread', run: () => this.openThread(m.id) }],
+            items: [
+              { label: 'Reply in thread', run: () => this.openThread(m.id) },
+              this.deleteItem(m, these?.length || 0),
+            ],
           }));
-          const these = replies.get(m.id);
           if (these) {
             const more = button('', () => this.openThread(m.id), 'corral-replies');
             more.textContent = `${these.length} ${these.length === 1 ? 'reply' : 'replies'}`;
@@ -958,7 +971,13 @@
             last.body.append(more);
             last = null;
           }
-        } else if (m.id === thread) {
+        } else {
+          contextMenu(text, () => ({
+            title: this.author(m.author),
+            items: [this.deleteItem(m, m.id === thread ? replies.get(thread)?.length || 0 : 0)],
+          }));
+        }
+        if (thread && m.id === thread) {
           const count = replies.get(thread)?.length || 0;
           items.push(
             node(
@@ -1016,6 +1035,40 @@
         ),
       ].join('   ');
       this.workingText.title = this.workingText.textContent;
+    }
+    // Delete, for any message: the person's, an agent's, or Corral's. One a thread hangs from
+    // takes its replies with it.
+    deleteItem(m, replies) {
+      return {
+        label: 'Delete',
+        danger: true,
+        confirm: replies
+          ? `Delete this message and its ${replies} ${replies === 1 ? 'reply' : 'replies'}?`
+          : 'Delete this message?',
+        run: () => this.deleteMessage(m),
+      };
+    }
+    async deleteMessage(m) {
+      const id = this.openId;
+      try {
+        const { deleted } = await request(
+          `/conversations/${encodeURIComponent(id)}/messages/${encodeURIComponent(m.id)}/delete`,
+          {}
+        );
+        this.removeMessages(id, deleted);
+      } catch (e) {
+        this.workingText.textContent = e.message;
+        this.workingLine.hidden = false;
+      }
+    }
+    removeMessages(conversation, ids) {
+      if (conversation === this.openId) {
+        this.messages = this.messages.filter(m => !ids.includes(m.id));
+        if (ids.includes(this.threadId)) this.closeThread();
+        else this.renderMessages();
+      }
+      this.later();
+      if (this.detailsOpen) this.activityLater();
     }
     setQueued(list = []) {
       this.queued = new Map(list.map(q => [q.message, q.agents]));
