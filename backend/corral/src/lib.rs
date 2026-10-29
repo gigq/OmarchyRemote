@@ -1364,9 +1364,10 @@ impl Corral {
     }
     /// Who a message wakes: the agent in a direct message from the person, and in a channel
     /// the agents it mentions (or every agent for @here), adding mentioned agents who are not
-    /// members yet. In a thread, the person's reply that mentions no one wakes the agents in it:
-    /// whoever wrote the message it hangs from, and every agent that has replied. Agents
-    /// mentioning agents stop after `MAX_CHAIN` replies in a row.
+    /// members yet. In a thread, the person's reply that mentions no one wakes whoever the thread
+    /// is with: the agent that wrote the message it hangs from, or for the person's own message,
+    /// the agents that message mentioned. Agents brought in by a mention in the thread are woken
+    /// again only by another. Agents mentioning agents stop after `MAX_CHAIN` replies in a row.
     fn targets(
         &self,
         state: &mut Workspace,
@@ -1393,16 +1394,20 @@ impl Corral {
         let mut wake: Vec<String> = if (talk.kind == "dm" && message.author == YOU) || everyone {
             talk.members.clone()
         } else if !message.thread.is_empty() && message.author == YOU && mentioned.is_empty() {
-            let mut inside: Vec<String> = Vec::new();
-            for m in state.messages.get(&talk.id).into_iter().flatten() {
-                if (m.id == message.thread || m.thread == message.thread)
-                    && state.agents.contains_key(&m.author)
-                    && !inside.contains(&m.author)
-                {
-                    inside.push(m.author.clone());
-                }
+            let root = state
+                .messages
+                .get(&talk.id)
+                .into_iter()
+                .flatten()
+                .find(|m| m.id == message.thread);
+            match root {
+                Some(root) if state.agents.contains_key(&root.author) => vec![root.author.clone()],
+                Some(root) if root.author == YOU => mentions(&root.text)
+                    .iter()
+                    .filter_map(|n| by_name.get(n).cloned())
+                    .collect(),
+                _ => Vec::new(),
             }
-            inside
         } else {
             mentioned
         };
@@ -3213,9 +3218,9 @@ mod tests {
         // In the conversation itself, the same words wake no one.
         let (wake, _, _) = corral.targets(&mut state, &talk, &message(YOU, "and last night's?", 0));
         assert!(wake.is_empty());
-        // A thread on the person's own message wakes no one until an agent is mentioned.
+        // A thread on the person's own message wakes the agents it mentioned.
         let (wake, _, _) = corral.targets(&mut state, &talk, &reply(YOU, "hm", &later));
-        assert!(wake.is_empty());
+        assert_eq!(wake, std::slice::from_ref(&alex.id));
         drop(state);
         fs::remove_dir_all(root).unwrap();
     }
@@ -3638,6 +3643,48 @@ mod tests {
             corral.delete_messages(&talk.id, &first).unwrap_err().0,
             StatusCode::CONFLICT
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn a_thread_wakes_only_whoever_it_is_with() {
+        let (corral, root) = corral();
+        let trail = agent(&corral, "PaperTrail");
+        let (asbuilt, walt) = (agent(&corral, "AsBuilt"), agent(&corral, "Walt"));
+        let talk = channel(&corral, "PlainSight", vec![trail.id.clone()]);
+        let started = message(&trail.id, "Draft is up.", 1);
+        let told = reply(
+            &trail.id,
+            "@AsBuilt @Walt heads up on the house rules.",
+            &started.id,
+        );
+        let asked = message(YOU, "no mention here", 0);
+        corral.state.lock().unwrap().messages.insert(
+            talk.id.clone(),
+            vec![
+                started.clone(),
+                told,
+                reply(&asbuilt.id, "Thanks.", &started.id),
+                reply(&walt.id, "Got it.", &started.id),
+                asked.clone(),
+                reply(YOU, "nobody", &asked.id),
+            ],
+        );
+        let mut state = corral.state.lock().unwrap();
+        // Agents mentioned in the thread, who replied there, are not woken by the person's reply.
+        let (wake, _, _) = corral.targets(
+            &mut state,
+            &talk,
+            &reply(YOU, "and the intro?", &started.id),
+        );
+        assert_eq!(wake, std::slice::from_ref(&trail.id));
+        // A mention still brings one in.
+        let (wake, _, _) =
+            corral.targets(&mut state, &talk, &reply(YOU, "@Walt you too", &started.id));
+        assert_eq!(wake, std::slice::from_ref(&walt.id));
+        // A thread on the person's message that mentioned no one wakes no one.
+        let (wake, _, _) = corral.targets(&mut state, &talk, &reply(YOU, "hm", &asked.id));
+        assert!(wake.is_empty());
+        drop(state);
         fs::remove_dir_all(root).unwrap();
     }
 }
