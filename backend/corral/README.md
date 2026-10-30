@@ -104,3 +104,30 @@ or dies leaves the queue with no daemon to tell. Jobs started under the queue's 
 hold one of `/tmp/render-slots/slot*.lock`, count as four cores each until they end. Corral reads
 the queue: an agent's job shows in its background line with its place in line, and the details
 panel's Renders tab shows each machine's queue.
+
+### The render farm
+
+Machines running Corral (see [Agents on other machines](#agents-on-other-machines)) take each
+other's jobs. `render-slot --on gerty …` sends one to a machine; `--needs cuda,blender` to the
+least busy machine with every tag, this one included. `--in` paths go with the job and `--out`
+paths come back; `render-slot machines` lists the farm.
+
+```sh
+render-slot --needs optix --gpu --cores 4 --in scene --out frames -- \
+  blender -b scene/shot.blend -o //frames/f_#### -a
+```
+
+The sender packs the inputs as a tar stream for the machine's Corral, which unpacks them in a
+folder of the job's own (`~/.cache/corral-farm/<id>`) and runs the command there as
+`render-slot run …`, so it waits its turn in that machine's queue; the sender then reports its
+place in line, prints its log when it ends, brings back the outputs as another tar stream, and
+exits with its status. A program named in the command (`blender`, `ffmpeg`, `node`) is found on
+that machine, through its settings' `tools` where it is not on the path, as Blender on Windows.
+A machine's `tags` are those in its settings, the programs it has, and its system.
+
+Job folders go when their files are back; each machine also sweeps its own every half hour,
+removing finished jobs after six hours (time to recover files that did not come back) and
+folders with no job behind them after a day. The farm's routes, under `/api/corral/farm`, take
+the machine's key: `GET /farm` (name, tags, queue), and for a job `POST …/jobs/<id>/files` (a tar
+stream in), `POST …/run`, `GET …/jobs/<id>` (waiting and its place, running, or done with its
+exit status, and its log's end), `GET …/files?paths=` (a tar stream out), and `POST …/delete`.

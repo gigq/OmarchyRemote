@@ -10,8 +10,16 @@ const USAGE: &str = "render-slot: heavy jobs take turns for this machine's cores
       then runs it held to N cores (default 4; match the job's own threads, as ffmpeg -threads N)
       at a lower priority. --gpu waits for a seat on the GPU as well (Blender, GPU upscales).
       Its exit status is the command's.
+  render-slot run --on MACHINE | --needs TAG,TAG [--in PATH]... [--out PATH]... [...] -- COMMAND
+      Runs the job on another machine of the farm, through its queue: --on names it, --needs
+      picks the least busy one with every tag (as blender,cuda; `render-slot machines` lists
+      them), tars included. --in paths (files or folders, relative to here) go with the job, and
+      --out paths come back here when it ends. The command runs in the job's folder there, so
+      give it those relative paths, and a program by name (blender, ffmpeg, node).
+  render-slot machines
+      The farm: each machine, whether it answers, its tags, and how busy its queue is.
   render-slot status [--json]
-      What is running and what waits, with each job's place in line.
+      What is running and what waits here, with each job's place in line.
   render-slot COMMAND [ARGS...]
       As run, with the defaults: how the old render-slot.sh was called.";
 
@@ -23,6 +31,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Some("status") => status(args.iter().any(|a| a == "--json")),
+        Some("machines") => machines(),
         Some("run") => run(&args[1..]),
         // Options first, as `run` takes them; otherwise the command itself.
         Some(first) if first.starts_with("--") => run(&args),
@@ -42,6 +51,8 @@ fn run(args: &[String]) -> ExitCode {
     let mut cores = queue::CORES;
     let mut gpu = false;
     let mut label = String::new();
+    let (mut on, mut needs) = (String::new(), Vec::<String>::new());
+    let (mut inputs, mut outputs) = (Vec::<String>::new(), Vec::<String>::new());
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -50,14 +61,25 @@ fn run(args: &[String]) -> ExitCode {
                 break;
             }
             "--gpu" => gpu = true,
-            "--cores" | "--label" if i + 1 < args.len() => {
-                if args[i] == "--cores" {
-                    let Ok(n) = args[i + 1].parse() else {
-                        return fail("--cores takes a number");
-                    };
-                    cores = n;
-                } else {
-                    label = args[i + 1].clone();
+            "--cores" | "--label" | "--on" | "--needs" | "--in" | "--out" if i + 1 < args.len() => {
+                let value = args[i + 1].clone();
+                match args[i].as_str() {
+                    "--cores" => {
+                        let Ok(n) = value.parse() else {
+                            return fail("--cores takes a number");
+                        };
+                        cores = n;
+                    }
+                    "--label" => label = value,
+                    "--on" => on = value,
+                    "--needs" => needs.extend(
+                        value
+                            .split(',')
+                            .map(|t| t.trim().to_lowercase())
+                            .filter(|t| !t.is_empty()),
+                    ),
+                    "--in" => inputs.push(value),
+                    _ => outputs.push(value),
                 }
                 i += 1;
             }
@@ -69,6 +91,24 @@ fn run(args: &[String]) -> ExitCode {
     let command = &args[i..];
     if command.is_empty() {
         return fail("give the command to run after --");
+    }
+    if !on.is_empty() || !needs.is_empty() {
+        let job = Remote {
+            command: command.to_vec(),
+            cores,
+            gpu,
+            label: label.clone(),
+            inputs,
+            outputs,
+        };
+        match pick(&on, &needs) {
+            Ok(Some(machine)) => return send(&machine, &job),
+            // This machine fits best: the job runs here, as any other.
+            Ok(None) => {}
+            Err(e) => return fail(&e),
+        }
+    } else if !inputs.is_empty() || !outputs.is_empty() {
+        return fail("--in and --out are for a job sent with --on or --needs");
     }
     let place = match queue::take(queue::ticket(command, &label, cores, gpu), |ahead| {
         queue::say(&format!("waiting: {ahead} in line before this job"));
@@ -92,11 +132,14 @@ fn run(args: &[String]) -> ExitCode {
     #[cfg(unix)]
     {
         use std::os::{fd::AsRawFd, unix::process::CommandExt};
+        #[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
         let cpus = place.ticket.cpus.clone();
         let fd = place.lock.as_raw_fd();
         // SAFETY: only async-signal-safe calls between fork and exec.
         unsafe {
             job.pre_exec(move || {
+                // Only Linux can hold a process to some processors; elsewhere the budget holds.
+                #[cfg(target_os = "linux")]
                 if !cpus.is_empty() {
                     let mut set: libc::cpu_set_t = std::mem::zeroed();
                     for cpu in &cpus {
@@ -201,6 +244,361 @@ fn status(json: bool) -> ExitCode {
             folder,
             what.chars().take(90).collect::<String>()
         );
+    }
+    ExitCode::SUCCESS
+}
+
+// ---- The farm: sending a job to another machine ----
+
+/// Another machine of the farm, as this one's Corral lists it in `~/Corral/hosts.json`.
+#[derive(Clone, serde::Deserialize)]
+struct Machine {
+    name: String,
+    url: String,
+    key: String,
+}
+struct Remote {
+    command: Vec<String>,
+    cores: usize,
+    gpu: bool,
+    label: String,
+    inputs: Vec<String>,
+    outputs: Vec<String>,
+}
+fn hosts() -> Vec<Machine> {
+    corral::default_root()
+        .ok()
+        .and_then(|r| std::fs::read(r.join("hosts.json")).ok())
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_default()
+}
+/// This machine's name, as the farm knows it.
+fn here() -> String {
+    std::env::var("RENDER_MACHINE")
+        .or_else(|_| std::env::var("OMARCHY_HOST_NAME"))
+        .ok()
+        .or_else(|| std::fs::read_to_string("/etc/hostname").ok())
+        .map(|n| n.trim().to_lowercase())
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| "here".into())
+}
+/// A file of curl options, readable by this account only, as the key must be; gone when dropped.
+struct Options(std::path::PathBuf);
+impl Options {
+    fn new(machine: &Machine, path: &str, extra: &[&str]) -> std::io::Result<Options> {
+        use std::io::Write;
+        let path_on_disk = std::env::temp_dir().join(format!(
+            "render-slot-{}.curl",
+            uuid::Uuid::new_v4().simple()
+        ));
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&path_on_disk)?;
+        let quoted = |t: &str| format!("\"{}\"", t.replace('\\', "\\\\").replace('"', "\\\""));
+        let mut lines = vec![
+            format!(
+                "url = {}",
+                quoted(&format!("{}{path}", machine.url.trim_end_matches('/')))
+            ),
+            format!(
+                "header = {}",
+                quoted(&format!("Authorization: Bearer {}", machine.key))
+            ),
+            "silent".into(),
+            "show-error".into(),
+            "fail-with-body".into(),
+        ];
+        lines.extend(extra.iter().map(|l| (*l).to_owned()));
+        file.write_all(lines.join("\n").as_bytes())?;
+        Ok(Options(path_on_disk))
+    }
+}
+impl Drop for Options {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+/// Asks a machine for `path`, with an optional JSON body, and reads its JSON answer.
+fn ask(
+    machine: &Machine,
+    path: &str,
+    body: Option<&serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let mut extra = vec!["max-time = 30"];
+    let data;
+    if let Some(body) = body {
+        extra.push("header = \"Content-Type: application/json\"");
+        data = format!(
+            "data-binary = \"{}\"",
+            body.to_string().replace('\\', "\\\\").replace('"', "\\\"")
+        );
+        extra.push(&data);
+    }
+    let options = Options::new(machine, path, &extra).map_err(|e| e.to_string())?;
+    let out = Command::new("curl")
+        .arg("--config")
+        .arg(&options.0)
+        .output()
+        .map_err(|e| format!("curl could not run: {e}"))?;
+    let said: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_default();
+    if !out.status.success() {
+        return Err(said["error"].as_str().map_or_else(
+            || {
+                format!(
+                    "{} did not answer ({})",
+                    machine.name,
+                    String::from_utf8_lossy(&out.stderr).trim()
+                )
+            },
+            |e| format!("{}: {e}", machine.name),
+        ));
+    }
+    Ok(said)
+}
+/// How busy a machine's queue is, from 0: cores in use and waiting over its budget.
+fn busy(farm: &serde_json::Value) -> f64 {
+    let q = &farm["queue"];
+    let jobs = q["jobs"].as_array().cloned().unwrap_or_default();
+    let cores: u64 = jobs.iter().filter_map(|j| j["cores"].as_u64()).sum::<u64>()
+        + q["legacy"].as_u64().unwrap_or(0) * queue::CORES as u64;
+    cores as f64 / q["budget"]["cores"].as_u64().unwrap_or(1).max(1) as f64
+}
+/// The machine a job goes to: the one named, or the least busy with every tag it needs, this
+/// one included; None when that is this one.
+fn pick(on: &str, needs: &[String]) -> Result<Option<Machine>, String> {
+    let me = here();
+    if on.eq_ignore_ascii_case(&me) {
+        return Ok(None);
+    }
+    let hosts = hosts();
+    if !on.is_empty() {
+        return hosts
+            .into_iter()
+            .find(|h| h.name.eq_ignore_ascii_case(on))
+            .map(Some)
+            .ok_or_else(|| format!("{on} is not in the farm; `render-slot machines` lists it"));
+    }
+    let fits = |tags: &[String]| {
+        needs
+            .iter()
+            .all(|n| tags.iter().any(|t| t.eq_ignore_ascii_case(n)))
+    };
+    let mut best: Option<(f64, Option<Machine>)> = None;
+    if fits(&corral::farm::tags()) {
+        let local = serde_json::json!({"queue": queue::snapshot()});
+        best = Some((busy(&local), None));
+    }
+    for host in hosts {
+        let Ok(farm) = ask(&host, "/api/corral/farm", None) else {
+            continue;
+        };
+        let tags: Vec<String> = farm["tags"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|t| t.as_str().map(str::to_owned))
+            .collect();
+        if !fits(&tags) {
+            continue;
+        }
+        let load = busy(&farm);
+        if best.as_ref().is_none_or(|(b, _)| load < *b) {
+            best = Some((load, Some(host)));
+        }
+    }
+    best.map(|(_, m)| m).ok_or_else(|| {
+        format!(
+            "No machine that answers has all of: {}; `render-slot machines` lists what each has",
+            needs.join(", ")
+        )
+    })
+}
+fn encode(text: &str) -> String {
+    text.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
+}
+/// Sends a job to another machine: its input files, then the command, which waits its turn in
+/// that machine's queue; then, once it ends, brings back its output files. Exits with its status.
+fn send(machine: &Machine, job: &Remote) -> ExitCode {
+    let id = uuid::Uuid::new_v4().simple().to_string();
+    let jobs = format!("/api/corral/farm/jobs/{id}");
+    for path in job.inputs.iter().chain(&job.outputs) {
+        if std::path::Path::new(path).is_absolute() || path.split(['/', '\\']).any(|p| p == "..") {
+            return fail(&format!(
+                "{path}: --in and --out take paths inside this folder"
+            ));
+        }
+    }
+    queue::say(&format!(
+        "sending to {}: {}",
+        machine.name,
+        job.command.join(" ")
+    ));
+    // The input files, as a tar stream, straight into curl.
+    let mut packing = vec!["-cf".to_owned(), "-".to_owned()];
+    packing.extend(job.inputs.iter().cloned());
+    if job.inputs.is_empty() {
+        packing.extend([
+            "--files-from".into(),
+            if cfg!(windows) {
+                "NUL".into()
+            } else {
+                "/dev/null".into()
+            },
+        ]);
+    }
+    let options = match Options::new(
+        machine,
+        &format!("{jobs}/files"),
+        &[
+            "data-binary = @-",
+            "header = \"Content-Type: application/x-tar\"",
+        ],
+    ) {
+        Ok(o) => o,
+        Err(e) => return fail(&e.to_string()),
+    };
+    let sent = Command::new("tar")
+        .args(&packing)
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .and_then(|mut tar| {
+            let out = tar.stdout.take().expect("piped");
+            let curl = Command::new("curl")
+                .arg("--config")
+                .arg(&options.0)
+                .stdin(out)
+                .output()?;
+            tar.wait()?;
+            Ok(curl)
+        });
+    match sent {
+        Ok(out) if out.status.success() => {}
+        Ok(out) => {
+            return fail(&format!(
+                "could not send the files to {}: {}{}",
+                machine.name,
+                String::from_utf8_lossy(&out.stdout).trim(),
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+        }
+        Err(e) => return fail(&format!("could not send the files: {e}")),
+    }
+    drop(options);
+    let body = serde_json::json!({
+        "command": job.command,
+        "cores": job.cores,
+        "gpu": job.gpu,
+        "label": job.label,
+        "place": std::env::var("CORRAL_PLACE").unwrap_or_default(),
+    });
+    if let Err(e) = ask(machine, &format!("{jobs}/run"), Some(&body)) {
+        return fail(&format!("could not start the job: {e}"));
+    }
+    // Its place in that machine's line, then its end.
+    let mut told = String::new();
+    let (code, log) = loop {
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        let Ok(status) = ask(machine, &jobs, None) else {
+            continue;
+        };
+        let state = status["state"].as_str().unwrap_or_default();
+        let line = match state {
+            "waiting" => format!("{}: waiting, {} in line", machine.name, status["position"]),
+            "running" => format!("{}: running", machine.name),
+            _ => String::new(),
+        };
+        if !line.is_empty() && line != told {
+            queue::say(&line);
+            told = line;
+        }
+        if state == "done" {
+            break (
+                status["exit"].as_i64().unwrap_or(-1),
+                status["log"].as_str().unwrap_or_default().to_owned(),
+            );
+        }
+    };
+    eprint!("{log}");
+    if code == 0 && !job.outputs.is_empty() {
+        let paths = encode(&job.outputs.join("\n"));
+        let options = match Options::new(machine, &format!("{jobs}/files?paths={paths}"), &[]) {
+            Ok(o) => o,
+            Err(e) => return fail(&e.to_string()),
+        };
+        let fetched = Command::new("curl")
+            .arg("--config")
+            .arg(&options.0)
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .and_then(|mut curl| {
+                let out = curl.stdout.take().expect("piped");
+                let tar = Command::new("tar").args(["-xf", "-"]).stdin(out).status()?;
+                Ok((curl.wait()?, tar))
+            });
+        match fetched {
+            Ok((curl, tar)) if curl.success() && tar.success() => {
+                queue::say(&format!(
+                    "brought back {} from {}",
+                    job.outputs.join(", "),
+                    machine.name
+                ));
+            }
+            _ => {
+                return fail(&format!(
+                    "the job ended, but its files did not come back from {}; they are in its .cache/corral-farm/{id} folder",
+                    machine.name
+                ));
+            }
+        }
+    }
+    let _ = ask(
+        machine,
+        &format!("{jobs}/delete"),
+        Some(&serde_json::json!({})),
+    );
+    ExitCode::from(code.clamp(0, 255) as u8)
+}
+/// `render-slot machines`: the farm, with what each machine has and how busy it is.
+fn machines() -> ExitCode {
+    let local = queue::snapshot();
+    let show = |name: &str, tags: &[String], q: &serde_json::Value| {
+        let jobs = q["jobs"].as_array().cloned().unwrap_or_default();
+        let running = jobs.iter().filter(|j| j["running"] == true).count();
+        println!(
+            "{:<10} {:>2} running, {:>2} waiting, {:>2} cores for jobs   {}",
+            name,
+            running,
+            jobs.len() - running,
+            q["budget"]["cores"],
+            tags.join(" ")
+        );
+    };
+    show(&here(), &corral::farm::tags(), &serde_json::json!(local));
+    for host in hosts() {
+        match ask(&host, "/api/corral/farm", None) {
+            Ok(farm) => {
+                let tags: Vec<String> = farm["tags"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|t| t.as_str().map(str::to_owned))
+                    .collect();
+                show(&host.name, &tags, &farm["queue"]);
+            }
+            Err(e) => println!("{:<10} not reachable: {e}", host.name),
+        }
     }
     ExitCode::SUCCESS
 }

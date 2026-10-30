@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Sets up Corral on another machine and lists it in this host's ~/Corral/hosts.json, so its
-# agents join this Corral: builds the `corral` program for it, copies it there, runs it at login
-# on the machine's Tailscale address, and adds the machine with its key.
+# agents join this Corral and it joins the render farm: builds the `corral` and `render-slot`
+# programs for it, copies them there, runs Corral at login on the machine's Tailscale address,
+# and adds the machine with its key. Its farm settings (budget, tags, where its tools are) are
+# ~/.config/render-slot.json there; see backend/corral/README.md.
 #
 #   scripts/corral-host.sh SSH_HOST [NAME]
 #
@@ -13,10 +15,11 @@ host=${1:?usage: corral-host.sh SSH_HOST [NAME]}
 name=${2:-$host}
 port=4190
 root=$(cd "$(dirname "$0")/.." && pwd)
+# Both programs for a target; prints the folder they are in.
 build() {
   cargo zigbuild --quiet --release --manifest-path "$root/backend/Cargo.toml" -p corral \
-    --bin corral --target "$1"
-  echo "$root/backend/target/$1/release/corral$2"
+    --bins --target "$1"
+  echo "$root/backend/target/$1/release"
 }
 ip=$(tailscale ip -4 "$host")
 listen="$ip:$port"
@@ -25,9 +28,10 @@ kind=$(ssh -o BatchMode=yes "$host" uname -sm 2>/dev/null || echo Windows)
 case $kind in
 Darwin*)
   [[ $kind == *arm64 ]] && target=aarch64-apple-darwin || target=x86_64-apple-darwin
-  binary=$(build $target '')
+  built=$(build $target)
   ssh -o BatchMode=yes "$host" 'mkdir -p ~/.local/bin ~/Corral ~/Library/LaunchAgents'
-  scp -q "$binary" "$host:.local/bin/corral.new"
+  scp -q "$built/corral" "$host:.local/bin/corral.new"
+  scp -q "$built/render-slot" "$host:.local/bin/render-slot"
   ssh -o BatchMode=yes "$host" bash -s -- "$listen" "$name" <<'EOF'
 set -e
 mv ~/.local/bin/corral.new ~/.local/bin/corral
@@ -61,7 +65,7 @@ EOF
   key=$(ssh -o BatchMode=yes "$host" '~/.local/bin/corral key')
   ;;
 *)
-  binary=$(build x86_64-pc-windows-gnu .exe)
+  built=$(build x86_64-pc-windows-gnu)
   task=$(mktemp)
   cat >"$task" <<EOF
 \$exe = "\$env:USERPROFILE\\.local\\bin\\corral.exe"
@@ -71,6 +75,7 @@ Stop-ScheduledTask -TaskName Corral -ErrorAction SilentlyContinue
 Stop-Process -Name corral -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 1
 Move-Item -Force "\$exe.new" \$exe
+Move-Item -Force "\$env:USERPROFILE\\.local\\bin\\render-slot.exe.new" "\$env:USERPROFILE\\.local\\bin\\render-slot.exe"
 # conhost --headless keeps the console program's window from showing.
 \$arguments = "--headless cmd.exe /c \`"\`"\$exe\`" serve --listen $listen --name $name >> \`"\$log\`" 2>&1\`""
 \$action = New-ScheduledTaskAction -Execute "\$env:SystemRoot\\System32\\conhost.exe" -Argument \$arguments -WorkingDirectory \$env:USERPROFILE
@@ -82,7 +87,8 @@ Register-ScheduledTask -TaskName Corral -Description "Corral: this machine's age
 Start-ScheduledTask -TaskName Corral
 EOF
   ssh -o BatchMode=yes "$host" 'if not exist "%USERPROFILE%\.local\bin" mkdir "%USERPROFILE%\.local\bin"' 2>/dev/null
-  scp -q "$binary" "$host:.local/bin/corral.exe.new"
+  scp -q "$built/corral.exe" "$host:.local/bin/corral.exe.new"
+  scp -q "$built/render-slot.exe" "$host:.local/bin/render-slot.exe.new"
   scp -q "$task" "$host:corral-task.ps1"
   rm -f "$task"
   ssh -o BatchMode=yes "$host" \

@@ -34,6 +34,7 @@ use tokio::{
 };
 
 mod background;
+pub mod farm;
 mod hosts;
 pub mod queue;
 mod siblings;
@@ -694,6 +695,13 @@ pub fn start(setup: Setup) -> anyhow::Result<Corral> {
     // Asked once, before any turn needs it.
     background::scoped();
     corral.watch_background();
+    // Farm jobs' folders that are done or abandoned go, every half hour.
+    tokio::spawn(async {
+        loop {
+            let _ = tokio::task::spawn_blocking(farm::sweep).await;
+            tokio::time::sleep(Duration::from_secs(1800)).await;
+        }
+    });
     Ok(corral)
 }
 impl Corral {
@@ -1656,6 +1664,17 @@ pub fn router<S: Clone + std::marker::Send + Sync + 'static>(corral: Corral) -> 
         .route("/search", get(search))
         .route("/renders", get(renders))
         .route("/renders/here", get(renders_here))
+        // The render farm, for another machine sending this one a job.
+        .route("/farm", get(farm::farm))
+        .route(
+            "/farm/jobs/{id}/files",
+            post(farm::put_files)
+                .get(farm::get_files)
+                .layer(axum::extract::DefaultBodyLimit::disable()),
+        )
+        .route("/farm/jobs/{id}/run", post(farm::run_job))
+        .route("/farm/jobs/{id}", get(farm::job_status))
+        .route("/farm/jobs/{id}/delete", post(farm::delete_job))
         .route("/ws", get(upgrade))
         // The `corral` command in an agent's turn, which sends the turn's token instead of the
         // app's credentials.
