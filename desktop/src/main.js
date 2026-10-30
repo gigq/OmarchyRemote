@@ -24,6 +24,7 @@ import { register } from './keys.js';
 import * as launchers from './launchers.js';
 import { Pages, website } from './pages.js';
 import { Store } from './store.js';
+import { windowRequests } from './startup.js';
 import { openHostFolder } from './folders.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -451,8 +452,10 @@ const requestedApp = argv => {
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   let desktopApp;
-  // Launching again, from a terminal or a launcher entry, opens that window in this process.
-  app.on('second-instance', (event, argv) => desktopApp?.open(requestedApp(argv)));
+  const requests = windowRequests();
+  requests.request(requestedApp(process.argv));
+  // Keep launcher requests that arrive while the first client is still starting.
+  app.on('second-instance', (event, argv) => requests.request(requestedApp(argv)));
   app.whenReady().then(() => {
     Menu.setApplicationMenu(applicationMenu());
     const store = new Store(app.getPath('userData'));
@@ -479,7 +482,7 @@ else {
       for (const window of desktopApp.windows.values())
         window.pages.findMessage(event.sender, message || {});
     });
-    desktopApp.open(requestedApp(process.argv));
+    requests.ready(key => desktopApp.open(key));
   });
   app.on('window-all-closed', () => app.quit());
 }
