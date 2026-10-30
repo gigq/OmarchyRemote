@@ -667,3 +667,30 @@
   -webkit-user-select: text;
   user-select: text;
 }
+/* Renders: each machine's queue. */
+.corral-render-machine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 8px 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.corral-render-machine .corral-count {
+  margin-left: auto;
+  font-weight: 400;
+}
+.corral-render-note {
+  margin: 0 8px 4px;
+  font-size: 12px;
+  color: var(--theme-secondary);
+}
+.corral-renders[hidden] {
+  display: none;
+}
+.corral-render-job > .corral-busy {
+  margin-top: 6px;
+}
+.corral-render-job.waiting .corral-activity-text {
+  color: var(--theme-secondary);
+}

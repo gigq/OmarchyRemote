@@ -283,6 +283,20 @@ impl Corral {
             .cloned()
             .ok_or_else(|| format!("{name} is not in hosts.json"))
     }
+    /// The render queues of the hosts whose agents are here, asked of each now.
+    pub(crate) async fn host_queues(&self) -> Vec<Value> {
+        let hosts = self.hosts.lock().unwrap().clone();
+        let mut out = Vec::new();
+        for host in hosts {
+            out.push(
+                match ask_json(&host, "/api/corral/renders/here", None).await {
+                    Ok(queue) => json!({"name": host.name, "online": true, "queue": queue}),
+                    Err(e) => json!({"name": host.name, "online": false, "error": e.to_string()}),
+                },
+            );
+        }
+        out
+    }
     /// Another host's engines, as it last listed them.
     pub(crate) fn host_engines(&self, name: &str) -> Vec<Value> {
         self.hosts

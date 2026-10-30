@@ -76,3 +76,31 @@ offers its Corral:
   agent's memory (which the machine adds), the request it ends with, and the agent API address
   and token for the turn. The answer is one JSON object a line: `{"status"}` while it works, then
   `{"reply"}` or `{"error"}`. Closing the connection stops the turn.
+
+## The render queue
+
+`render-slot`, the crate's second program, is each machine's render queue. Heavy jobs (Blender,
+ffmpeg encodes and upscales, headless Chrome frame renders, Whisper) run through it, and take
+turns for the machine's cores and GPU, first come, first served, so many agents can queue work
+without overloading the machine.
+
+```sh
+render-slot --cores 6 --label "4K recut" -- ffmpeg -threads 6 …   # waits its turn, then runs
+render-slot --gpu --cores 8 -- blender -b scene.blend -a          # also waits for a GPU seat
+render-slot status                                                # what runs, what waits
+```
+
+A job asks for so many cores (the threads it uses; default 4) and, with `--gpu`, a GPU seat. Jobs
+start in the order they came while they fit in the machine's budget, set in
+`~/.config/render-slot.json` (`{"cores": 24, "gpus": 2, "env": {"DRI_PRIME": "…"}}`; by default
+three quarters of its processors and one GPU seat), which leaves the rest for the person and the
+agents. On Linux each job is held to its own whole cores, from the top down, and runs at a lower
+priority, so a job that starts more threads than it asked for slows only itself; elsewhere the
+budget alone holds.
+
+Each job is a ticket in the queue's folder (the system's temporary folder, `render-queue`):
+`<id>.json` says what it is and `<id>.lock` is held by the job while it lives, so a job that ends
+or dies leaves the queue with no daemon to tell. Jobs started under the queue's predecessor, which
+hold one of `/tmp/render-slots/slot*.lock`, count as four cores each until they end. Corral reads
+the queue: an agent's job shows in its background line with its place in line, and the details
+panel's Renders tab shows each machine's queue.

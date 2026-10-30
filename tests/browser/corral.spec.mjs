@@ -134,6 +134,9 @@ async function setup(page, { width = 402, height = 874 } = {}, before) {
           });
     return r.fulfill({ json: { items: items.reverse() } });
   });
+  await page.route('**/api/corral/renders', r =>
+    r.fulfill({ json: { machines: state.renders || [] } })
+  );
   await page.route('**/api/corral/activity', r =>
     r.fulfill({ json: { items: state.activity || [] } })
   );
@@ -996,4 +999,67 @@ test.describe('on a computer', () => {
     await page.getByRole('menuitem', { name: 'Copy selection' }).click();
     expect(await page.evaluate(() => window.copied)).toEqual([selected.trim()]);
   });
+});
+
+test("Renders shows each machine's queue, and a job opens where it was started", async ({
+  page,
+}) => {
+  const now = Date.now();
+  const iso = ago => new Date(now - ago * 1000).toISOString();
+  const job = fields => ({
+    cwd: '/home/qa/git/infra',
+    command: 'ffmpeg -i a.mp4 b.mp4',
+    label: '',
+    cpus: [],
+    gpu: false,
+    ...fields,
+  });
+  const { app } = await setup(page, { width: 1400, height: 900 }, (page, state) => {
+    state.renders = [
+      {
+        name: 'tars',
+        online: true,
+        queue: {
+          budget: { cores: 24, gpus: 2 },
+          legacy: 1,
+          jobs: [
+            job({
+              running: true,
+              position: 0,
+              cores: 6,
+              started: iso(720),
+              since: iso(800),
+              label: '4K recut',
+              place: `${INFRA}\t${ALEX}\t`,
+            }),
+            job({
+              running: false,
+              position: 1,
+              cores: 8,
+              gpu: true,
+              since: iso(90),
+              started: '',
+              command: 'blender -b scene.blend -a',
+            }),
+          ],
+        },
+      },
+      { name: 'winbox', online: false, error: 'not reachable' },
+    ];
+  });
+  await app.getByRole('button', { name: 'Activity and Search' }).click();
+  await app.getByRole('tab', { name: 'Renders' }).click();
+  const list = app.getByRole('list', { name: 'Render queues' });
+  await expect(list.locator('.corral-render-machine')).toHaveText([
+    /tars\s*10 of 24 cores · GPU 0 of 2/,
+    /winbox\s*not reachable/,
+  ]);
+  await expect(list.getByRole('listitem')).toHaveText([
+    /Running 12 min\s*6 cores\s*@alex: 4K recut/,
+    /#1 · waiting 2 min\s*8 cores \+ GPU\s*infra: blender -b scene.blend -a/,
+  ]);
+  await expect(list.locator('.corral-busy.background')).toHaveCount(1);
+  await page.screenshot({ path: 'artifacts/browser/corral-renders.png' });
+  await list.getByRole('listitem').first().click();
+  await expect(app.locator('.corral-title')).toHaveText('#infra');
 });

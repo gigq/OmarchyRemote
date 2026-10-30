@@ -95,6 +95,28 @@ fn summary(processes: &[Tagged]) -> String {
         .or(processes.first());
     clip(top.map_or("", |p| p.command.as_str()), 100)
 }
+/// What a place's work is doing in the render queue, if it is in it: its turn, or its place in
+/// line.
+fn queued(queue: &crate::queue::Snapshot, place: &TurnKey, machine: &str) -> Option<String> {
+    let job = queue.jobs.iter().find(|j| j.ticket.place == tag(place))?;
+    let what = if job.ticket.label.is_empty() {
+        clip(&job.ticket.command, 80)
+    } else {
+        job.ticket.label.clone()
+    };
+    Some(if job.running {
+        format!("rendering on {machine}: {what}")
+    } else {
+        let n = job.position;
+        let nth = match n % 10 {
+            1 if n % 100 != 11 => "st",
+            2 if n % 100 != 12 => "nd",
+            3 if n % 100 != 13 => "rd",
+            _ => "th",
+        };
+        format!("waiting for a render turn on {machine}, {n}{nth} in line: {what}")
+    })
+}
 /// The background work, for the app.
 pub(crate) fn list(state: &Workspace) -> Vec<Value> {
     let mut list: Vec<Value> = state
@@ -152,9 +174,10 @@ impl Corral {
             let mut before: HashMap<TurnKey, String> = HashMap::new();
             let mut jobs: HashMap<String, Job> = read_json(&saved).unwrap_or_default();
             loop {
-                let found = tokio::task::spawn_blocking(tagged)
-                    .await
-                    .unwrap_or_default();
+                let (found, queue) =
+                    tokio::task::spawn_blocking(|| (tagged(), crate::queue::snapshot()))
+                        .await
+                        .unwrap_or_else(|_| (HashMap::new(), crate::queue::snapshot()));
                 let mut now: HashMap<TurnKey, String> = HashMap::new();
                 let (changed, done) = {
                     let mut state = corral.state.lock().unwrap();
@@ -164,7 +187,9 @@ impl Corral {
                         {
                             continue;
                         }
-                        now.insert(place.clone(), summary(processes));
+                        let what = queued(&queue, place, &corral.name)
+                            .unwrap_or_else(|| summary(processes));
+                        now.insert(place.clone(), what);
                     }
                     let steady: HashMap<TurnKey, String> = now
                         .iter()

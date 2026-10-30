@@ -35,6 +35,7 @@ use tokio::{
 
 mod background;
 mod hosts;
+pub mod queue;
 mod siblings;
 pub use hosts::Host;
 use hosts::{host_listing, host_turn};
@@ -310,7 +311,7 @@ const MAX_AGENTS: usize = 40;
 /// The proxy's extra models, and when they were asked for.
 type Models = (Instant, Vec<String>);
 
-fn now() -> String {
+pub fn now() -> String {
     let d = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();
@@ -1653,6 +1654,8 @@ pub fn router<S: Clone + std::marker::Send + Sync + 'static>(corral: Corral) -> 
         .route("/conversations/{id}/delete", post(delete_conversation))
         .route("/activity", get(activity))
         .route("/search", get(search))
+        .route("/renders", get(renders))
+        .route("/renders/here", get(renders_here))
         .route("/ws", get(upgrade))
         // The `corral` command in an agent's turn, which sends the turn's token instead of the
         // app's credentials.
@@ -2319,6 +2322,25 @@ pub struct SearchQuery {
 }
 pub async fn search(State(corral): State<Corral>, Query(query): Query<SearchQuery>) -> Json<Value> {
     Json(json!({"items": search_of(&corral.state.lock().unwrap(), &query.q)}))
+}
+/// This machine's render queue alone, as other hosts ask for it.
+pub async fn renders_here() -> Json<Value> {
+    Json(
+        tokio::task::spawn_blocking(queue::snapshot)
+            .await
+            .map(|s| json!(s))
+            .unwrap_or_default(),
+    )
+}
+/// Each machine's render queue: this one's, and those of the hosts whose agents are here.
+pub async fn renders(State(corral): State<Corral>) -> Json<Value> {
+    let local = tokio::task::spawn_blocking(queue::snapshot)
+        .await
+        .map(|s| json!(s))
+        .unwrap_or_default();
+    let mut machines = vec![json!({"name": corral.name, "online": true, "queue": local})];
+    machines.extend(corral.host_queues().await);
+    Json(json!({"machines": machines}))
 }
 pub async fn activity(State(corral): State<Corral>) -> Json<Value> {
     Json(json!({"items": activity_of(&corral.state.lock().unwrap())}))

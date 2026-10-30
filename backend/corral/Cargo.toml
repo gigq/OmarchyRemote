@@ -14,3 +14,6 @@ futures-util = "0.3"
 uuid = { version = "1", features = ["v4"] }
 anyhow = "1"
 regex = "1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

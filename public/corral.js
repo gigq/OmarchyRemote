@@ -18,6 +18,7 @@
   const PANELS = [
     ['activity', 'Activity'],
     ['search', 'Search'],
+    ['renders', 'Renders'],
   ];
   const FILTER_ICON =
     '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>';
@@ -305,12 +306,17 @@
       this.searchList.setAttribute('role', 'list');
       this.searchList.setAttribute('aria-label', 'Search results');
       this.results = [];
+      // Renders: each machine's render queue.
+      this.renderList = node('div', 'corral-side-scroll corral-activity corral-renders');
+      this.renderList.setAttribute('role', 'list');
+      this.renderList.setAttribute('aria-label', 'Render queues');
       this.details.append(
         detailsBar,
         this.searchField,
         this.filterNote,
         this.activityList,
-        this.searchList
+        this.searchList,
+        this.renderList
       );
       this.panel = PANELS.some(([id]) => id === storage.read(PANEL, ''))
         ? storage.read(PANEL)
@@ -733,15 +739,109 @@
         tab.classList.toggle('active', on);
       }
       const searching = id === 'search';
-      this.activityList.hidden = searching;
+      this.activityList.hidden = id !== 'activity';
       this.searchField.hidden = !searching;
       this.searchList.hidden = !searching;
+      this.renderList.hidden = id !== 'renders';
+      this.filterKey.hidden = id === 'renders';
+      clearTimeout(this.rendersTimer);
       if (!load) return;
-      if (searching) {
+      if (id === 'renders') {
+        this.filterNote.hidden = true;
+        this.loadRenders();
+      } else if (searching) {
         this.renderSearch();
         // Ready to type, except where a keyboard would cover the panel.
         if (window.matchMedia?.('(pointer: fine)').matches) this.searchField.focus();
       } else this.loadActivity();
+    }
+    // The queues, every few seconds while Renders shows.
+    async loadRenders() {
+      clearTimeout(this.rendersTimer);
+      try {
+        this.renders = (await request('/renders')).machines || [];
+        this.rendersError = '';
+      } catch (e) {
+        this.rendersError = e.message;
+      }
+      if (this.panel !== 'renders' || !this.detailsOpen || this.disposed) return;
+      this.renderRenders();
+      this.rendersTimer = setTimeout(() => this.loadRenders(), 5000);
+    }
+    renderRenders() {
+      const ago = ts => {
+        const s = Math.max(0, (Date.now() - Date.parse(ts)) / 1000);
+        return s < 60
+          ? `${Math.round(s)} s`
+          : s < 3600
+            ? `${Math.round(s / 60)} min`
+            : `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`;
+      };
+      const rows = [];
+      for (const machine of this.renders || []) {
+        const q = machine.queue;
+        const head = node('div', 'corral-render-machine');
+        head.append(node('span', 'corral-row-name', machine.name));
+        if (!machine.online || !q) {
+          head.append(node('span', 'corral-offline', 'not reachable'));
+          rows.push(head);
+          continue;
+        }
+        const running = q.jobs.filter(j => j.running);
+        const used = running.reduce((n, j) => n + j.cores, 0) + q.legacy * 4;
+        const seats = running.filter(j => j.gpu).length;
+        head.append(
+          node(
+            'span',
+            'corral-count',
+            `${used} of ${q.budget.cores} cores · GPU ${seats} of ${q.budget.gpus}`
+          )
+        );
+        rows.push(head);
+        if (q.legacy)
+          rows.push(
+            node(
+              'p',
+              'corral-render-note',
+              `${q.legacy} ${q.legacy === 1 ? 'job' : 'jobs'} from before the queue`
+            )
+          );
+        if (!q.jobs.length) rows.push(node('p', 'corral-render-note', 'Nothing queued.'));
+        for (const job of q.jobs) {
+          const [conversation = '', agent = '', thread = ''] = (job.place || '').split('\t');
+          const who = this.agent(agent) ? '@' + this.author(agent) : job.cwd.split(/[\\/]/).pop();
+          const row = button(
+            '',
+            () => this.conversation(conversation) && this.goTo({ conversation, thread }),
+            'corral-activity-row corral-render-job'
+          );
+          row.setAttribute('role', 'listitem');
+          row.classList.toggle('waiting', !job.running);
+          const place = node('div', 'corral-activity-place');
+          place.append(
+            node(
+              'span',
+              'corral-row-name',
+              job.running
+                ? `Running ${ago(job.started)}`
+                : `#${job.position} · waiting ${ago(job.since)}`
+            ),
+            node('time', '', `${job.cores} cores${job.gpu ? ' + GPU' : ''}`)
+          );
+          const text = node('span', 'corral-row-text');
+          text.append(
+            place,
+            node('span', 'corral-activity-text', `${who}: ${job.label || job.command}`)
+          );
+          if (job.running) row.append(dot());
+          else row.append(dot(true));
+          row.append(text);
+          rows.push(row);
+        }
+      }
+      if (!rows.length)
+        rows.push(node('p', 'corral-empty', this.rendersError || 'No render queues found.'));
+      this.renderList.replaceChildren(...rows);
     }
     // Typing narrows the results once it pauses.
     searchLater() {
@@ -1692,6 +1792,7 @@
       clearTimeout(this.retry);
       clearTimeout(this.refreshTimer);
       clearTimeout(this.activityTimer);
+      clearTimeout(this.rendersTimer);
       this.ws?.close();
       this.resized.disconnect();
       this.listResized.disconnect();
