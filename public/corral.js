@@ -2348,13 +2348,18 @@
     hostChanged() {
       this.renderSide();
     }
-    // While the composer is open it stands in for the prompt row, as in Chat.
+    // While the composer is open it stands in for the prompt row, as in Chat, and keeps its
+    // controls where they were: the paperclip before the field, the microphone after it.
     placeLatest() {
       const composing = !this.nativeInput.element.hidden;
       this.promptRow.hidden = composing;
-      if (composing)
-        this.nativeInput.row.insertBefore(this.dictation.control, this.nativeInput.field);
-      else this.promptRow.append(this.dictation.control);
+      if (composing) {
+        this.nativeInput.row.insertBefore(this.attachButton, this.nativeInput.field);
+        this.nativeInput.field.after(this.dictation.control);
+      } else {
+        this.promptRow.prepend(this.attachButton);
+        this.promptRow.append(this.dictation.control);
+      }
     }
     get actions() {
       return this.openId && !this.main.hidden ? this.dictation.actions : [];

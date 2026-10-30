@@ -1162,6 +1162,26 @@ test('a link in a message has its own menu items, and any message copies its tex
 test.describe('on a computer', () => {
   test.use({ isMobile: false, hasTouch: false, viewport: { width: 1280, height: 800 } });
 
+  test('the open composer keeps the paperclip before the field and the microphone after', async ({
+    page,
+  }) => {
+    const { app } = await setup(page, { width: 1280, height: 800 });
+    await app.getByRole('listitem').filter({ hasText: 'infra' }).first().click();
+    const x = async locator => (await locator.boundingBox()).x;
+    const attach = app.getByRole('button', { name: 'Attach files' });
+    const mic = app.locator('.dictation-button').first();
+    const closed = [await x(attach), await x(mic)];
+    await app.getByRole('button', { name: 'Write a message' }).click();
+    const field = app.locator('textarea.native-input');
+    await expect(field).toBeFocused();
+    await expect(attach).toBeVisible();
+    const [a, f, m] = [await x(attach), await x(field), await x(mic)];
+    expect(a).toBeLessThan(f);
+    expect(f).toBeLessThan(m);
+    expect(closed[0]).toBeLessThan(closed[1]);
+    await page.screenshot({ path: 'artifacts/browser/corral-composer.png' });
+  });
+
   test('message text can be selected, and the menu copies the selection', async ({ page }) => {
     await page.addInitScript(() => {
       window.copied = [];

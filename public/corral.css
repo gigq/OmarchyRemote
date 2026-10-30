@@ -864,3 +864,12 @@
 .corral-viewer-step[hidden] {
   display: none;
 }
+/* With room, the open composer lays its controls out in order; Corral's keep their sides. */
+@media (min-width: 600px) and (min-height: 600px) {
+  .corral-main .herdr-composer .corral-attach {
+    order: 2;
+  }
+  .corral-main .herdr-composer .dictation-button {
+    order: 3;
+  }
+}
