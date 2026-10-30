@@ -580,7 +580,7 @@ test('a tap on the microphone sends with mentions; holding Talk reads replies al
   await expect(floating).toBeHidden();
 });
 
-test("another host's agents group under it, and a new agent can be made there", async ({
+test("another host's agents stand at the top, saying where they run, and one can be made there", async ({
   page,
 }) => {
   const WINNY = 'a4444444-4444-4444-8444-444444444444@winbox';
@@ -617,10 +617,11 @@ test("another host's agents group under it, and a new agent can be made there", 
     state.messages[dm.id] = [];
     await page.route('**/api/corral/dm', r => r.fulfill({ json: state.conversations.at(-1) }));
   });
-  // Its own group, under the machine's name, even alone.
-  const group = app.getByRole('group', { name: 'winbox' });
-  await expect(group.locator('.corral-row-name')).toHaveText(['winbox', 'Winny']);
-  await group.getByRole('listitem').click();
+  // In no group of its machine's; its conversation names the machine.
+  await expect(app.getByRole('group', { name: 'winbox' })).toHaveCount(0);
+  const winny = app.locator('.corral-agent-row').filter({ hasText: 'Winny' });
+  await expect(winny.locator('xpath=..')).toHaveClass(/corral-list/);
+  await winny.click();
   await expect(app.locator('.corral-subtitle')).toHaveText(
     'Claude · sonnet · on winbox · C:\\Users\\Justin'
   );

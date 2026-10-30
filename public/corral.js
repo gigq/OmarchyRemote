@@ -570,11 +570,14 @@
             .filter(Boolean);
         const where = places(this.working.keys());
         const waiting = places(this.background.keys());
+        const machine = a.host && this.host(a.host);
         const status = where.length
           ? 'working in ' + where.map(c => this.label(c)).join(', ')
           : waiting.length
             ? 'running in the background in ' + waiting.map(c => this.label(c)).join(', ')
-            : [this.engineLabel(a.engine), a.model].filter(Boolean).join(' · ');
+            : machine && !machine.online
+              ? `${a.host} is not reachable`
+              : [this.engineLabel(a.engine), a.model].filter(Boolean).join(' · ');
         const text = node('span', 'corral-row-text');
         text.append(
           node('span', 'corral-row-name', a.name),
@@ -597,25 +600,24 @@
         }));
         agentRows.set(a.id, { row, busy: where.length > 0, waiting: waiting.length > 0 });
       }
-      // Another host's agents group under its name; this host's, whose home folders share a
-      // parent, under that folder. Groups collapse; an agent alone in its folder stands alone.
-      const parent = a =>
-        a.host ? 'host:' + a.host : a.home.replace(/\/+$/, '').replace(/\/[^/]*$/, '') || '/';
+      // Agents whose home folders on this host share a parent group under that folder. Groups
+      // collapse; an agent alone in its folder stands alone, as does one on another host, whose
+      // machine its conversation names.
+      const parent = a => a.home.replace(/\/+$/, '').replace(/\/[^/]*$/, '') || '/';
       const groups = new Map();
-      for (const a of this.data.agents)
+      for (const a of this.data.agents.filter(a => !a.host))
         groups.set(parent(a), [...(groups.get(parent(a)) || []), a]);
       const collapsed = new Set(storage.read(COLLAPSED, []) || []);
       const agents = [];
       for (const a of this.data.agents) {
-        const members = groups.get(parent(a));
-        if (members.length < 2 && !a.host) {
+        const members = a.host ? [a] : groups.get(parent(a));
+        if (members.length < 2) {
           agents.push(agentRows.get(a.id).row);
           continue;
         }
         if (members[0] !== a) continue;
         const folder = parent(a);
-        const host = a.host && this.host(a.host);
-        const label = a.host || folder.split('/').pop() || folder;
+        const label = folder.split('/').pop() || folder;
         const shut = collapsed.has(folder);
         const head = button(
           '',
@@ -629,15 +631,12 @@
           'corral-group-head'
         );
         head.setAttribute('aria-expanded', String(!shut));
-        head.title = a.host
-          ? `Agents on ${a.host}` + (host && !host.online ? ` · not reachable: ${host.error}` : '')
-          : window.HyprlandApps.tilde(folder);
+        head.title = window.HyprlandApps.tilde(folder);
         head.append(
           node('span', 'corral-caret', '›'),
           node('span', 'corral-row-name', label),
           node('span', 'corral-count', String(members.length))
         );
-        if (host && !host.online) head.append(node('span', 'corral-offline', 'not reachable'));
         if (shut && members.some(m => agentRows.get(m.id).busy)) head.append(dot());
         else if (shut && members.some(m => agentRows.get(m.id).waiting)) head.append(dot(true));
         const group = node('div', 'corral-folder-group');
