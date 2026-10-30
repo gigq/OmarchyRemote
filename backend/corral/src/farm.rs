@@ -466,12 +466,12 @@ pub async fn tidy(Json(query): Json<Paths>) -> Result<Json<Value>, ApiError> {
     }
     Ok(Json(json!({"removed": gone})))
 }
-/// A finished job's folder is kept this long, for files that did not make it back; one with no
-/// job behind it, this long.
-const KEEP_FINISHED: Duration = Duration::from_secs(6 * 3600);
-const KEEP_ABANDONED: Duration = Duration::from_secs(24 * 3600);
+/// The sender removes a job's folder as soon as its files are back; a finished job it never came
+/// back for goes after this long, and one that never started, after this long.
+const KEEP_FINISHED: Duration = Duration::from_secs(10 * 60);
+const KEEP_ABANDONED: Duration = Duration::from_secs(3600);
 /// A project copy no split render has used for this long goes.
-const KEEP_PROJECT: Duration = Duration::from_secs(14 * 24 * 3600);
+const KEEP_PROJECT: Duration = Duration::from_secs(3 * 24 * 3600);
 /// How long since a file last changed.
 fn age(path: &FsPath) -> Option<Duration> {
     fs::metadata(path).ok()?.modified().ok()?.elapsed().ok()
@@ -579,9 +579,9 @@ mod tests {
             fs::create_dir_all(&farm).unwrap();
             fs::write(root.join(id).join("frame.png"), "x").unwrap();
             let long_ago = std::time::SystemTime::now() - Duration::from_secs(48 * 3600);
-            if let Some(hours) = exit {
+            if let Some(minutes) = exit {
                 let file = fs::File::create(farm.join("exit")).unwrap();
-                let then = std::time::SystemTime::now() - Duration::from_secs(hours * 3600);
+                let then = std::time::SystemTime::now() - Duration::from_secs(minutes * 60);
                 file.set_modified(then).unwrap();
             } else {
                 fs::write(farm.join("pid"), "999999999").unwrap();
@@ -593,8 +593,8 @@ mod tests {
                     .unwrap();
             }
         };
-        job("old-finished", Some(7), false);
-        job("new-finished", Some(1), false);
+        job("old-finished", Some(30), false);
+        job("new-finished", Some(2), false);
         job("abandoned", None, true);
         job("just-sent", None, false);
         assert_eq!(sweep(), 2);

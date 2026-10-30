@@ -130,9 +130,9 @@ exits with its status. A program named in the command (`blender`, `ffmpeg`, `nod
 that machine, through its settings' `tools` where it is not on the path, as Blender on Windows.
 A machine's `tags` are those in its settings, the programs it has, and its system.
 
-Job folders go when their files are back; each machine also sweeps its own every half hour,
-removing finished jobs after six hours (time to recover files that did not come back) and
-folders with no job behind them after a day. The farm's routes, under `/api/corral/farm`, take
+Job folders go as soon as their files are back; each machine also sweeps its own every five
+minutes, removing a finished job its sender never came back for after ten minutes and a folder
+with no job behind it after an hour. The farm's routes, under `/api/corral/farm`, take
 the machine's key: `GET /farm` (name, tags, queue), and for a job `POST …/jobs/<id>/files` (a tar
 stream in), `POST …/run`, `GET …/jobs/<id>` (waiting and its place, running, or done with its
 exit status, and its log's end), `GET …/files?paths=` (a tar stream out), and `POST …/delete`.
@@ -153,7 +153,7 @@ by `render-slot` itself, with nothing asked of whoever runs it:
 4. A Mac renders in its copy of the project (`~/.cache/corral-farm/projects/…`, synced with rsync,
    without `out/`, `.git/`, or `work/`), with Playwright's Chrome for macOS behind a shim at the
    Linux path the renderer looks in; a piece that fails there runs on tars, and that Mac takes no
-   more. Copies unused for two weeks are removed.
+   more. Copies unused for three days are removed.
 5. The pieces' pictures are joined in order under the one mix, as the renderer joins its own
    workers'; a join that does not match the soundtrack's length fails.
 

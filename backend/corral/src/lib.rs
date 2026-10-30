@@ -695,11 +695,11 @@ pub fn start(setup: Setup) -> anyhow::Result<Corral> {
     // Asked once, before any turn needs it.
     background::scoped();
     corral.watch_background();
-    // Farm jobs' folders that are done or abandoned go, every half hour.
+    // Farm jobs' folders that are done or abandoned go, every five minutes.
     tokio::spawn(async {
         loop {
             let _ = tokio::task::spawn_blocking(farm::sweep).await;
-            tokio::time::sleep(Duration::from_secs(1800)).await;
+            tokio::time::sleep(Duration::from_secs(300)).await;
         }
     });
     Ok(corral)
