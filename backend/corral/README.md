@@ -172,12 +172,21 @@ draw quite alike on each:
 1. The machines form groups: gerty alone (CUDA/OptiX), the Macs together (Metal, all on the same
    Blender), and tars alone. A script that names `OPTIX` or `CUDA` renders on gerty only;
    `METAL`, on the Macs only; `HIP`, on tars only. Otherwise gerty goes first when its GPU seat is
-   free, then the Macs, then tars.
-2. The project (the folder above with `AGENTS.md`) is synced to each machine of the group,
-   only the files that changed, without its renders, videos, `.git/`, or caches, and the frames
-   are cut into ranges, about twice as many as machines. Each range runs in that machine's copy,
-   with the GPU set up for it and `--python-exit-code 1`, so a script that raises fails the
-   range.
+   free and nothing waits in its queue, then the Macs, then tars. A script whose Python imports a
+   module Windows lacks (`resource`, `fcntl`, `termios`, `pwd`, `grp`) skips gerty.
+2. Only what the render reads goes. Before anything is sent, the script runs here with Blender's
+   render call replaced: at its first render it lists every file Python opened, every module it
+   imported, and every file Blender loaded (scenes, linked libraries, images, sounds, fonts), and
+   stops. Those and the files beside the script are synced to each machine of the group, only
+   those that changed, into a copy of the project (the folder above with `AGENTS.md`, widened to
+   the nearest folder that holds shared files the render reads elsewhere in the home folder, never
+   the home folder itself). If the script cannot be run this way, the project goes as it is,
+   without its renders, videos, `.git/`, or caches. The frames are cut into ranges, about twice
+   as many as machines. Each range runs in that machine's copy, with the GPU set up for it and
+   `--python-exit-code 1`, so a script that raises fails the range.
+   While it runs, a watch notes any file of the project it or Blender looked for and did not find
+   (a missing image would otherwise render pink); one this machine has is sent, and the range runs
+   again.
 3. What a range made (every file that changed in the copy while it ran) comes back into the
    project, where Blender would have written it. A group that renders nothing (a script that
    does not run on Windows, say) gives the whole job to the next group, which cuts it for its

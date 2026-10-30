@@ -180,16 +180,18 @@ fn farmers() -> Vec<Farmer> {
                 .collect();
             let q = &farm["queue"];
             let seats = q["budget"]["gpus"].as_u64().unwrap_or(1);
-            let busy = q["jobs"]
-                .as_array()
-                .into_iter()
-                .flatten()
+            let jobs: Vec<&serde_json::Value> =
+                q["jobs"].as_array().into_iter().flatten().collect();
+            let busy = jobs
+                .iter()
                 .filter(|j| j["running"] == true && j["gpu"] == true)
                 .count() as u64;
+            // Free means nothing in line either: a long render between its ranges is not.
+            let waiting = jobs.iter().any(|j| j["running"] == false);
             Some(Farmer {
                 machine,
                 tags,
-                gpu_free: busy < seats,
+                gpu_free: busy < seats && !waiting,
             })
         })
         .filter(|f| f.tags.iter().any(|t| t == "blender"))
@@ -198,7 +200,7 @@ fn farmers() -> Vec<Farmer> {
 /// The groups a render can go to, in the order to try them: gerty alone, or the Macs together.
 /// Gerty comes first while its GPU is free; a group that fails before it renders a frame gives
 /// way to the next.
-fn groups(allowed: Allowed) -> Vec<Vec<Farmer>> {
+fn groups(allowed: Allowed, windows: bool) -> Vec<Vec<Farmer>> {
     if allowed == Allowed::Here {
         return Vec::new();
     }
@@ -206,7 +208,7 @@ fn groups(allowed: Allowed) -> Vec<Vec<Farmer>> {
         .into_iter()
         .filter(|f| f.tags.iter().any(|t| t == "optix" || t == "metal"))
         .partition(|f| f.tags.iter().any(|t| t == "optix"));
-    gerty.truncate(1);
+    gerty.truncate(if windows { 1 } else { 0 });
     let free = gerty.first().is_some_and(|g| g.gpu_free);
     let order = match allowed {
         Allowed::Gerty => vec![gerty],
@@ -217,6 +219,174 @@ fn groups(allowed: Allowed) -> Vec<Vec<Farmer>> {
     order.into_iter().filter(|g| !g.is_empty()).collect()
 }
 /// Blender's Python, before the script, that turns on the machine's GPU for Cycles.
+/// Run before the script here: it renders nothing, and at the script's first render prints every
+/// file the render has read, those Python opened and those Blender loaded (scenes, linked
+/// libraries, images, sounds, fonts), then quits.
+const SURVEY: &str = r#"
+import atexit, json, os, sys, bpy
+used = set()
+def note(path):
+    try:
+        used.add(os.path.abspath(os.fsdecode(path)))
+    except TypeError:
+        pass
+sys.addaudithook(lambda event, args: note(args[0]) if event == 'open' and isinstance(args[0], (str, bytes, os.PathLike)) else None)
+said = []
+def report(live=True):
+    if said:
+        return
+    said.append(True)
+    # Modules it imported, which Python finds without an open the hook sees.
+    for module in list(sys.modules.values()):
+        if getattr(module, '__file__', None):
+            note(module.__file__)
+    # Blender's data is gone by the time Python exits: asking for it then crashes.
+    if live:
+        for path in bpy.utils.blend_paths(absolute=True, packed=False, local=False):
+            note(path)
+        if bpy.data.filepath:
+            note(bpy.data.filepath)
+    print('RENDER-SLOT-SURVEY ' + json.dumps(sorted(p for p in used if os.path.isfile(p))), flush=True)
+real = bpy.ops.render
+class Render:
+    def __getattr__(self, name):
+        if name != 'render':
+            return getattr(real, name)
+        def first(*args, **kwargs):
+            report()
+            os._exit(0)
+        return first
+bpy.ops.render = Render()
+atexit.register(report, False)
+"#;
+/// Run before the script on a farm machine, with `UP` (the project copy's top, from the folder
+/// the render runs in) and `OUT` (a file there) set: writes to `OUT` each file of the project the
+/// render looked for and did not find, Python's and Blender's (a missing image renders pink).
+const WATCH: &str = r#"
+import atexit, json, os, sys, bpy
+ROOT = os.path.normpath(os.path.join(os.getcwd(), UP))
+used = set()
+def note(path):
+    try:
+        used.add(os.path.abspath(os.fsdecode(path)))
+    except TypeError:
+        pass
+sys.addaudithook(lambda event, args: note(args[0]) if event == 'open' and isinstance(args[0], (str, bytes, os.PathLike)) else None)
+def check(live=True):
+    # Blender's data is gone by the time Python exits: asking for it then crashes.
+    if live:
+        for path in bpy.utils.blend_paths(absolute=True, packed=False, local=False):
+            note(path)
+    missing = sorted(os.path.relpath(p, ROOT).replace(os.sep, '/') for p in used if p.startswith(ROOT + os.sep) and not os.path.exists(p))
+    with open(os.path.join(ROOT, OUT), 'w') as f:
+        json.dump(missing, f)
+bpy.app.handlers.render_pre.append(bpy.app.handlers.persistent(lambda *args: check()))
+atexit.register(check, False)
+"#;
+/// `source` as one `--python-expr`, with `names` set first: a single line, however the machine's
+/// shell or Windows passes it on.
+fn python_expr(source: &str, names: &[(&str, &str)]) -> String {
+    let mut code = String::new();
+    for (name, value) in names {
+        code.push_str(&format!(
+            "{name} = {}\n",
+            serde_json::to_string(value).unwrap_or_default()
+        ));
+    }
+    code.push_str(source);
+    format!("exec({})", serde_json::to_string(&code).unwrap_or_default())
+}
+/// The files a render reads, found by running it here up to its first render; with the script
+/// and the files beside it, which Blender reads without Python seeing. None if it cannot tell.
+fn survey(job: &Job) -> Option<Vec<PathBuf>> {
+    let mut args = job.args.clone();
+    args.splice(
+        job.script_at..job.script_at,
+        ["--python-expr".to_owned(), SURVEY.to_owned()],
+    );
+    // `blender` on the path may be render-slot's own door: this run is not a render to queue.
+    let out = Command::new("blender")
+        .env(super::JOB, "survey")
+        .args(&args)
+        .current_dir(&job.cwd)
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    let said = String::from_utf8_lossy(&out.stdout);
+    let line = said
+        .lines()
+        .find_map(|l| l.strip_prefix("RENDER-SLOT-SURVEY "))?;
+    let mut files: Vec<PathBuf> = serde_json::from_str::<Vec<String>>(line)
+        .ok()?
+        .into_iter()
+        .map(PathBuf::from)
+        .collect();
+    let script = job.cwd.join(&job.args[job.script_at + 1]);
+    if let Some(dir) = script.parent() {
+        for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            if entry
+                .metadata()
+                .is_ok_and(|m| m.is_file() && m.len() <= BESIDE_SCRIPT)
+            {
+                files.push(entry.path());
+            }
+        }
+    }
+    files.push(script);
+    files.sort();
+    files.dedup();
+    Some(files)
+}
+/// Whether Python source imports a module Windows does not have.
+fn unix_only(text: &str) -> bool {
+    text.lines().any(|line| {
+        let line = line.trim();
+        ["resource", "fcntl", "termios", "pwd", "grp"]
+            .iter()
+            .any(|m| {
+                line.starts_with(&format!("import {m}"))
+                    && line[7 + m.len()..]
+                        .chars()
+                        .next()
+                        .is_none_or(|c| !c.is_alphanumeric() && c != '_')
+                    || line.starts_with(&format!("from {m} import"))
+            })
+            || line.starts_with("import ") && line.contains(", resource")
+    })
+}
+/// Files beside the script larger than this go only if the render reads them.
+const BESIDE_SCRIPT: u64 = 50_000_000;
+/// The folder to copy: the project, or, when the render reads files elsewhere in the home
+/// folder (shared assets), the nearest folder that holds them all, short of the home folder.
+fn widen(root: &Path, files: &[PathBuf], home: &Path) -> PathBuf {
+    let mut wide = root.to_path_buf();
+    for file in files.iter().filter(|f| f.starts_with(home)) {
+        while !file.starts_with(&wide) && wide.pop() {}
+    }
+    if wide.starts_with(home) && wide != home {
+        wide
+    } else {
+        root.to_path_buf()
+    }
+}
+/// Each of `paths` (relative to `root`) that this machine has, with its size and when it
+/// changed, for a sync.
+pub(crate) fn entries(root: &Path, paths: &[String]) -> Vec<(String, u64, u64)> {
+    paths
+        .iter()
+        .filter_map(|p| {
+            let meta = std::fs::metadata(root.join(p)).ok()?;
+            let changed = meta
+                .modified()
+                .ok()?
+                .duration_since(std::time::UNIX_EPOCH)
+                .ok()?
+                .as_secs();
+            meta.is_file().then(|| (p.clone(), meta.len(), changed))
+        })
+        .collect()
+}
 fn gpu_setup(farmer: &Farmer) -> String {
     let kind = if farmer.tags.iter().any(|t| t == "optix") {
         "OPTIX"
@@ -233,24 +403,51 @@ fn gpu_setup(farmer: &Farmer) -> String {
 /// Renders a Blender job's frames across a group of the farm; None when it should run here.
 pub(crate) fn run(job: Job) -> Option<ExitCode> {
     let started = Instant::now();
-    let groups = groups(job.allowed);
+    let read = survey(&job);
+    // A script that loads a module only Linux and macOS have does not run on gerty.
+    let windows = !read.iter().flatten().any(|f| {
+        f.extension().is_some_and(|e| e == "py")
+            && std::fs::read_to_string(f).is_ok_and(|text| unix_only(&text))
+    });
+    let groups = groups(job.allowed, windows);
     if groups.is_empty() {
         return None;
     }
     let home = corral::home_dir().unwrap_or_default();
-    let rel_root = job
-        .root
+    // Only what the render reads goes; the whole project, if that cannot be told.
+    let (root, files) = match read {
+        Some(read) => {
+            let root = widen(&job.root, &read, &home);
+            let rel: Vec<String> = read
+                .iter()
+                .filter_map(|f| f.strip_prefix(&root).ok())
+                .map(|p| p.to_string_lossy().replace('\\', "/"))
+                .collect();
+            let files = entries(&root, &rel);
+            let size: u64 = files.iter().map(|(_, n, _)| n).sum();
+            queue::say(&format!(
+                "it reads {} files ({:.1} GB)",
+                files.len(),
+                size as f64 / 1e9
+            ));
+            (root, files)
+        }
+        None => {
+            queue::say("could not tell what it reads; the project goes as it is");
+            (job.root.clone(), listing(&job.root))
+        }
+    };
+    let rel_root = root
         .strip_prefix(&home)
         .ok()?
         .to_string_lossy()
         .replace('\\', "/");
     let rel_cwd = job
         .cwd
-        .strip_prefix(&job.root)
+        .strip_prefix(&root)
         .ok()?
         .to_string_lossy()
         .replace('\\', "/");
-    let files = listing(&job.root);
     let total: u64 = job.spans.iter().map(|(a, b)| b - a + 1).sum();
     let frames = job.args[job.frames_at].clone();
     let landing =
@@ -264,7 +461,7 @@ pub(crate) fn run(job: Job) -> Option<ExitCode> {
             let syncs: Vec<_> = group
                 .iter()
                 .map(|f| {
-                    let (files, root, rel) = (&files, &job.root, &rel_root);
+                    let (files, root, rel) = (&files, &root, &rel_root);
                     scope.spawn(move || match sync(&f.machine, root, rel, files) {
                         Ok(sent) => {
                             queue::say(&format!(
@@ -313,7 +510,9 @@ pub(crate) fn run(job: Job) -> Option<ExitCode> {
                 return Err("a range runs on a farm machine".to_owned());
             };
             let farmer = by_name(&machine.name).ok_or("not in the group")?;
-            range(farmer, &job, &rel_root, &rel_cwd, piece, &landing, stop)
+            range(
+                farmer, &job, &root, &rel_root, &rel_cwd, piece, &landing, stop,
+            )
         };
         // The scheduler counts every piece of the board as done before it stops.
         schedule(&board, &places, count, &run_piece);
@@ -324,7 +523,7 @@ pub(crate) fn run(job: Job) -> Option<ExitCode> {
         }
         // Only the machines whose frames came back.
         for (_, folder, name) in &board.done {
-            made += place_files(folder, &job.root);
+            made += place_files(folder, &root);
             if !used.contains(name) {
                 used.push(name.clone());
             }
@@ -379,11 +578,15 @@ pub(crate) fn run(job: Job) -> Option<ExitCode> {
 /// The end of a range's log that says what went wrong: its last error if it printed one, else
 /// its last few lines.
 fn why(log: &str) -> String {
+    if let Some(at) = log.lines().find(|l| l.contains("crash.txt")) {
+        return format!("Blender crashed ({})", at.trim());
+    }
     let lines: Vec<&str> = log
         .lines()
         .map(str::trim)
         .filter(|l| {
             !l.is_empty()
+                && !l.starts_with("[render-slot]")
                 && *l != "Blender quit"
                 && !l.starts_with("Blender ")
                 && !l.starts_with("Error: script failed")
@@ -541,9 +744,11 @@ pub(crate) fn sync(
 }
 /// One range of frames on one machine; returns a folder holding what it made, in the project's
 /// layout.
+#[allow(clippy::too_many_arguments)]
 fn range(
     farmer: &Farmer,
     job: &Job,
+    root: &Path,
     rel_root: &str,
     rel_cwd: &str,
     piece: &Piece,
@@ -553,82 +758,118 @@ fn range(
     let machine = &farmer.machine;
     let mut args = job.args.clone();
     args[job.frames_at] = format!("{}-{}", piece.from, piece.to.unwrap_or(piece.from));
-    let mut command = vec!["blender".to_owned()];
-    command.extend(args[..job.script_at].iter().cloned());
-    // A script that raises fails the run: Blender otherwise exits 0.
-    command.extend(["--python-exit-code".to_owned(), "1".to_owned()]);
-    command.extend(["--python-expr".to_owned(), gpu_setup(farmer)]);
-    command.extend(args[job.script_at..].iter().cloned());
     let dir = if rel_cwd.is_empty() {
         rel_root.to_owned()
     } else {
         format!("{rel_root}/{rel_cwd}")
     };
-    let id = uuid::Uuid::new_v4().simple().to_string();
-    let jobs = format!("/api/corral/farm/jobs/{id}");
-    let body = serde_json::json!({
-        "command": command,
-        "cores": 4,
-        "gpu": true,
-        "label": format!("{} · {}", job.label, piece.span()),
-        "place": std::env::var("CORRAL_PLACE").unwrap_or_default(),
-        "dir": dir,
-    });
-    ask(machine, &format!("{jobs}/run"), Some(&body))?;
-    let cleanup = || {
-        let _ = ask(
-            machine,
-            &format!("{jobs}/delete"),
-            Some(&serde_json::json!({})),
-        );
+    // From the folder it runs in, back to the copy's top.
+    let up = if rel_cwd.is_empty() {
+        ".".to_owned()
+    } else {
+        vec![".."; rel_cwd.split('/').count()].join("/")
     };
-    let (code, log) = loop {
-        std::thread::sleep(Duration::from_secs(3));
-        if stop.load(std::sync::atomic::Ordering::Relaxed) {
+    // A file it looks for and this machine has is sent, and the range runs again.
+    for _ in 0..3 {
+        let id = uuid::Uuid::new_v4().simple().to_string();
+        let missing = format!(".piece-{id}.missing.json");
+        let mut command = vec!["blender".to_owned()];
+        command.extend(args[..job.script_at].iter().cloned());
+        // A script that raises fails the run: Blender otherwise exits 0.
+        command.extend(["--python-exit-code".to_owned(), "1".to_owned()]);
+        command.extend(["--python-expr".to_owned(), gpu_setup(farmer)]);
+        command.extend([
+            "--python-expr".to_owned(),
+            python_expr(WATCH, &[("UP", &up), ("OUT", &missing)]),
+        ]);
+        command.extend(args[job.script_at..].iter().cloned());
+        let jobs = format!("/api/corral/farm/jobs/{id}");
+        let body = serde_json::json!({
+            "command": command,
+            "cores": 4,
+            "gpu": true,
+            "label": format!("{} · {}", job.label, piece.span()),
+            "place": std::env::var("CORRAL_PLACE").unwrap_or_default(),
+            "dir": dir,
+        });
+        ask(machine, &format!("{jobs}/run"), Some(&body))?;
+        let cleanup = || {
             let _ = ask(
                 machine,
-                &format!("{jobs}/stop"),
+                &format!("{jobs}/delete"),
                 Some(&serde_json::json!({})),
             );
-            cleanup();
-            return Err("stopped".into());
-        }
-        let Ok(status) = ask(machine, &jobs, None) else {
-            continue;
         };
-        if status["state"] == "done" {
-            break (
-                status["exit"].as_i64().unwrap_or(-1),
-                status["log"].as_str().unwrap_or_default().to_owned(),
-            );
-        }
-    };
-    if code != 0 {
+        let (code, log) = loop {
+            std::thread::sleep(Duration::from_secs(3));
+            if stop.load(std::sync::atomic::Ordering::Relaxed) {
+                let _ = ask(
+                    machine,
+                    &format!("{jobs}/stop"),
+                    Some(&serde_json::json!({})),
+                );
+                cleanup();
+                return Err("stopped".into());
+            }
+            let Ok(status) = ask(machine, &jobs, None) else {
+                continue;
+            };
+            if status["state"] == "done" {
+                break (
+                    status["exit"].as_i64().unwrap_or(-1),
+                    status["log"].as_str().unwrap_or_default().to_owned(),
+                );
+            }
+        };
+        // What the range made (whatever changed in the copy since it started), and what it
+        // could not find; both come back, which also clears them from the copy.
+        let changed = ask(
+            machine,
+            &format!("/api/corral/farm/changed?dir={}&job={id}", encode(rel_root)),
+            None,
+        );
         cleanup();
-        return Err(why(&log));
+        let mut made: Vec<String> = changed?["files"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|f| f.as_str().map(str::to_owned))
+            .collect();
+        let folder = landing.join(format!("{}-{id}", piece.n));
+        std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+        let back = made.is_empty() || fetch(machine, rel_root, &made, &folder);
+        let wanted: Vec<String> = std::fs::read_to_string(folder.join(&missing))
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or_default();
+        let _ = std::fs::remove_file(folder.join(&missing));
+        made.retain(|m| *m != missing);
+        let have = entries(root, &wanted);
+        if !have.is_empty() {
+            let _ = std::fs::remove_dir_all(&folder);
+            sync(machine, root, rel_root, &have)?;
+            queue::say(&format!(
+                "{}: sent {} file{} {} looked for; it runs again",
+                machine.name,
+                have.len(),
+                if have.len() == 1 { "" } else { "s" },
+                piece.span()
+            ));
+            continue;
+        }
+        if code != 0 || made.is_empty() || !back {
+            let _ = std::fs::remove_dir_all(&folder);
+            return Err(if code != 0 {
+                why(&log)
+            } else if made.is_empty() {
+                format!("it made no files: {}", why(&log))
+            } else {
+                "its files did not come back".into()
+            });
+        }
+        return Ok(folder);
     }
-    // What the range made: whatever changed in the copy since it started.
-    let changed = ask(
-        machine,
-        &format!("/api/corral/farm/changed?dir={}&job={id}", encode(rel_root)),
-        None,
-    );
-    cleanup();
-    let made: Vec<String> = changed?["files"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|f| f.as_str().map(str::to_owned))
-        .collect();
-    if made.is_empty() {
-        return Err(format!("it made no files: {}", why(&log)));
-    }
-    let folder = landing.join(format!("{}-{}", piece.n, uuid::Uuid::new_v4().simple()));
-    std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
-    if !fetch(machine, rel_root, &made, &folder) {
-        return Err("its files did not come back".into());
-    }
-    Ok(folder)
+    Err("it kept looking for files".into())
 }
 
 /// Brings `paths` of a machine's project copy into `folder`, and removes them there.
@@ -759,6 +1000,42 @@ mod tests {
     }
 
     #[test]
+    fn the_copy_widens_to_shared_files_but_never_to_home() {
+        let home = Path::new("/home/me");
+        let root = Path::new("/home/me/git/show/episode");
+        let inside = [PathBuf::from("/home/me/git/show/episode/scene.blend")];
+        assert_eq!(widen(root, &inside, home), root);
+        let shared = [
+            PathBuf::from("/home/me/git/show/episode/scene.blend"),
+            PathBuf::from("/home/me/git/show/assets/wood.png"),
+            PathBuf::from("/usr/share/blender/brushes.blend"),
+        ];
+        assert_eq!(widen(root, &shared, home), Path::new("/home/me/git/show"));
+        let elsewhere = [PathBuf::from("/home/me/Downloads/wood.png")];
+        assert_eq!(widen(root, &elsewhere, home), root);
+    }
+
+    #[test]
+    fn scripts_that_need_unix_are_kept_off_windows() {
+        assert!(unix_only("import bpy\n    import resource\n"));
+        assert!(unix_only("from fcntl import flock"));
+        assert!(unix_only("import os, resource"));
+        assert!(!unix_only("import resources_pack\nimport bpy"));
+        assert!(!unix_only("# import resource someday"));
+    }
+
+    #[test]
+    fn python_for_blender_is_one_line_with_its_values_set() {
+        let expr = python_expr(
+            "print(UP, OUT)\n",
+            &[("UP", "../.."), ("OUT", "a \"b\".json")],
+        );
+        assert!(!expr.contains('\n'));
+        assert!(expr.starts_with("exec(\"") && expr.ends_with("\")"));
+        assert!(expr.contains(r#"UP = \"../..\""#), "{expr}");
+    }
+
+    #[test]
     fn a_list_of_spans_is_cut_within_each_span() {
         assert_eq!(spans("1-99,124-521"), Some(vec![(1, 99), (124, 521)]));
         for not_one in ["5", "1-99,50-60", "9-1", "1-9,x"] {
@@ -781,6 +1058,17 @@ mod tests {
         assert_eq!(
             why("one\ntwo\nthree\nfour\nBlender quit\n"),
             "two / three / four"
+        );
+        // Not the command line it echoes, which may hold the word.
+        assert_eq!(
+            why(
+                "[render-slot] got a turn: x TypeError\nSegmentation fault\nWriting: /tmp/blender.crash.txt\n"
+            ),
+            "Blender crashed (Writing: /tmp/blender.crash.txt)"
+        );
+        assert_eq!(
+            why("[render-slot] got a turn: x TypeError\nreal trouble\n"),
+            "real trouble"
         );
     }
 

@@ -15,7 +15,7 @@
 //! machine has is sent, and the piece runs again. The Macs draw the same frames as here (Pillow
 //! lays out text with raqm on both, which the Macs' `raqm` tag says), so a picture's pieces can
 //! come from both.
-use super::blender::{fetch, sync};
+use super::blender::{entries, fetch, sync};
 use super::split::{Board, Piece, Place, cut, finish, me, took, work};
 use super::*;
 use std::{
@@ -317,23 +317,6 @@ fn small_files(root: &Path, folder: &str) -> Vec<String> {
         }
     }
     found
-}
-
-/// Each of `paths` this machine has, with its size and when it changed, for a sync.
-fn entries(root: &Path, paths: &[String]) -> Vec<(String, u64, u64)> {
-    paths
-        .iter()
-        .filter_map(|p| {
-            let meta = std::fs::metadata(root.join(p)).ok()?;
-            let changed = meta
-                .modified()
-                .ok()?
-                .duration_since(std::time::UNIX_EPOCH)
-                .ok()?
-                .as_secs();
-            meta.is_file().then(|| (p.clone(), meta.len(), changed))
-        })
-        .collect()
 }
 
 /// Renders the picture in pieces here and on the Macs and joins them, and exits with how it went.
