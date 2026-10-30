@@ -319,6 +319,19 @@
 .corral-reply-key:focus-visible {
   display: block;
 }
+.corral-reactions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+.corral-reaction {
+  padding: 1px 7px;
+  border: 1px solid var(--theme-border);
+  border-radius: 10px;
+  background: var(--theme-surface);
+  font-size: 13px;
+  line-height: 1.5;
+}
 .corral-replies {
   display: inline-flex;
   align-items: baseline;

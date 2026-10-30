@@ -103,7 +103,13 @@ async function setup(page, { width = 402, height = 874 } = {}, before) {
   });
   await page.route(/\/api\/corral\/conversations\/[^/]+\/messages$/, r => {
     const id = r.request().url().split('/').at(-2);
-    const { text, thread } = r.request().postDataJSON();
+    const { text, thread, reacts } = r.request().postDataJSON();
+    if (reacts) {
+      state.sent.push({ id, text, reacts });
+      return r.fulfill({
+        json: { ...msg('you', text, 9), id: 'react' + state.sent.length, reacts },
+      });
+    }
     state.sent.push(thread ? { id, text, thread } : { id, text });
     const m = { ...msg('you', text, 9), id: 'sent' + state.sent.length, thread: thread || '' };
     state.messages[id].push(m);
@@ -877,6 +883,33 @@ test('any message can be deleted, and a thread goes with the message it hangs fr
   await expect(list).not.toContainText('rotate the certs');
 });
 
+test('a message menu reacts with a tap, shown on the message rather than as one', async ({
+  page,
+}) => {
+  const { app, state, emit } = await setup(page);
+  await app.getByRole('listitem').filter({ hasText: 'infra' }).first().click();
+  const list = app.locator('.corral-messages');
+  const said = list.locator('.corral-text', { hasText: 'On it.' });
+  await said.click({ button: 'right' });
+  for (const name of ['Thumbs up', 'Thumbs down', 'OK, noted', 'Do it'])
+    await expect(page.getByRole('menuitem', { name })).toBeVisible();
+  await page.getByRole('menuitem', { name: 'Do it' }).click();
+  await expect.poll(() => state.sent).toEqual([{ id: INFRA, text: '\u{1F680}', reacts: 'm2' }]);
+  // The host tells the agent in words; the app shows only the emoji, on the message.
+  emit({
+    type: 'message',
+    conversation: INFRA,
+    message: {
+      ...msg('you', "\u{1F680} (do it) to @alex's message: \u201cOn it.\u201d", 6),
+      reacts: 'm2',
+    },
+  });
+  const chip = list.locator('.corral-reaction');
+  await expect(chip).toHaveText('\u{1F680}');
+  await expect(chip).toHaveAttribute('title', 'You: do it');
+  await expect(list).not.toContainText('(do it)');
+});
+
 test('a thread stays open when Corral reconnects, and after a reload', async ({ page }) => {
   const { app, state } = await setup(page, {}, (page, state) => {
     state.messages[INFRA].push({ ...msg(ALEX, 'All three renewed.', 5), id: 'r1', thread: 'm1' });
@@ -951,7 +984,10 @@ test('a link in a message has its own menu items, and any message copies its tex
   await app.getByRole('listitem').filter({ hasText: 'infra' }).first().click();
   const list = app.locator('.corral-messages');
   await list.getByRole('link', { name: 'https://example.com/certs' }).click({ button: 'right' });
+  // The quick reactions come first, in a row of their own.
+  const reactions = ['\u{1F44D}', '\u{1F44E}', '\u{1F44C}', '\u{1F680}'];
   await expect(page.getByRole('menuitem')).toHaveText([
+    ...reactions,
     'Open in the Omarchy browser',
     'Open in the default browser',
     'Copy link',
@@ -964,7 +1000,12 @@ test('a link in a message has its own menu items, and any message copies its tex
   await page.getByRole('menuitem', { name: 'Open in the default browser' }).click();
   // Elsewhere in a message, only its own items; Copy text copies it as written.
   await list.locator('.corral-text', { hasText: 'On it.' }).click({ button: 'right' });
-  await expect(page.getByRole('menuitem')).toHaveText(['Copy text', 'Reply in thread', 'Delete']);
+  await expect(page.getByRole('menuitem')).toHaveText([
+    ...reactions,
+    'Copy text',
+    'Reply in thread',
+    'Delete',
+  ]);
   await page.getByRole('menuitem', { name: 'Copy text' }).click();
   expect(await page.evaluate(() => window.copied)).toEqual([
     'https://example.com/certs',

@@ -194,7 +194,17 @@ pub struct Message {
     /// For a reply in a thread, the message the thread hangs from.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub thread: String,
+    /// For the person's reaction, the message it is to; the app shows it on that message.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub reacts: String,
 }
+/// The reactions the person can give a message, and the word each is told to an agent as.
+pub const REACTIONS: [(&str, &str); 4] = [
+    ("👍", "thumbs up"),
+    ("👎", "thumbs down"),
+    ("👌", "OK, noted"),
+    ("🚀", "do it"),
+];
 /// An agent's place in a conversation, or in one of its threads: its engine session there and
 /// how many of the conversation's messages it has been given. A conversation's seat also marks
 /// where its session stood after each turn, so a thread can fork it from there.
@@ -1357,14 +1367,22 @@ impl Corral {
         chain: u32,
         thread: &str,
     ) -> anyhow::Result<Message> {
-        let message = Message {
-            id: uuid::Uuid::new_v4().to_string(),
-            ts: now(),
-            author: author.to_owned(),
-            text: text.to_owned(),
-            chain,
-            thread: thread.to_owned(),
-        };
+        self.post_message(
+            conversation,
+            Message {
+                id: uuid::Uuid::new_v4().to_string(),
+                ts: now(),
+                author: author.to_owned(),
+                text: text.to_owned(),
+                chain,
+                thread: thread.to_owned(),
+                reacts: String::new(),
+            },
+        )
+    }
+    fn post_message(&self, conversation: &str, message: Message) -> anyhow::Result<Message> {
+        let thread = message.thread.clone();
+        let thread = thread.as_str();
         let (wake, joined, stopped) = {
             let mut state = self.state.lock().unwrap();
             let talk = state
@@ -1454,7 +1472,18 @@ impl Corral {
             .iter()
             .filter_map(|n| by_name.get(n).cloned())
             .collect();
-        let mut wake: Vec<String> = if (talk.kind == "dm" && message.author == YOU) || everyone {
+        let reacted_to = state
+            .messages
+            .get(&talk.id)
+            .into_iter()
+            .flatten()
+            .find(|m| !message.reacts.is_empty() && m.id == message.reacts);
+        // A reaction wakes whoever wrote the message, and no one else.
+        let mut wake: Vec<String> = if !message.reacts.is_empty() {
+            reacted_to
+                .map(|m| vec![m.author.clone()])
+                .unwrap_or_default()
+        } else if (talk.kind == "dm" && message.author == YOU) || everyone {
             talk.members.clone()
         } else if !message.thread.is_empty() && message.author == YOU && mentioned.is_empty() {
             let root = state
@@ -2434,6 +2463,9 @@ pub struct SendForm {
     /// The message a reply in a thread hangs from.
     #[serde(default)]
     thread: String,
+    /// For a reaction, the message it is to; `text` is then one of `REACTIONS`.
+    #[serde(default)]
+    reacts: String,
 }
 pub async fn send(
     State(corral): State<Corral>,
@@ -2441,6 +2473,9 @@ pub async fn send(
     Json(form): Json<SendForm>,
 ) -> Result<Json<Value>, ApiError> {
     let text = form.text.trim();
+    if !form.reacts.is_empty() {
+        return react(&corral, &id, &form.reacts, text).map(Json);
+    }
     if text.is_empty() || text.len() > 64 * 1024 {
         return Err(refuse(
             StatusCode::BAD_REQUEST,
@@ -2469,6 +2504,50 @@ pub async fn send(
         .post(&id, YOU, text, 0, &form.thread)
         .map_err(error)?;
     Ok(Json(json!(message)))
+}
+/// The person's reaction to a message: posted beside it, saying in words what it is and what it is
+/// to, so the agent that wrote the message is woken there and reads it like any other.
+fn react(corral: &Corral, id: &str, to: &str, emoji: &str) -> Result<Value, ApiError> {
+    let Some((_, word)) = REACTIONS.iter().find(|(e, _)| *e == emoji) else {
+        return Err(refuse(StatusCode::BAD_REQUEST, "Not one of the reactions"));
+    };
+    let (thread, text) = {
+        let state = corral.state.lock().unwrap();
+        let target = state
+            .messages
+            .get(id)
+            .into_iter()
+            .flatten()
+            .find(|m| m.id == to && m.reacts.is_empty())
+            .ok_or_else(not_found)?;
+        let whose = if target.author == YOU {
+            "your own".to_owned()
+        } else {
+            format!("{}'s", handle(&state, &target.author))
+        };
+        (
+            target.thread.clone(),
+            format!(
+                "{emoji} ({word}) to {whose} message: \u{201c}{}\u{201d}",
+                clip(&target.text, 160)
+            ),
+        )
+    };
+    let message = corral
+        .post_message(
+            id,
+            Message {
+                id: uuid::Uuid::new_v4().to_string(),
+                ts: now(),
+                author: YOU.to_owned(),
+                text,
+                chain: 0,
+                thread,
+                reacts: to.to_owned(),
+            },
+        )
+        .map_err(error)?;
+    Ok(json!(message))
 }
 /// Deletes a message, and the replies of one a thread hangs from.
 pub async fn delete_message(
@@ -2504,7 +2583,15 @@ impl Corral {
         let gone: Vec<(usize, Message)> = messages
             .iter()
             .enumerate()
-            .filter(|(_, m)| m.id == message || (starts_thread && m.thread == message))
+            .filter(|(_, m)| {
+                let goes = |id: &str| {
+                    id == message
+                        || (starts_thread
+                            && messages.iter().any(|r| r.id == id && r.thread == message))
+                };
+                // Reactions go with what they are to.
+                goes(&m.id) || (!m.reacts.is_empty() && goes(&m.reacts))
+            })
             .map(|(i, m)| (i, m.clone()))
             .collect();
         let kept: Vec<Message> = messages
@@ -3192,6 +3279,7 @@ mod tests {
             text: text.into(),
             chain,
             thread: String::new(),
+            reacts: String::new(),
         }
     }
     fn reply(author: &str, text: &str, thread: &str) -> Message {
@@ -3886,6 +3974,51 @@ mod tests {
         let (wake, _, _) = corral.targets(&mut state, &talk, &reply(YOU, "hm", &asked.id));
         assert!(wake.is_empty());
         drop(state);
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn a_reaction_wakes_only_whoever_wrote_the_message_and_says_what_it_is_to() {
+        let (corral, root) = corral();
+        let trail = agent(&corral, "PaperTrail");
+        let walt = agent(&corral, "Walt");
+        let talk = channel(
+            &corral,
+            "PlainSight",
+            vec![trail.id.clone(), walt.id.clone()],
+        );
+        let started = message(&trail.id, "Draft is up.", 1);
+        let answered = reply(&walt.id, "Rendered the intro.", &started.id);
+        let mine = message(YOU, "Ship it on Friday.", 0);
+        corral.state.lock().unwrap().messages.insert(
+            talk.id.clone(),
+            vec![started.clone(), answered.clone(), mine.clone()],
+        );
+        let reaction = |to: &Message| Message {
+            reacts: to.id.clone(),
+            thread: to.thread.clone(),
+            ..message(YOU, "👍 (thumbs up)", 0)
+        };
+        {
+            let mut state = corral.state.lock().unwrap();
+            // In the channel, with no mention, it still wakes the message's author.
+            let (wake, _, _) = corral.targets(&mut state, &talk, &reaction(&started));
+            assert_eq!(wake, std::slice::from_ref(&trail.id));
+            // In a thread, the reply's author, not whoever the thread is with.
+            let (wake, _, _) = corral.targets(&mut state, &talk, &reaction(&answered));
+            assert_eq!(wake, std::slice::from_ref(&walt.id));
+            // On the person's own message, no one.
+            let (wake, _, _) = corral.targets(&mut state, &talk, &reaction(&mine));
+            assert!(wake.is_empty());
+        }
+        // It is told in words, where the message is.
+        let posted = react(&corral, &talk.id, &mine.id, "🚀").unwrap();
+        assert_eq!(posted["reacts"], mine.id.as_str());
+        assert_eq!(
+            posted["text"],
+            "🚀 (do it) to your own message: \u{201c}Ship it on Friday.\u{201d}"
+        );
+        assert!(react(&corral, &talk.id, &mine.id, "🎉").is_err());
+        assert!(react(&corral, &talk.id, "nope", "👍").is_err());
         fs::remove_dir_all(root).unwrap();
     }
     #[test]

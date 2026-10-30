@@ -11,7 +11,8 @@
   }
 
   /* Opens a menu. `items` are { label, run, danger, confirm } (confirm is a question asked in the
-     menu before a danger runs); `ask` instead shows a text field and resolves with its value. */
+     menu before a danger runs), or { row } for a row of small choices side by side, each
+     { label, title, run }; `ask` instead shows a text field and resolves with its value. */
   function open({ title, items = [], x, y, ask, returnFocus }) {
     close();
     const sheet = innerWidth < 600;
@@ -123,6 +124,20 @@
       });
     } else {
       for (const entry of items.filter(Boolean)) {
+        if (entry.row) {
+          const row = node('div', 'context-row');
+          for (const choice of entry.row) {
+            const b = item(choice.label, () => {
+              close();
+              choice.run();
+            });
+            b.title = choice.title || '';
+            b.setAttribute('aria-label', choice.title || choice.label);
+            row.append(b);
+          }
+          menu.append(row);
+          continue;
+        }
         menu.append(
           item(
             entry.label,

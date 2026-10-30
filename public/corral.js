@@ -47,6 +47,13 @@
     if (!response.ok) throw Error(data.error || 'The host did not respond.');
     return data;
   }
+  // Quick replies from a message's menu; the host keeps the same list.
+  const REACTIONS = [
+    ['\u{1F44D}', 'thumbs up'],
+    ['\u{1F44E}', 'thumbs down'],
+    ['\u{1F44C}', 'OK, noted'],
+    ['\u{1F680}', 'do it'],
+  ];
   const COLORS = ['blue', 'green', 'magenta', 'cyan', 'yellow', 'red'];
   const colorOf = name => {
     let hash = 0;
@@ -1169,11 +1176,16 @@
       const thread = this.threadId;
       // A thread shows its message and the replies; the conversation, the messages outside
       // threads, each with how many replies it has.
-      const shown = thread
-        ? this.messages.filter(m => m.id === thread || m.thread === thread)
-        : this.messages.filter(m => !m.thread);
-      const replies = new Map();
+      // Reactions show on the message they are to, not as messages of their own.
+      const reactions = new Map();
       for (const m of this.messages)
+        if (m.reacts) reactions.set(m.reacts, [...(reactions.get(m.reacts) || []), m]);
+      const said = this.messages.filter(m => !m.reacts);
+      const shown = thread
+        ? said.filter(m => m.id === thread || m.thread === thread)
+        : said.filter(m => !m.thread);
+      const replies = new Map();
+      for (const m of said)
         if (m.thread) replies.set(m.thread, [...(replies.get(m.thread) || []), m]);
       for (const m of shown) {
         if (m.author === 'corral') {
@@ -1219,6 +1231,18 @@
           );
         }
         last.author = m.author;
+        const given = reactions.get(m.id);
+        if (given) {
+          const row = node('div', 'corral-reactions');
+          for (const r of given) {
+            const [emoji, word] = REACTIONS.find(([e]) => r.text.startsWith(e)) || [r.text, ''];
+            const chip = node('span', 'corral-reaction', emoji);
+            chip.title = 'You: ' + word;
+            contextMenu(chip, () => ({ title: chip.title, items: [this.deleteItem(r, 0)] }));
+            row.append(chip);
+          }
+          last.body.append(row);
+        }
         if (!thread) {
           // Reply in thread: on hover, or from the message's menu.
           const answer = button('Reply', () => this.openThread(m.id), 'corral-reply-key');
@@ -1228,6 +1252,7 @@
           contextMenu(text, pressed => ({
             title: this.author(m.author),
             items: [
+              this.reactRow(m),
               ...this.textItems(m, text, pressed),
               { label: 'Reply in thread', run: () => this.openThread(m.id) },
               this.deleteItem(m, these?.length || 0),
@@ -1244,6 +1269,7 @@
           contextMenu(text, pressed => ({
             title: this.author(m.author),
             items: [
+              this.reactRow(m),
               ...this.textItems(m, text, pressed),
               this.deleteItem(m, m.id === thread ? replies.get(thread)?.length || 0 : 0),
             ],
@@ -1322,6 +1348,24 @@
         ...(selected ? [{ label: 'Copy selection', run: () => copy(selected) }] : []),
         { label: 'Copy text', run: () => copy(m.text) },
       ];
+    }
+    // Quick replies to a message: the agent that wrote it is woken where it is and told, in words,
+    // which one it got and to what.
+    reactRow(m) {
+      return {
+        row: REACTIONS.map(([emoji, word]) => ({
+          label: emoji,
+          title: word[0].toUpperCase() + word.slice(1),
+          run: () =>
+            request(`/conversations/${encodeURIComponent(this.openId)}/messages`, {
+              text: emoji,
+              reacts: m.id,
+            }).catch(e => {
+              this.workingText.textContent = e.message;
+              this.workingLine.hidden = false;
+            }),
+        })),
+      };
     }
     // Delete, for any message: the person's, an agent's, or Corral's. One a thread hangs from
     // takes its replies with it.
