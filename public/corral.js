@@ -47,17 +47,17 @@
     if (!response.ok) throw Error(data.error || 'The host did not respond.');
     return data;
   }
-  // Reactions, as the host lists them: a message's menu offers the first four, and agents use any,
-  // 👀 to say they have taken a message on.
+  // Reactions, as the host lists them: a message's menu offers all but 👀, which agents use to say
+  // they have taken a message on.
   const REACTIONS = [
     ['\u{1F44D}', 'thumbs up'],
     ['\u{1F44E}', 'thumbs down'],
     ['\u{1F44C}', 'OK, noted'],
     ['\u{1F680}', 'do it'],
     ['\u{1F440}', 'on it'],
-    ['\u2753', 'not sure'],
+    ['\u2753', 'please explain'],
   ];
-  const OFFERED = REACTIONS.slice(0, 4);
+  const OFFERED = REACTIONS.filter(([e]) => e !== '\u{1F440}');
   const COLORS = ['blue', 'green', 'magenta', 'cyan', 'yellow', 'red'];
   const colorOf = name => {
     let hash = 0;
@@ -438,6 +438,8 @@
         this.renderWorking();
         this.renderSide();
         if (this.detailsOpen) this.renderActivity();
+      } else if (e.type === 'closed') {
+        if (this.detailsOpen) this.activityLater();
       } else if (e.type === 'deleted') {
         this.removeMessages(e.conversation, e.messages || []);
       } else if (e.type === 'queued') {
@@ -1083,7 +1085,16 @@
           );
         row.append(this.face(this.agent(m.author), m.author === 'you' ? 'you' : name, name), text);
         if (fresh) row.setAttribute('aria-label', `New: ${this.label(c)}, ${name}: ${m.text}`);
-        rows.push(row);
+        // Closing a row hides it here until a newer message comes to that place.
+        const close = button('\u00d7', () => this.closeActivity(item), 'corral-activity-close');
+        close.title = 'Close until something new comes';
+        close.setAttribute(
+          'aria-label',
+          `Close ${(item.thread ? 'thread in ' : '') + this.label(c)}`
+        );
+        const holder = node('div', 'corral-activity-item');
+        holder.append(row, close);
+        rows.push(holder);
       }
       if (!rows.length)
         rows.push(
@@ -1095,6 +1106,18 @@
           )
         );
       this.activityList.replaceChildren(...rows);
+    }
+    async closeActivity(item) {
+      this.activity = this.activity.filter(
+        a => a.conversation !== item.conversation || a.thread !== item.thread
+      );
+      this.renderActivity();
+      try {
+        await request('/activity/close', { conversation: item.conversation, thread: item.thread });
+      } catch (e) {
+        this.activityError = e.message;
+        this.loadActivity();
+      }
     }
     // Opens a place from Activity as if it were opened from the sidebar or its message.
     // With `message`, it is shown and lit, as a search result is.

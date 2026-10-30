@@ -199,14 +199,14 @@ pub struct Message {
     pub reacts: String,
 }
 /// The reactions a message can be given, and the words each is told as. The app offers the person
-/// the first four; agents use any, `👀` to say they have taken a message on.
+/// all but `👀`, which agents use to say they have taken a message on.
 pub const REACTIONS: [(&str, &str); 6] = [
     ("👍", "thumbs up"),
     ("👎", "thumbs down"),
     ("👌", "OK, noted"),
     ("🚀", "do it"),
     ("👀", "on it"),
-    ("❓", "not sure"),
+    ("❓", "please explain"),
 ];
 /// An agent's place in a conversation, or in one of its threads: its engine session there and
 /// how many of the conversation's messages it has been given. A conversation's seat also marks
@@ -280,6 +280,9 @@ struct Workspace {
     pictures: HashMap<String, u64>,
     /// What agents left running after their turns, by place: the command it started.
     background: HashMap<TurnKey, String>,
+    /// Places the person closed in Activity, `conversation/thread`, with the time of the latest
+    /// message there then: one comes back with a newer message.
+    closed: HashMap<String, String>,
 }
 #[derive(Clone)]
 pub struct Corral {
@@ -800,6 +803,7 @@ impl Corral {
                 .conversations
                 .insert(conversation.id.clone(), conversation);
         }
+        state.closed = read_json(&root.join(CLOSED)).unwrap_or_default();
         Corral {
             bin: root.join(".bin"),
             api: "http://127.0.0.1:4188/api/corral/agent".into(),
@@ -1750,6 +1754,7 @@ pub fn router<S: Clone + std::marker::Send + Sync + 'static>(corral: Corral) -> 
         .route("/conversations/{id}/response", get(response))
         .route("/conversations/{id}/delete", post(delete_conversation))
         .route("/activity", get(activity))
+        .route("/activity/close", post(close_activity))
         .route("/search", get(search))
         .route("/renders", get(renders))
         .route("/renders/here", get(renders_here))
@@ -2326,6 +2331,8 @@ const ACTIVITY: usize = 200;
 /// thread in them, with its latest message (shortened), the agents who have written there, and,
 /// for a thread, the message it hangs from and how many replies it has. Corral's own notes do not
 /// count.
+/// Where a place's Activity row is closed, in `closed.json`.
+const CLOSED: &str = "closed.json";
 fn activity_of(state: &Workspace) -> Vec<Value> {
     let brief = |m: &Message| json!({"id": m.id, "ts": m.ts, "author": m.author, "text": clip(&m.text, 300)});
     let mut items: Vec<(String, Value)> = Vec::new();
@@ -2339,6 +2346,13 @@ fn activity_of(state: &Workspace) -> Vec<Value> {
             *entry = (m, entry.1 + 1);
         }
         for (thread, (last, count)) in latest {
+            if state
+                .closed
+                .get(&format!("{id}/{thread}"))
+                .is_some_and(|ts| last.ts <= *ts)
+            {
+                continue;
+            }
             let root = (!thread.is_empty())
                 .then(|| messages.iter().find(|r| r.id == thread))
                 .flatten();
@@ -2462,6 +2476,43 @@ pub async fn renders(State(corral): State<Corral>) -> Json<Value> {
 }
 pub async fn activity(State(corral): State<Corral>) -> Json<Value> {
     Json(json!({"items": activity_of(&corral.state.lock().unwrap())}))
+}
+#[derive(Deserialize)]
+pub struct Place {
+    conversation: String,
+    #[serde(default)]
+    thread: String,
+}
+/// Closes a place's row in Activity until a newer message comes there. Nothing else changes.
+pub async fn close_activity(
+    State(corral): State<Corral>,
+    Json(place): Json<Place>,
+) -> Result<Json<Value>, ApiError> {
+    {
+        let mut state = corral.state.lock().unwrap();
+        let latest = state
+            .messages
+            .get(&place.conversation)
+            .into_iter()
+            .flatten()
+            .filter(|m| m.author != CORRAL)
+            .filter(|m| m.thread == place.thread)
+            .map(|m| m.ts.clone())
+            .max()
+            .ok_or_else(not_found)?;
+        state
+            .closed
+            .insert(format!("{}/{}", place.conversation, place.thread), latest);
+        // Places since deleted are forgotten.
+        let conversations: std::collections::HashSet<String> =
+            state.conversations.keys().cloned().collect();
+        state
+            .closed
+            .retain(|k, _| conversations.contains(k.split('/').next().unwrap_or_default()));
+        write_json(&corral.root.join(CLOSED), &state.closed).map_err(error)?;
+    }
+    corral.emit(json!({"type":"closed","conversation":place.conversation,"thread":place.thread}));
+    Ok(Json(json!({"closed": true})))
 }
 #[derive(Deserialize)]
 pub struct SendForm {
@@ -2785,7 +2836,7 @@ const ACTIONS: [(&str, &str, &str); 13] = [
     (
         "react",
         "[--message ID] EMOJI",
-        "React to the latest message to you here (or the one given) without a reply: 👀 (on it), 👍 (thumbs up), 👌 (OK, noted), ❓ (not sure), 👎 (thumbs down), or 🚀 (do it). It wakes no one.",
+        "React to the latest message to you here (or the one given) without a reply: 👀 (on it), 👍 (thumbs up), 👌 (OK, noted), ❓ (please explain), 👎 (thumbs down), or 🚀 (do it). It wakes no one.",
     ),
     (
         "read",
@@ -3902,6 +3953,45 @@ mod tests {
         assert_eq!(items[1]["thread"], "");
         assert_eq!(items[1]["message"]["id"], json!(answered.id));
         assert!(items[1]["root"].is_null());
+        // A closed row stays gone until a newer message comes there, and for good.
+        let close = |thread: &str| {
+            tokio::runtime::Runtime::new()
+                .unwrap()
+                .block_on(close_activity(
+                    State(corral.clone()),
+                    Json(Place {
+                        conversation: talk.id.clone(),
+                        thread: thread.into(),
+                    }),
+                ))
+                .unwrap()
+        };
+        let _ = close(&asked.id);
+        let items = activity_of(&corral.state.lock().unwrap());
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["thread"], "");
+        assert_eq!(
+            Corral::load(root.clone())
+                .state
+                .lock()
+                .unwrap()
+                .closed
+                .len(),
+            1
+        );
+        let mut again = reply(YOU, "and the fourth?", &asked.id);
+        again.ts = "2026-10-29T11:00:00.000Z".into();
+        corral
+            .state
+            .lock()
+            .unwrap()
+            .messages
+            .get_mut(&talk.id)
+            .unwrap()
+            .push(again);
+        let items = activity_of(&corral.state.lock().unwrap());
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0]["message"]["text"], "and the fourth?");
         fs::remove_dir_all(root).unwrap();
     }
     #[test]

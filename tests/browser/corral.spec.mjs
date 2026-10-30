@@ -146,6 +146,14 @@ async function setup(page, { width = 402, height = 874 } = {}, before) {
   await page.route('**/api/corral/activity', r =>
     r.fulfill({ json: { items: state.activity || [] } })
   );
+  await page.route('**/api/corral/activity/close', r => {
+    const place = r.request().postDataJSON();
+    (state.closed ||= []).push(place);
+    state.activity = state.activity.filter(
+      a => a.conversation !== place.conversation || a.thread !== place.thread
+    );
+    return r.fulfill({ json: { closed: true } });
+  });
   await page.route('**/api/corral/agents', r => {
     const body = r.request().postDataJSON();
     state.created.push(body);
@@ -713,6 +721,13 @@ test('Activity lists every conversation and thread by its latest message, and op
   });
   emit({ type: 'message', conversation: DM, message: msg(ALEX, 'Backups done.', 9) });
   await expect(list.locator('.corral-activity-place .corral-row-name').first()).toHaveText('@alex');
+  // One tap on a row's close takes it out of Activity, and only Activity.
+  await list.getByRole('button', { name: 'Close @alex' }).click();
+  await expect.poll(() => state.closed).toEqual([{ conversation: DM, thread: '' }]);
+  await expect(list.getByRole('listitem')).toHaveCount(2);
+  await expect(list.locator('.corral-activity-place .corral-row-name').first()).toHaveText(
+    'Thread in #infra'
+  );
 });
 
 test('with room, Activity sits beside the conversation', async ({ page }) => {
@@ -890,8 +905,8 @@ test('reactions show on the message, counted, naming who gave them, and a tap ta
   await app.getByRole('listitem').filter({ hasText: 'infra' }).first().click();
   const list = app.locator('.corral-messages');
   await list.locator('.corral-text', { hasText: 'On it.' }).click({ button: 'right' });
-  // The menu offers four; agents have two more of their own.
-  for (const name of ['Thumbs up', 'Thumbs down', 'OK, noted', 'Do it'])
+  // The menu offers all but 👀, which is the agents' own.
+  for (const name of ['Thumbs up', 'Thumbs down', 'OK, noted', 'Do it', 'Please explain'])
     await expect(page.getByRole('menuitem', { name })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'On it' })).toHaveCount(0);
   await page.getByRole('menuitem', { name: 'Do it' }).click();
@@ -992,7 +1007,7 @@ test('a link in a message has its own menu items, and any message copies its tex
   const list = app.locator('.corral-messages');
   await list.getByRole('link', { name: 'https://example.com/certs' }).click({ button: 'right' });
   // The quick reactions come first, in a row of their own.
-  const reactions = ['\u{1F44D}', '\u{1F44E}', '\u{1F44C}', '\u{1F680}'];
+  const reactions = ['\u{1F44D}', '\u{1F44E}', '\u{1F44C}', '\u{1F680}', '\u2753'];
   await expect(page.getByRole('menuitem')).toHaveText([
     ...reactions,
     'Open in the Omarchy browser',

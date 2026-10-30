@@ -543,6 +543,39 @@
   text-align: left;
   cursor: pointer;
 }
+.corral-activity-item {
+  position: relative;
+}
+.corral-activity-item .corral-activity-row {
+  padding-right: 32px;
+}
+.corral-activity-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: var(--theme-background);
+  color: var(--theme-secondary);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.pointer-mouse .corral-activity-close {
+  display: none;
+}
+.pointer-mouse .corral-activity-item:hover .corral-activity-close,
+.corral-activity-close:focus-visible {
+  display: block;
+}
+.corral-activity-close:hover {
+  background: var(--theme-surface-raised);
+  color: var(--theme-foreground);
+}
 .corral-activity-row:hover {
   background: color-mix(in srgb, var(--theme-surface-raised) 70%, transparent);
 }
