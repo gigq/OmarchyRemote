@@ -54,8 +54,10 @@ pub fn log_of(pid: u32, named: &str) -> Option<PathBuf> {
 
 /// How far along a job is, from its command, its log, and how long it has run.
 pub fn estimate(command: &str, log: &Log, elapsed: u64) -> Option<Progress> {
+    // The program's name, from a path that may have spaces in it (`C:\\Program Files\\…\\blender.exe`):
+    // what comes before its first option.
     let program = command
-        .split_whitespace()
+        .split(" -")
         .next()
         .unwrap_or_default()
         .rsplit(['/', '\\'])
@@ -316,5 +318,8 @@ mod tests {
         assert_eq!(p.counted, "600 of 20400 frames");
         assert_eq!(p.left, (120.0 * 19800.0 / 600.0f64).round() as u64);
         assert!(estimate("python whisper.py", &log("loading model"), 50).is_none());
+        // A program in a folder with spaces in its name is still known.
+        let windows = r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe -b a.blend -- --frames 1-10";
+        assert!(estimate(windows, &log("Saved: 'C:\\out\\f0005.png'"), 50).is_some());
     }
 }

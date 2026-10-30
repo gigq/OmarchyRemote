@@ -120,6 +120,41 @@ async fn ask(host: &Host, path: &str, body: Option<&Value>) -> anyhow::Result<Ve
     }
     Ok(body)
 }
+/// For another machine's running farm jobs that do not say how far along they are (its Corral may
+/// be older than that), how far along each is from the end of its log, which the farm gives.
+async fn farm_progress(host: &Host, queue: &mut Value) {
+    let Some(jobs) = queue["jobs"].as_array_mut() else {
+        return;
+    };
+    for job in jobs
+        .iter_mut()
+        .filter(|j| j["running"] == true && j["progress"].is_null())
+    {
+        // A farm job runs in a folder named for it, in `corral-farm`.
+        let cwd = job["cwd"].as_str().unwrap_or_default();
+        let mut parts = cwd.rsplit(['/', '\\']);
+        let (Some(id), Some("corral-farm")) = (parts.next(), parts.next()) else {
+            continue;
+        };
+        if id.len() != 32 || !id.chars().all(|c| c.is_ascii_hexdigit()) {
+            continue;
+        }
+        let Ok(status) = ask_json(host, &format!("/api/corral/farm/jobs/{id}"), None).await else {
+            continue;
+        };
+        let tail = status["log"].as_str().unwrap_or_default().to_owned();
+        let log = crate::progress::Log {
+            head: tail.clone(),
+            tail,
+        };
+        let elapsed = crate::queue::seconds_since(job["started"].as_str().unwrap_or_default());
+        if let Some(p) =
+            crate::progress::estimate(job["command"].as_str().unwrap_or_default(), &log, elapsed)
+        {
+            job["progress"] = json!(p);
+        }
+    }
+}
 async fn ask_json(host: &Host, path: &str, body: Option<&Value>) -> anyhow::Result<Value> {
     Ok(serde_json::from_slice(&ask(host, path, body).await?)?)
 }
@@ -290,7 +325,10 @@ impl Corral {
         for host in hosts {
             out.push(
                 match ask_json(&host, "/api/corral/renders/here", None).await {
-                    Ok(queue) => json!({"name": host.name, "online": true, "queue": queue}),
+                    Ok(mut queue) => {
+                        farm_progress(&host, &mut queue).await;
+                        json!({"name": host.name, "online": true, "queue": queue})
+                    }
                     Err(e) => json!({"name": host.name, "online": false, "error": e.to_string()}),
                 },
             );
