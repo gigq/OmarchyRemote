@@ -146,6 +146,9 @@ async function setup(page, { width = 402, height = 874 } = {}, before) {
   await page.route('**/api/corral/activity', r =>
     r.fulfill({ json: { items: state.activity || [] } })
   );
+  await page.route(/\/api\/corral\/agents\/[^/]+\/recent$/, r =>
+    r.fulfill({ json: { items: state.recent || [] } })
+  );
   await page.route('**/api/corral/activity/close', r => {
     const place = r.request().postDataJSON();
     (state.closed ||= []).push(place);
@@ -789,6 +792,61 @@ test('work an agent left running shows apart from a turn under way', async ({ pa
   emit({ type: 'background', background: [] });
   await expect(line).toBeHidden();
   await expect(app.locator('.corral-busy')).toHaveCount(0);
+});
+
+test("an agent's Work shows what it is doing and its latest message in each place", async ({
+  page,
+}) => {
+  const { app, emit } = await setup(page, {}, (page, state) => {
+    state.background = [
+      { conversation: INFRA, agent: ALEX, thread: 'm1', command: 'bash tools/render.sh' },
+    ];
+    state.recent = [
+      {
+        conversation: INFRA,
+        thread: 'm1',
+        message: { id: 'r1', ts: '2026-10-28T10:05:00.000Z', author: ALEX, text: 'Rendering.' },
+        root: { id: 'm1', ts: '2026-10-28T10:01:00.000Z', author: 'you', text: 'rotate the certs' },
+      },
+      {
+        conversation: INFRA,
+        thread: '',
+        message: { id: 'm2', ts: '2026-10-28T10:02:00.000Z', author: ALEX, text: 'On it.' },
+        root: null,
+      },
+    ];
+    state.messages[INFRA].push({ ...msg(ALEX, 'Rendering.', 5), id: 'r1', thread: 'm1' });
+  });
+  await app.locator('.corral-agent-row').filter({ hasText: 'alex' }).click();
+  // A direct message opens on its messages; Work is beside them.
+  const tabs = app.getByRole('tablist', { name: 'View' });
+  await expect(tabs.getByRole('tab', { name: 'Messages' })).toHaveAttribute(
+    'aria-selected',
+    'true'
+  );
+  await tabs.getByRole('tab', { name: 'Work' }).click();
+  const work = app.getByRole('list', { name: 'Work' });
+  await expect(app.locator('.corral-messages')).toBeHidden();
+  await expect(work.locator('.corral-work-heading')).toHaveText(['Now', 'Latest everywhere']);
+  await expect(work.getByRole('listitem')).toHaveCount(3);
+  await expect(work.getByRole('listitem').first()).toContainText(
+    'In the background: bash tools/render.sh'
+  );
+  await expect(work.getByRole('listitem').nth(1)).toContainText('Justin: rotate the certs');
+  // A turn under way shows as it starts.
+  emit({ type: 'status', conversation: INFRA, agent: ALEX, thread: '', status: 'Edit · a.rs' });
+  await expect(work.getByRole('listitem')).toHaveCount(4);
+  await expect(work.getByRole('listitem').first()).toContainText('Edit · a.rs');
+  await page.screenshot({ path: 'artifacts/browser/corral-work.png' });
+  // A row opens its place, here the thread.
+  await work.getByRole('listitem').nth(2).click();
+  await expect(app.locator('.corral-title')).toHaveText('Thread');
+  await expect(app.locator('.corral-messages')).toContainText('Rendering.');
+  // The view chosen stays for next time.
+  await app.getByRole('button', { name: 'Back to #infra' }).click();
+  await app.getByRole('button', { name: 'All conversations' }).click();
+  await app.locator('.corral-agent-row').filter({ hasText: 'alex' }).click();
+  await expect(tabs.getByRole('tab', { name: 'Work' })).toHaveAttribute('aria-selected', 'true');
 });
 
 test('the filter narrows Activity to the agent or room open, until pressed again', async ({

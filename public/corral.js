@@ -15,6 +15,8 @@
   const FILTER = 'omarchy-corral-activity-filter';
   // Which panel the details panel shows: Activity or Search.
   const PANEL = 'omarchy-corral-panel';
+  // Whether an agent's direct message shows the messages or the agent's work everywhere.
+  const MODE = 'omarchy-corral-dm-mode';
   const PANELS = [
     ['activity', 'Activity'],
     ['search', 'Search'],
@@ -271,8 +273,33 @@
       this.voiceTools = node('div', 'herdr-output-tools corral-voice-tools');
       this.voiceTools.onpointerdown = e => e.preventDefault();
       this.voiceTools.onclick = e => e.stopPropagation();
-      this.stage.append(this.list, this.voiceTools);
-      this.main.append(bar, this.stage, this.workingLine, this.suggestions, this.promptRow);
+      // An agent's direct message has a second view: what it is doing and has said everywhere.
+      this.dmMode = storage.read(MODE) === 'work' ? 'work' : 'messages';
+      this.modeTabs = node('div', 'corral-tabs corral-modes');
+      this.modeTabs.setAttribute('role', 'tablist');
+      this.modeTabs.setAttribute('aria-label', 'View');
+      for (const [id, label] of [
+        ['messages', 'Messages'],
+        ['work', 'Work'],
+      ]) {
+        const tab = button(label, () => this.setMode(id), 'corral-tab');
+        tab.setAttribute('role', 'tab');
+        tab.dataset.mode = id;
+        this.modeTabs.append(tab);
+      }
+      this.workList = node('div', 'corral-work');
+      this.workList.setAttribute('role', 'list');
+      this.workList.setAttribute('aria-label', 'Work');
+      this.recent = [];
+      this.stage.append(this.list, this.workList, this.voiceTools);
+      this.main.append(
+        bar,
+        this.modeTabs,
+        this.stage,
+        this.workingLine,
+        this.suggestions,
+        this.promptRow
+      );
       this.main.hidden = true;
       this.sheet = node('section', 'corral-sheet');
       this.sheet.hidden = true;
@@ -431,10 +458,12 @@
         this.renderSide();
         if (this.detailsOpen) this.activityLater();
         if (this.detailsOpen && this.panel === 'search' && this.searchAsked) this.searchLater();
+        if (this.workAgent() === e.message.author) this.workLater();
       } else if (e.type === 'status') {
         const key = [e.conversation, e.agent, e.thread || ''].join(' ');
         if (e.status) this.working.set(key, e.status);
         else this.working.delete(key);
+        if (this.workAgent()) this.renderWork();
         this.renderWorking();
         this.renderSide();
         if (this.detailsOpen) this.renderActivity();
@@ -448,6 +477,7 @@
         if ([...this.queued.keys()].join() !== before) this.renderMessages();
       } else if (e.type === 'background') {
         this.setBackground(e.background);
+        if (this.workAgent()) this.renderWork();
         this.renderWorking();
         this.renderSide();
         if (this.detailsOpen) this.renderActivity();
@@ -678,6 +708,11 @@
       this.renderMessages();
       this.renderSide();
       if (!thread) this.markSeen();
+      if (this.workAgent()) {
+        this.recent = [];
+        this.renderWork();
+        this.loadWork();
+      }
       try {
         const data = await request('/conversations/' + encodeURIComponent(id));
         if (this.openId !== id) return;
@@ -1123,6 +1158,7 @@
     // With `message`, it is shown and lit, as a search result is.
     async goTo(item, message) {
       if (!this.root.classList.contains('corral-roomy')) this.toggleDetails(false);
+      if (this.workAgent() && item.conversation === this.openId) this.setMode('messages');
       if (item.conversation !== this.openId || (this.threadId && !item.thread))
         await this.open(item.conversation, item.thread);
       else if (item.thread) this.openThread(item.thread);
@@ -1156,7 +1192,121 @@
         this.filterKey.disabled = !this.filter && !this.filterHere();
       this.backKey.hidden = wide && !this.threadId;
       this.sidePanelKey.hidden = !this.main.hidden;
+      this.layoutMode();
       this.followVoice();
+    }
+    // The Messages and Work tabs, for an agent's direct message outside a thread.
+    workAgent() {
+      const c = this.conversation(this.openId);
+      return c?.kind === 'dm' && !this.threadId && this.dmMode === 'work' ? c.members[0] : null;
+    }
+    layoutMode() {
+      if (!this.modeTabs) return;
+      const c = this.conversation(this.openId);
+      this.modeTabs.hidden = !(c?.kind === 'dm' && !this.threadId);
+      for (const tab of this.modeTabs.children) {
+        const on = tab.dataset.mode === this.dmMode;
+        tab.setAttribute('aria-selected', String(on));
+        tab.classList.toggle('active', on);
+      }
+      const work = !!this.workAgent();
+      this.list.hidden = work;
+      this.workList.hidden = !work;
+      this.main.classList.toggle('corral-at-work', work);
+    }
+    setMode(mode) {
+      this.dmMode = mode;
+      storage.write(MODE, mode);
+      this.layoutMode();
+      if (mode === 'work') this.loadWork();
+      else this.pin();
+    }
+    async loadWork() {
+      const agent = this.workAgent();
+      if (!agent) return;
+      try {
+        const { items } = await request(`/agents/${encodeURIComponent(agent)}/recent`);
+        if (this.workAgent() !== agent) return;
+        this.recent = items;
+        this.workError = '';
+      } catch (e) {
+        this.workError = e.message;
+      }
+      this.renderWork();
+    }
+    workLater() {
+      clearTimeout(this.workTimer);
+      this.workTimer = setTimeout(() => this.loadWork(), 300);
+    }
+    // What the agent is doing now, in any place: turns under way, then work left running; then its
+    // latest message in each place it has written, newest first. A row opens its place.
+    renderWork() {
+      const agent = this.workAgent();
+      if (!agent) return;
+      const where = (conversation, thread) => {
+        const c = this.conversation(conversation);
+        return c ? (thread ? 'Thread in ' : '') + this.label(c) : 'removed';
+      };
+      const row = (place, item, first, second, at, live) => {
+        const r = button('', () => this.goTo(item, item.message?.id), 'corral-activity-row');
+        r.setAttribute('role', 'listitem');
+        const head = node('div', 'corral-activity-place');
+        head.append(node('span', 'corral-row-name', place));
+        if (at) head.append(node('time', '', when(at)));
+        if (live) head.append(dot(live === 'background'));
+        const text = node('span', 'corral-row-text');
+        text.append(head);
+        if (first) text.append(node('span', 'corral-activity-root', first));
+        text.append(node('span', 'corral-activity-text', second));
+        r.append(text);
+        return r;
+      };
+      const rows = [node('h3', 'corral-work-heading', 'Now')];
+      const mine = map =>
+        [...map.entries()]
+          .map(([k, value]) => [...k.split(' '), value])
+          .filter(([, a]) => a === agent);
+      const busy = mine(this.working);
+      const left = mine(this.background);
+      for (const [c, , t, status] of busy)
+        rows.push(
+          row(
+            where(c, t),
+            { conversation: c, thread: t },
+            '',
+            status === 'thinking' ? 'Thinking…' : status,
+            '',
+            'turn'
+          )
+        );
+      for (const [c, , t, command] of left)
+        rows.push(
+          row(
+            where(c, t),
+            { conversation: c, thread: t },
+            '',
+            'In the background: ' + command,
+            '',
+            'background'
+          )
+        );
+      if (!busy.length && !left.length) rows.push(node('p', 'corral-empty', 'Nothing under way.'));
+      rows.push(node('h3', 'corral-work-heading', 'Latest everywhere'));
+      for (const item of this.recent) {
+        if (!this.conversation(item.conversation)) continue;
+        rows.push(
+          row(
+            where(item.conversation, item.thread),
+            item,
+            item.root ? `${this.author(item.root.author)}: ${item.root.text}` : '',
+            item.message.text,
+            item.message.ts
+          )
+        );
+      }
+      if (!this.recent.length)
+        rows.push(node('p', 'corral-empty', this.workError || 'It has not written anywhere yet.'));
+      this.workList.replaceChildren(...rows);
     }
     renderHeader() {
       const c = this.conversation(this.openId);
@@ -1537,6 +1687,7 @@
       this.cycle = null;
       // What you send is what you want to see.
       this.pinned = true;
+      if (this.workAgent()) this.setMode('messages');
       const thread = this.threadId || '';
       return request(`/conversations/${encodeURIComponent(id)}/messages`, { text, thread }).then(
         message => {

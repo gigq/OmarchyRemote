@@ -1740,6 +1740,7 @@ pub fn router<S: Clone + std::marker::Send + Sync + 'static>(corral: Corral) -> 
         .route("/", get(overview))
         .route("/agents", post(create_agent))
         .route("/agents/{id}", post(update_agent))
+        .route("/agents/{id}/recent", get(recent))
         .route("/agents/{id}/delete", post(delete_agent))
         .route("/agents/{id}/avatar", get(picture))
         .route("/channels", post(create_channel))
@@ -2473,6 +2474,51 @@ pub async fn renders(State(corral): State<Corral>) -> Json<Value> {
     let mut machines = vec![json!({"name": corral.name, "online": true, "queue": local})];
     machines.extend(corral.host_queues().await);
     Json(json!({"machines": machines}))
+}
+/// An agent's latest message in each place it has written, newest first: where it has been working
+/// and what it last said there, wherever that is.
+fn recent_of(state: &Workspace, agent: &str) -> Vec<Value> {
+    let brief = |m: &Message| json!({"id": m.id, "ts": m.ts, "author": m.author, "text": clip(&m.text, 300)});
+    let mut items: Vec<(String, Value)> = Vec::new();
+    for (id, messages) in &state.messages {
+        if !state.conversations.contains_key(id) {
+            continue;
+        }
+        let mut latest: HashMap<&str, &Message> = HashMap::new();
+        for m in messages
+            .iter()
+            .filter(|m| m.author == agent && m.reacts.is_empty())
+        {
+            latest.insert(m.thread.as_str(), m);
+        }
+        for (thread, last) in latest {
+            let root = (!thread.is_empty())
+                .then(|| messages.iter().find(|r| r.id == thread))
+                .flatten();
+            items.push((
+                last.ts.clone(),
+                json!({
+                    "conversation": id,
+                    "thread": thread,
+                    "message": brief(last),
+                    "root": root.map(brief),
+                }),
+            ));
+        }
+    }
+    items.sort_by(|a, b| b.0.cmp(&a.0));
+    items.truncate(ACTIVITY);
+    items.into_iter().map(|(_, v)| v).collect()
+}
+pub async fn recent(
+    State(corral): State<Corral>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let state = corral.state.lock().unwrap();
+    if !state.agents.contains_key(&id) {
+        return Err(not_found());
+    }
+    Ok(Json(json!({"items": recent_of(&state, &id)})))
 }
 pub async fn activity(State(corral): State<Corral>) -> Json<Value> {
     Json(json!({"items": activity_of(&corral.state.lock().unwrap())}))
@@ -3992,6 +4038,45 @@ mod tests {
         let items = activity_of(&corral.state.lock().unwrap());
         assert_eq!(items.len(), 2);
         assert_eq!(items[0]["message"]["text"], "and the fourth?");
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn an_agents_recent_work_is_its_latest_message_in_each_place() {
+        let (corral, root) = corral();
+        let alex = agent(&corral, "alex");
+        let sam = agent(&corral, "sam");
+        let talk = channel(&corral, "infra", vec![alex.id.clone(), sam.id.clone()]);
+        let mut asked = message(YOU, "@alex certs?", 0);
+        asked.ts = "2026-10-29T10:00:00.000Z".into();
+        let mut first = message(&alex.id, "Looking.", 1);
+        first.ts = "2026-10-29T10:01:00.000Z".into();
+        let mut answered = message(&alex.id, "Renewed.", 1);
+        answered.ts = "2026-10-29T10:02:00.000Z".into();
+        let mut threaded = reply(&alex.id, "Details: all three.", &asked.id);
+        threaded.ts = "2026-10-29T10:05:00.000Z".into();
+        let mut later = reply(&sam.id, "Thanks.", &asked.id);
+        later.ts = "2026-10-29T10:06:00.000Z".into();
+        let mut eyes = message(&alex.id, "👀 (on it)", 0);
+        eyes.reacts = asked.id.clone();
+        eyes.ts = "2026-10-29T10:07:00.000Z".into();
+        corral.state.lock().unwrap().messages.insert(
+            talk.id.clone(),
+            vec![
+                asked.clone(),
+                first,
+                answered.clone(),
+                threaded,
+                later,
+                eyes,
+            ],
+        );
+        let items = recent_of(&corral.state.lock().unwrap(), &alex.id);
+        // Its own latest in each place, not others' after it, and not its reactions.
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0]["thread"], json!(asked.id));
+        assert_eq!(items[0]["message"]["text"], "Details: all three.");
+        assert_eq!(items[0]["root"]["text"], "@alex certs?");
+        assert_eq!(items[1]["message"]["id"], json!(answered.id));
         fs::remove_dir_all(root).unwrap();
     }
     #[test]

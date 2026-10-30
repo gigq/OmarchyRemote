@@ -678,6 +678,35 @@
   background: color-mix(in srgb, var(--theme-accent) 22%, transparent);
   color: var(--theme-foreground);
 }
+.corral-modes {
+  flex: none;
+  padding: 0 12px 6px;
+}
+.corral-modes[hidden],
+.corral-work[hidden],
+.corral-messages[hidden] {
+  display: none;
+}
+.corral-at-work .corral-working {
+  display: none;
+}
+.corral-work {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 8px 12px;
+}
+.corral-work-heading {
+  margin: 12px 8px 4px;
+  color: var(--theme-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 .corral-search {
   flex: none;
   box-sizing: border-box;
