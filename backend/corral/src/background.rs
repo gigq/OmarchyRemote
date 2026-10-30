@@ -7,8 +7,8 @@
 //! wakes it there, to see how it went and tell the person. What is running is kept in
 //! `background.json`, so work that ends while Corral is restarting still wakes its agent.
 //!
-//! On a systemd host each turn runs in a scope of its own, so that work is not stopped with the
-//! service when it restarts. Processes are found through `/proc`, so this is Linux's for now.
+//! On a systemd host each turn runs in a scope of its own, in Corral's slice, so that work is not
+//! stopped with the service when it restarts, and all of it yields to the rest of the machine. Processes are found through `/proc`, so this is Linux's for now.
 use super::*;
 
 /// How often running processes are looked through.
@@ -26,13 +26,24 @@ fn untag(value: &str) -> Option<TurnKey> {
         parts.next()?.to_owned(),
     ))
 }
+/// The slice every turn's scope is in, so that all agents' work, queued or not, yields to the
+/// rest of the machine (and stays within a cap, if the host sets one): `deploy/corral.slice`.
+pub(crate) const SLICE: &str = "--slice=corral.slice";
 /// Whether turns can run in scopes of their own: a Linux host whose user systemd answers.
 pub(crate) fn scoped() -> bool {
     static SCOPED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *SCOPED.get_or_init(|| {
         cfg!(target_os = "linux")
             && std::process::Command::new("systemd-run")
-                .args(["--user", "--scope", "--quiet", "--collect", "--", "true"])
+                .args([
+                    "--user",
+                    "--scope",
+                    "--quiet",
+                    "--collect",
+                    SLICE,
+                    "--",
+                    "true",
+                ])
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())

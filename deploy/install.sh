@@ -23,6 +23,8 @@ for unit in omarchy-remote.service omarchy-remote-dev.service; do
   sed -e "s|@REPO@|$repo|g" -e "s|@NODE@|$node|g" "$repo/deploy/$unit" > "$target/$unit"
 done
 echo "Wrote $target/omarchy-remote.service and $target/omarchy-remote-dev.service"
+# Corral's agents run in this slice, at a lower priority than the rest of the machine.
+cp "$repo/deploy/corral.slice" "$target/corral.slice"
 if [ "${1:-}" = "--no-enable" ]; then
   exit 0
 fi

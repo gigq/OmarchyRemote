@@ -98,6 +98,11 @@ agents. On Linux each job is held to its own whole cores, from the top down, and
 priority, so a job that starts more threads than it asked for slows only itself; elsewhere the
 budget alone holds.
 
+On a systemd host Corral starts each agent turn in its own scope in `corral.slice`
+(`deploy/corral.slice`, which `deploy/install.sh` installs), so everything agents run, queued or
+not, yields to the rest of the machine; a drop-in caps it, as tars's
+`~/.config/systemd/user/corral.slice.d/budget.conf` (`CPUQuota=2400%`) does at 24 processors.
+
 Each job is a ticket in the queue's folder (the system's temporary folder, `render-queue`):
 `<id>.json` says what it is and `<id>.lock` is held by the job while it lives, so a job that ends
 or dies leaves the queue with no daemon to tell. Jobs started under the queue's predecessor, which

@@ -1,0 +1,11 @@
+# Everything Corral's agents run: each turn's own scope, and whatever the turn leaves running, as
+# a render started in the background. It yields to everything else on the machine, the person's
+# desktop and shells and Corral itself, and a drop-in can cap it, such as
+#   ~/.config/systemd/user/corral.slice.d/budget.conf:  [Slice]  CPUQuota=2400%
+# for 24 processors' worth on a 32-thread machine.
+[Unit]
+Description=Corral agents' turns and their work
+
+[Slice]
+CPUWeight=20
+IOWeight=20

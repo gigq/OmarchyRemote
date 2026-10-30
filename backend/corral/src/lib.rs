@@ -1201,8 +1201,15 @@ impl Corral {
         // background outlives the service that started it, as when the service restarts.
         let mut command_line = if background::scoped() {
             let mut c = Command::new("systemd-run");
-            c.args(["--user", "--scope", "--quiet", "--collect", "--"])
-                .arg(&program);
+            c.args([
+                "--user",
+                "--scope",
+                "--quiet",
+                "--collect",
+                background::SLICE,
+                "--",
+            ])
+            .arg(&program);
             c
         } else {
             Command::new(&program)
