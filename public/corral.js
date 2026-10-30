@@ -931,9 +931,18 @@
             ),
             node('time', '', `${job.cores} cores${job.gpu ? ' + GPU' : ''}`)
           );
+          // A piece of a split render says so, rather than looking like a job of its own.
+          const label = job.label || '';
+          const split = (this.splits || []).find(
+            s => s.place === job.place && (label === s.label || label.startsWith(s.label + ' · '))
+          );
+          const piece = split
+            ? 'Part of the split above'
+            : / · (frames \d+–\d+|piece \d+|mix)$/.test(label)
+              ? 'Part of a split render'
+              : '';
           // How far along, when its log says.
           const p = job.running && job.progress;
-          if (p) place.firstChild.textContent += ` · about ${span(p.left)} left`;
           const text = node('span', 'corral-row-text');
           text.append(place);
           if (p) text.append(progressBar(p.done));
@@ -941,9 +950,10 @@
             node(
               'span',
               'corral-activity-text',
-              `${who}: ${job.label || job.command}${p ? ' · ' + p.counted : ''}`
+              `${who}: ${job.label || job.command}${p ? ` · ${p.counted} · about ${span(p.left)} left` : ''}`
             )
           );
+          if (piece) text.append(node('span', 'corral-row-status corral-piece', piece));
           if (job.running) row.append(dot());
           else row.append(dot(true));
           row.append(text);

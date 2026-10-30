@@ -1163,6 +1163,24 @@ test("Renders shows each machine's queue, and a job opens where it was started",
               started: '',
               command: 'blender -b scene.blend -a',
             }),
+            // Pieces of splits: the one listed above, and an older one.
+            job({
+              running: true,
+              position: 0,
+              cores: 4,
+              started: iso(60),
+              since: iso(60),
+              label: 'Gulp final · frames 1–213',
+              place: `${INFRA}\t${ALEX}\t`,
+            }),
+            job({
+              running: true,
+              position: 0,
+              cores: 4,
+              started: iso(60),
+              since: iso(60),
+              label: 'Wheels · frames 2143–2918',
+            }),
           ],
         },
       },
@@ -1194,14 +1212,16 @@ test("Renders shows each machine's queue, and a job opens where it was started",
   const list = app.getByRole('list', { name: 'Render queues' });
   await expect(list.locator('.corral-render-machine')).toHaveText([
     'Split across the farm',
-    /tars\s*10 of 24 cores · GPU 0 of 2/,
+    /tars\s*18 of 24 cores · GPU 0 of 2/,
     /winbox\s*not reachable/,
   ]);
   await expect(list.getByRole('listitem')).toHaveText([
     /About 42 min left\s*3 of 12 pieces\s*@alex: Gulp final · running 25 min/,
     /Estimating time left…\s*0 of 8 pieces\s*wound-up: Drumbeat · running 1 min/,
-    /Running 12 min · about 36 min left\s*6 cores\s*@alex: 4K recut · 1:15 of 5:00/,
+    /Running 12 min\s*6 cores\s*@alex: 4K recut · 1:15 of 5:00 · about 36 min left/,
     /#1 · waiting 2 min\s*8 cores \+ GPU\s*infra: blender -b scene.blend -a/,
+    /@alex: Gulp final · frames 1–213Part of the split above/,
+    /infra: Wheels · frames 2143–2918Part of a split render/,
   ]);
   await expect(list.locator('.corral-busy.background')).toHaveCount(1);
   await page.screenshot({ path: 'artifacts/browser/corral-renders.png' });
