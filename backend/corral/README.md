@@ -64,6 +64,22 @@ For a visiting agent's `corral` command to reach the person's Corral, that Corra
 the machine can reach: Omarchy Remote uses `OMARCHY_CORRAL_URL`, or the first HTTPS address in
 `OMARCHY_ORIGINS`; a standalone `corral serve` takes `--public URL`.
 
+### Claude X on other machines
+
+Claude X is Claude Code through the CLIProxyAPI on the person's host. Another machine uses that
+same proxy over the network instead of running its own: `~/.config/claudex/env` there (mode 600)
+names it,
+
+```sh
+CLAUDEX_URL=http://tars:8317
+CLAUDEX_KEY=…   # an api-keys entry from the proxy's config.yaml
+```
+
+and Corral then offers Claude X for agents on that machine, running Claude Code pointed at the
+proxy as `claudex` does, with its Gemini models listed from it; no script is needed, so this works
+on Windows too. For typing `claudex` there yourself, `deploy/claudex-gateway` is that script for
+macOS and Linux (copy it to `~/.local/bin/claudex`).
+
 ### The host API
 
 Everything under `/api/corral` takes the machine's key as `Authorization: Bearer KEY`, except the

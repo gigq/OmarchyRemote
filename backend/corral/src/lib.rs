@@ -144,6 +144,45 @@ const ENGINES: [(&str, &str, &str); 3] = [
     ("claude", "Claude", "claude"),
     ("codex", "Codex", "codex"),
 ];
+/// Claude X on a machine without the proxy: `~/.config/claudex/env` names the proxy to use
+/// over the network, `CLAUDEX_URL=http://tars:8317` and `CLAUDEX_KEY=…`; Claude Code then runs
+/// through it as `claudex` does on the proxy's own host.
+fn claudex_gateway() -> Option<(String, String)> {
+    let text = fs::read_to_string(home_dir()?.join(".config/claudex/env")).ok()?;
+    let value = |name: &str| {
+        text.lines()
+            .filter_map(|l| l.trim().strip_prefix(name)?.strip_prefix('='))
+            .map(|v| v.trim().trim_matches('"').to_owned())
+            .find(|v| !v.is_empty())
+    };
+    Some((value("CLAUDEX_URL")?, value("CLAUDEX_KEY")?))
+}
+/// The proxy Claude X goes through, and its key: the gateway named, or this host's own.
+fn claudex_proxy() -> Option<(String, String)> {
+    claudex_gateway().or_else(|| {
+        let config = fs::read_to_string(home_dir()?.join(".cli-proxy-api/config.yaml")).ok()?;
+        let key = regex::Regex::new(r#"- "([a-f0-9]+)""#)
+            .unwrap()
+            .captures(&config)?[1]
+            .to_owned();
+        Some(("http://127.0.0.1:8317".into(), key))
+    })
+}
+/// The program an engine runs: its own (`claudex`), or for Claude X through a gateway, Claude
+/// Code itself, which the turn points at the gateway.
+fn engine_program(engine: &str) -> anyhow::Result<PathBuf> {
+    let command = ENGINES
+        .iter()
+        .find(|(id, _, _)| *id == engine)
+        .map_or("claude", |(_, _, c)| *c);
+    program(command).or_else(|e| {
+        if engine == "claudex" && claudex_gateway().is_some() {
+            program("claude")
+        } else {
+            Err(e)
+        }
+    })
+}
 const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
 const CODEX_EFFORTS: [&str; 4] = ["low", "medium", "high", "xhigh"];
 /// Handles that mean something else in a message, so no agent can have them.
@@ -953,11 +992,7 @@ impl Corral {
             return models;
         }
         let models = async {
-            let config = fs::read_to_string(home_dir()?.join(".cli-proxy-api/config.yaml")).ok()?;
-            let key = regex::Regex::new(r#"- "([a-f0-9]+)""#)
-                .unwrap()
-                .captures(&config)?[1]
-                .to_owned();
+            let (url, key) = claudex_proxy()?;
             let mut child = Command::new("curl")
                 .args([
                     "-s",
@@ -965,7 +1000,7 @@ impl Corral {
                     "5",
                     "-H",
                     "@-",
-                    "http://127.0.0.1:8317/v1/models",
+                    &format!("{}/v1/models", url.trim_end_matches('/')),
                 ])
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
@@ -1006,8 +1041,8 @@ impl Corral {
         ];
         let gemini = self.proxy_models().await;
         let mut out = Vec::new();
-        for (id, label, command) in ENGINES {
-            if program(command).is_err() {
+        for (id, label, _) in ENGINES {
+            if engine_program(id).is_err() {
                 continue;
             }
             let models: Vec<Value> = match id {
@@ -1281,7 +1316,11 @@ impl Corral {
             .iter()
             .find(|(id, _, _)| *id == agent.engine)
             .map_or("claude", |(_, _, c)| *c);
-        let program = program(command).map_err(|e| e.to_string())?;
+        // Claude X with no `claudex` here: Claude Code, pointed at the gateway as `claudex` does.
+        let gateway = (agent.engine == "claudex" && program("claudex").is_err())
+            .then(claudex_gateway)
+            .flatten();
+        let program = engine_program(&agent.engine).map_err(|e| e.to_string())?;
         let mut args: Vec<String> = Vec::new();
         let mut input = prompt.to_owned();
         let mut session = seat.session.clone();
@@ -1324,6 +1363,12 @@ impl Corral {
                 .map(String::from),
             );
             args.extend(["--append-system-prompt".into(), brief]);
+            if gateway.is_some() {
+                args.extend([
+                    "--settings".into(),
+                    r#"{"env":{"CLAUDE_CODE_AUTO_COMPACT_WINDOW":"990000"}}"#.into(),
+                ]);
+            }
             if !agent.model.is_empty() {
                 args.extend(["--model".into(), agent.model.clone()]);
             }
@@ -1391,6 +1436,16 @@ impl Corral {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
+        if let Some((url, key)) = &gateway {
+            command_line
+                .env("ANTHROPIC_BASE_URL", url)
+                .env("ANTHROPIC_AUTH_TOKEN", key)
+                .env("CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY", "1")
+                .env("CLAUDE_CODE_ALWAYS_ENABLE_EFFORT", "1")
+                .env("ENABLE_TOOL_SEARCH", "true")
+                .env("ENABLE_PROMPT_CACHING_1H", "1")
+                .env("API_TIMEOUT_MS", "3000000");
+        }
         #[cfg(unix)]
         command_line.process_group(0);
         let mut child = command_line
