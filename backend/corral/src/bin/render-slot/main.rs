@@ -1,5 +1,6 @@
 //! `render-slot`: runs a heavy job (a Blender render, an ffmpeg encode or upscale, a headless
 //! Chrome render, Whisper) when this machine's render queue gives it a turn, and shows the queue.
+mod blender;
 mod split;
 
 use corral::queue;
@@ -114,6 +115,11 @@ fn run(args: &[String]) -> ExitCode {
     } else if let Some(render) = split::render(command, &label) {
         // A whole video from a renderer that can render any stretch: across the farm.
         return split::run(render);
+    } else if let Some(job) = blender::job(command, &label) {
+        // A Blender script's frames: across one group of the farm, unless it runs here.
+        if let Some(code) = blender::run(job) {
+            return code;
+        }
     }
     let place = match queue::take(queue::ticket(command, &label, cores, gpu), |ahead| {
         queue::say(&format!("waiting: {ahead} in line before this job"));

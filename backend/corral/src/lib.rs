@@ -1683,6 +1683,13 @@ pub fn router<S: Clone + std::marker::Send + Sync + 'static>(corral: Corral) -> 
         .route("/farm/jobs/{id}", get(farm::job_status))
         .route("/farm/jobs/{id}/delete", post(farm::delete_job))
         .route("/farm/tidy", post(farm::tidy))
+        .route("/farm/sync/plan", post(farm::sync_plan))
+        .route(
+            "/farm/sync/files",
+            post(farm::sync_files).layer(axum::extract::DefaultBodyLimit::disable()),
+        )
+        .route("/farm/changed", get(farm::changed))
+        .route("/farm/fetch", post(farm::fetch))
         .route("/farm/jobs/{id}/stop", post(farm::stop_job))
         .route("/farm/list", get(farm::list))
         .route("/ws", get(upgrade))

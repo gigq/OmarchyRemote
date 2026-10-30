@@ -110,30 +110,32 @@ pub(crate) fn render(command: &[String], label: &str) -> Option<Render> {
 
 /// A place a piece can run, and how many it runs at once.
 #[derive(Clone)]
-enum Place {
+pub(crate) enum Place {
     Here,
     Mac(Machine),
 }
 impl Place {
-    fn name(&self) -> String {
+    pub fn name(&self) -> String {
         match self {
             Place::Here => here(),
             Place::Mac(m) => m.name.clone(),
         }
     }
 }
-/// A stretch of the video, in seconds; the last runs to the end.
+/// A stretch of a render: seconds of a video, the last running to the end, or frames.
 #[derive(Clone)]
-struct Piece {
-    n: usize,
-    from: u64,
-    to: Option<u64>,
+pub(crate) struct Piece {
+    pub n: usize,
+    pub from: u64,
+    pub to: Option<u64>,
+    pub frames: bool,
 }
 impl Piece {
-    fn span(&self) -> String {
-        match self.to {
-            Some(to) => format!("{}–{} s", self.from, to),
-            None => format!("{} s–end", self.from),
+    pub fn span(&self) -> String {
+        match (self.to, self.frames) {
+            (Some(to), true) => format!("frames {}–{}", self.from, to),
+            (Some(to), false) => format!("{}–{} s", self.from, to),
+            (None, _) => format!("{} s–end", self.from),
         }
     }
 }
@@ -146,6 +148,7 @@ fn cut(duration: f64, count: usize) -> Vec<Piece> {
             n,
             from: (duration * n as f64 / count as f64).round() as u64,
             to: (n + 1 < count).then(|| (duration * (n + 1) as f64 / count as f64).round() as u64),
+            frames: false,
         })
         .collect()
 }
@@ -269,20 +272,12 @@ pub(crate) fn run(render: Render) -> ExitCode {
     // Each machine takes the next piece whenever it has room; one that fails on a Mac runs here.
     // Once none is left, an idle Mac takes a copy of the oldest piece still under way elsewhere,
     // and whichever copy finishes first is used, so one slow machine does not hold up the rest.
-    let board = Arc::new(Mutex::new(Board {
-        all: pieces.clone(),
-        todo: pieces.clone(),
-        ..Board::default()
-    }));
-    std::thread::scope(|scope| {
-        for (place, room) in &ready {
-            for _ in 0..*room {
-                let board = board.clone();
-                let (render, rel, pieces_dir) = (&render, &rel, &pieces_dir);
-                scope.spawn(move || work(&board, place, render, rel, pieces_dir, count));
-            }
-        }
-    });
+    let board = Arc::new(Mutex::new(Board::new(pieces.clone())));
+    let run = |place: &Place, piece: &Piece, stop: &std::sync::atomic::AtomicBool| match place {
+        Place::Here => piece_here(&render, piece, &pieces_dir, stop),
+        Place::Mac(m) => piece_there(m, &render, &rel, piece, &pieces_dir, stop),
+    };
+    schedule(&board, &ready, count, &run);
     let mut board = std::mem::take(&mut *board.lock().unwrap());
     if let Some(e) = board.broken.take() {
         let _ = std::fs::remove_dir_all(&pieces_dir);
@@ -356,15 +351,38 @@ pub(crate) fn run(render: Render) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// How a piece runs on a place, as a kind of render does it: what it made, or why not.
+pub(crate) type Runner<'a> =
+    dyn Fn(&Place, &Piece, &std::sync::atomic::AtomicBool) -> Result<PathBuf, String> + Sync + 'a;
+/// Runs the pieces on `ready`'s places, each taking the next as it has room.
+pub(crate) fn schedule(board: &Mutex<Board>, ready: &[(Place, usize)], count: usize, run: &Runner) {
+    std::thread::scope(|scope| {
+        for (place, room) in ready {
+            for _ in 0..*room {
+                scope.spawn(move || work(board, place, count, run));
+            }
+        }
+    });
+}
 /// Who is doing what: the pieces waiting, those under way, and those done.
 #[derive(Default)]
-struct Board {
-    /// Every piece, as the video was cut.
-    all: Vec<Piece>,
-    todo: Vec<Piece>,
+pub(crate) struct Board {
+    /// Every piece, as the render was cut.
+    pub all: Vec<Piece>,
+    pub todo: Vec<Piece>,
     running: Vec<Running>,
-    done: Vec<(usize, PathBuf, String)>,
-    broken: Option<String>,
+    pub done: Vec<(usize, PathBuf, String)>,
+    pub broken: Option<String>,
+}
+impl Board {
+    /// A board with every piece waiting.
+    pub fn new(pieces: Vec<Piece>) -> Board {
+        Board {
+            all: pieces.clone(),
+            todo: pieces,
+            ..Board::default()
+        }
+    }
 }
 /// A copy of a piece under way: where, since when, and a flag that stops it.
 struct Running {
@@ -375,14 +393,7 @@ struct Running {
 }
 /// One of a machine's places for pieces: takes the next piece, or a copy of a slow one, until
 /// every piece is done.
-fn work(
-    board: &Mutex<Board>,
-    place: &Place,
-    render: &Render,
-    rel: &str,
-    pieces: &Path,
-    count: usize,
-) {
+fn work(board: &Mutex<Board>, place: &Place, count: usize, run: &Runner) {
     use std::sync::atomic::{AtomicBool, Ordering};
     let name = place.name();
     let mac = matches!(place, Place::Mac(_));
@@ -421,16 +432,15 @@ fn work(
             continue;
         };
         let began = Instant::now();
-        let result = match place {
-            Place::Here => piece_here(render, &piece, pieces, &stop),
-            Place::Mac(m) => piece_there(m, render, rel, &piece, pieces, &stop),
-        };
+        let result = run(place, &piece, &stop);
         let mut b = board.lock().unwrap();
         b.running.retain(|r| !(r.n == piece.n && r.place == name));
         let others = b.running.iter().filter(|r| r.n == piece.n).count();
         match result {
             Ok(file) if b.done.iter().any(|(n, _, _)| *n == piece.n) => {
-                let _ = std::fs::remove_file(file);
+                // A file of a piece, or a folder of its frames.
+                let _ = std::fs::remove_file(&file);
+                let _ = std::fs::remove_dir_all(&file);
             }
             Ok(file) => {
                 queue::say(&format!(
@@ -453,9 +463,8 @@ fn work(
             Err(_) if others > 0 => {}
             Err(e) if mac => {
                 queue::say(&format!(
-                    "piece {} failed on {name} ({e}); it runs on {} instead, and {name} takes no more",
-                    piece.n + 1,
-                    here()
+                    "piece {} failed on {name} ({e}); it goes back in line, and {name} takes no more",
+                    piece.n + 1
                 ));
                 b.todo.insert(0, piece);
                 return;

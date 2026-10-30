@@ -160,3 +160,21 @@ by `render-slot` itself, with nothing asked of whoever runs it:
 macOS and Linux Chrome draw a frame alike except for text anti-aliasing (a 340 s test: 99.9% of
 pixels identical, the rest at glyph edges), so text held across a seam may change by a shade for
 one frame. Seams fall on whole seconds. `RENDER_SPLIT=0` renders whole, here.
+
+A Blender render of a frame range (`blender … -P script.py -- … --frames A-B`, at least 16
+frames) is spread the same way, but never across two kinds of GPU, since Eevee and Cycles do not
+draw quite alike on each:
+
+1. The machines form groups: gerty alone (CUDA/OptiX), the Macs together (Metal, all on the same
+   Blender), and tars alone. A script that names `OPTIX` or `CUDA` renders on gerty only;
+   `METAL`, on the Macs only; `HIP`, on tars only. Otherwise gerty goes first when its GPU seat is
+   free, then the Macs, then tars.
+2. The project (the folder above with `AGENTS.md`) is synced to each machine of the group,
+   only the files that changed, without its renders, videos, `.git/`, or caches, and the frames
+   are cut into ranges, about twice as many as machines. Each range runs in that machine's copy,
+   with the GPU set up for it and `--python-exit-code 1`, so a script that raises fails the
+   range.
+3. What a range made (every file that changed in the copy while it ran) comes back into the
+   project, where Blender would have written it. A group that renders nothing (a script that
+   does not run on Windows, say) gives the whole job to the next group, which cuts it for its
+   own machines; ranges no group could render run here.

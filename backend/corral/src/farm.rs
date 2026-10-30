@@ -23,8 +23,8 @@ fn root() -> anyhow::Result<PathBuf> {
 fn projects() -> anyhow::Result<PathBuf> {
     Ok(root()?.join("projects"))
 }
-/// A path inside the farm's project copies, or why not.
-fn project(dir: &str) -> Result<PathBuf, ApiError> {
+/// A path inside the farm's project copies, which need not exist yet, or why not.
+fn project_path(dir: &str) -> Result<PathBuf, ApiError> {
     let relative = FsPath::new(dir);
     if dir.is_empty()
         || relative.is_absolute()
@@ -34,7 +34,11 @@ fn project(dir: &str) -> Result<PathBuf, ApiError> {
     {
         return Err(refuse(StatusCode::BAD_REQUEST, "Not a project folder"));
     }
-    let path = projects().map_err(error)?.join(relative);
+    Ok(projects().map_err(error)?.join(relative))
+}
+/// A path inside the farm's project copies, or why not.
+fn project(dir: &str) -> Result<PathBuf, ApiError> {
+    let path = project_path(dir)?;
     if !path.is_dir() {
         return Err(refuse(
             StatusCode::NOT_FOUND,
@@ -110,6 +114,8 @@ async fn tar(dir: &FsPath, args: &[&str]) -> std::io::Result<tokio::process::Chi
     // macOS's tar would add its file attributes, which other systems' tar warn about.
     if cfg!(target_os = "macos") && args.first() == Some(&"-cf") {
         command.arg("--no-xattrs");
+        // Nor its `._` files beside each one.
+        command.env("COPYFILE_DISABLE", "1");
     }
     command
         .args(args)
@@ -342,6 +348,111 @@ pub async fn list(Query(query): Query<Listing>) -> Result<Json<Value>, ApiError>
         })
         .collect();
     Ok(Json(json!({"files": files})))
+}
+#[derive(Deserialize)]
+pub struct Plan {
+    dir: String,
+    /// Each file the sender has: its path in the project, size, and when it changed (seconds).
+    files: Vec<(String, u64, u64)>,
+}
+fn modified(meta: &fs::Metadata) -> u64 {
+    meta.modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |d| d.as_secs())
+}
+/// Which of the sender's files this machine's copy of a project lacks or has another version of,
+/// so only those are sent. Makes the copy's folder if it has none.
+pub async fn sync_plan(Json(plan): Json<Plan>) -> Result<Json<Value>, ApiError> {
+    let dir = project_path(&plan.dir)?;
+    fs::create_dir_all(&dir).map_err(error)?;
+    let _ = fs::write(dir.join(".farm-used"), crate::now());
+    let need: Vec<&str> = plan
+        .files
+        .iter()
+        .filter(|(path, size, changed)| {
+            let outside =
+                path.split(['/', '\\']).any(|p| p == "..") || FsPath::new(path).is_absolute();
+            let same = fs::metadata(dir.join(path))
+                .is_ok_and(|m| m.len() == *size && modified(&m).abs_diff(*changed) <= 1);
+            !outside && !same
+        })
+        .map(|(path, _, _)| path.as_str())
+        .collect();
+    Ok(Json(json!({"need": need})))
+}
+#[derive(Deserialize)]
+pub struct Dir {
+    dir: String,
+}
+/// Files into a project copy, as a tar stream, which keeps when each changed.
+pub async fn sync_files(Query(query): Query<Dir>, body: Body) -> Result<Json<Value>, ApiError> {
+    let dir = project_path(&query.dir)?;
+    fs::create_dir_all(&dir).map_err(error)?;
+    let mut child = tar(&dir, &["-xf", "-"]).await.map_err(error)?;
+    let mut stdin = child.stdin.take().ok_or_else(|| error("no input"))?;
+    let mut stream = body.into_data_stream();
+    while let Some(chunk) = stream.next().await {
+        stdin
+            .write_all(&chunk.map_err(error)?)
+            .await
+            .map_err(error)?;
+    }
+    drop(stdin);
+    let out = child.wait_with_output().await.map_err(error)?;
+    if !out.status.success() {
+        return Err(refuse(
+            StatusCode::BAD_REQUEST,
+            &format!(
+                "Could not unpack the files: {}",
+                clip(&String::from_utf8_lossy(&out.stderr), 300)
+            ),
+        ));
+    }
+    Ok(Json(json!({"ok": true})))
+}
+#[derive(Deserialize)]
+pub struct Changed {
+    dir: String,
+    /// The job whose start counts: what changed in the copy since then.
+    job: String,
+}
+/// The files in a project copy that changed since a job started there: what it made.
+pub async fn changed(Query(query): Query<Changed>) -> Result<Json<Value>, ApiError> {
+    let dir = project(&query.dir)?;
+    let since = fs::metadata(folder(&query.job)?.join(".farm").join("pid"))
+        .map(|m| modified(&m))
+        .map_err(|_| not_found())?;
+    let mut found = Vec::new();
+    let mut walk = vec![dir.clone()];
+    while let Some(d) = walk.pop() {
+        for entry in fs::read_dir(&d).into_iter().flatten().flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name == "__pycache__"
+                || name == ".farm-used"
+                || name.ends_with(".pyc")
+                || name.starts_with("._")
+            {
+                continue;
+            }
+            match entry.metadata() {
+                Ok(m) if m.is_dir() => walk.push(path),
+                Ok(m) if modified(&m) >= since => {
+                    if let Ok(rel) = path.strip_prefix(&dir) {
+                        found.push(rel.to_string_lossy().replace('\\', "/"));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    found.sort();
+    Ok(Json(json!({"files": found})))
+}
+/// Files from a project copy, as a tar stream: for lists too long for a query.
+pub async fn fetch(Json(query): Json<Paths>) -> Result<Response, ApiError> {
+    get_files(Path(String::from("fetch")), Query(query)).await
 }
 /// Removes files a split render made in a project copy, once they are back.
 pub async fn tidy(Json(query): Json<Paths>) -> Result<Json<Value>, ApiError> {
