@@ -70,3 +70,11 @@ agent commands must be installed and authenticated on this host; installing a
 launcher does not transfer credentials or conversations from another machine.
 
 Herdr’s folder button uses the OS default file manager when the selected server’s `/api/state` host ID matches the local backend’s `~/.local/share/omarchy-remote/settings.sqlite3`. The database is read-only and never created by the client. Missing identities, remote hosts, non-directory paths, and OS opener failures fall back to the in-app Files view. The `shellFolders` bridge is available only to the trusted host shell, not embedded websites.
+
+## Separate macOS apps
+
+A packaged client can carry `standalone.json` in its Resources directory with `key`, `name`, and `host`. Give each bundle its own app ID and product name when packaging; launching the bundle through macOS then gives it its own menu-bar name, Dock identity, and local profile. Hostnames stay in this untracked packaging configuration. `OMARCHY_STANDALONE_CONFIG` selects a configuration file during development.
+
+Single-app windows on macOS hide the title bar and traffic lights while retaining a movable, resizable native window for accessibility window managers. Drag the top six pixels to move one; ⌘W closes the focused app window and ⌘Q quits that app. Full-shell shortcuts keep their existing behavior. Window titles start with a capital letter. macOS accessibility support is enabled before creating windows.
+
+Theme and wallpaper choices are shared across separately packaged apps for the same host through `Omarchy Remote Appearance` in the user's Application Support directory. Other app state remains in each app's profile. `OMARCHY_APPEARANCE_DIRECTORY` overrides that location for isolated integration tests. Test profiles default to their own appearance directory.

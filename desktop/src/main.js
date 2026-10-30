@@ -25,8 +25,14 @@ import * as launchers from './launchers.js';
 import { Pages, website } from './pages.js';
 import { Store } from './store.js';
 import { windowRequests } from './startup.js';
+import { Appearance } from './appearance.js';
+import { standaloneConfiguration } from './standalone.js';
 import { openHostFolder } from './folders.js';
 
+const standalone = standaloneConfiguration(
+  process.env.OMARCHY_STANDALONE_CONFIG || path.join(process.resourcesPath, 'standalone.json')
+);
+if (standalone) app.setName(standalone.name);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SCHEME = 'omarchy-app';
 const BUNDLE = `${SCHEME}://bundle`;
@@ -82,7 +88,8 @@ class ShellWindow {
       ...(visible ? saved : {}),
       minWidth: 360,
       minHeight: 420,
-      title: 'Omarchy Remote',
+      title: standalone?.name || 'Omarchy Remote',
+      ...(process.platform === 'darwin' && key ? { titleBarStyle: 'hidden' } : {}),
       icon,
       backgroundColor: '#191724',
       autoHideMenuBar: true,
@@ -96,12 +103,24 @@ class ShellWindow {
         spellcheck: true,
       },
     });
+    if (process.platform === 'darwin' && key) this.window.setWindowButtonVisibility(false);
     this.contents = this.window.webContents;
+    this.window.on('focus', () => {
+      const close = Menu.getApplicationMenu()?.getMenuItemById('close-window');
+      if (close) close.enabled = !!key;
+    });
     this.window.once('ready-to-show', () => this.window.show());
     // The full shell is titled by host; an app window takes the app's name from its page.
     this.window.on('page-title-updated', (event, title) => {
       event.preventDefault();
-      if (this.key && origin(this.contents.getURL()) !== BUNDLE) this.window.setTitle(title);
+      if (this.key && origin(this.contents.getURL()) !== BUNDLE)
+        this.window.setTitle(
+          this.key === standalone?.key
+            ? standalone.name
+            : process.platform === 'darwin'
+              ? title.charAt(0).toUpperCase() + title.slice(1)
+              : title
+        );
     });
     this.window.on('close', () => desktopApp.store.saveBounds(key, this.window.getNormalBounds()));
     this.window.on('closed', () => desktopApp.windows.delete(key));
@@ -170,6 +189,12 @@ class ShellWindow {
         this.showPicker(`${new URL(url).host} answered with HTTP ${status}.`);
     });
     contents.on('did-finish-load', () => {
+      if (process.platform === 'darwin' && this.key && this.allowed(contents.getURL()))
+        contents
+          .insertCSS(
+            '.desktop-shell.solo-mode::after { content: \"\"; position: fixed; inset: 0 0 auto; height: 6px; -webkit-app-region: drag; z-index: 2147483647; }'
+          )
+          .catch(() => {});
       if (!this.pickerError || origin(contents.getURL()) !== BUNDLE) return;
       contents
         .executeJavaScript(
@@ -191,12 +216,17 @@ class ShellWindow {
       name: os.hostname(),
       scope,
       hosts: this.desktop.store.directory,
-      snapshot: scope ? this.desktop.store.snapshot(scope) : {},
+      snapshot: scope
+        ? { ...this.desktop.store.snapshot(scope), ...this.desktop.appearance.get(scope) }
+        : {},
+      appearance: this.desktop.appearance.get(scope),
       window: this.key || null,
     };
   }
   async dispatch(channel, body) {
     switch (channel) {
+      case 'shellAppearance':
+        return this.desktop.appearance.set(this.selected, body?.key, body?.value);
       case 'shellStorage':
         return this.desktop.store.saveSnapshot(body?.scope, body?.values);
       case 'shellHosts':
@@ -297,6 +327,18 @@ class DesktopApp {
   constructor(store) {
     this.store = store;
     this.windows = new Map();
+    this.appearance = new Appearance(
+      process.env.OMARCHY_APPEARANCE_DIRECTORY ||
+        (process.env.OMARCHY_USER_DATA
+          ? path.join(app.getPath('userData'), 'appearance')
+          : path.join(app.getPath('appData'), 'Omarchy Remote Appearance')),
+      (scope, values) => {
+        for (const window of this.windows.values())
+          if (window.selected === scope && window.allowed(window.contents.getURL()))
+            window.contents.send('omarchy:appearance', { scope, values });
+      }
+    );
+    app.once('will-quit', () => this.appearance.close());
     this.shellSession = session.fromPartition('persist:shell');
     this.pageSession = session.fromPartition('persist:websites');
     this.serveBundle(this.shellSession);
@@ -439,13 +481,18 @@ function applicationMenu() {
     { role: 'editMenu' },
     {
       label: 'Window',
-      submenu: [{ role: 'minimize' }, { role: 'zoom' }, { role: 'togglefullscreen' }],
+      submenu: [
+        { id: 'close-window', role: 'close', accelerator: 'Command+W', enabled: false },
+        { role: 'minimize' },
+        { role: 'zoom' },
+        { role: 'togglefullscreen' },
+      ],
     },
   ]);
 }
 
 const requestedApp = argv => {
-  const key = argument(argv, 'app') || '';
+  const key = argument(argv, 'app') || standalone?.key || '';
   return !key || launchers.APP_KEY.test(key) ? key : '';
 };
 
@@ -457,9 +504,11 @@ else {
   // Keep launcher requests that arrive while the first client is still starting.
   app.on('second-instance', (event, argv) => requests.request(requestedApp(argv)));
   app.whenReady().then(() => {
+    if (process.platform === 'darwin') app.setAccessibilitySupportEnabled(true);
     Menu.setApplicationMenu(applicationMenu());
     const store = new Store(app.getPath('userData'));
-    const requested = argument(process.argv, 'host') || process.env.OMARCHY_REMOTE_URL;
+    const requested =
+      argument(process.argv, 'host') || process.env.OMARCHY_REMOTE_URL || standalone?.host;
     try {
       store.directory = seed(store.directory, requested);
     } catch (error) {

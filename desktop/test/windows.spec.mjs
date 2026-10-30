@@ -40,7 +40,7 @@ test('--app opens one app in its own window, and launching again adds windows', 
       .poll(() => titles(app))
       .toEqual([
         ['CodexBar', HOST + '/native/?app=codexbar'],
-        ['herdr', HOST + '/native/?app=herdr'],
+        [process.platform === 'darwin' ? 'Herdr' : 'herdr', HOST + '/native/?app=herdr'],
       ]);
 
     // The same app is focused rather than duplicated; the shell bridge opens the full shell too.
@@ -88,7 +88,9 @@ test('Settings adds and removes Linux launcher entries for an app', async ({ pro
     expect(fs.existsSync(file)).toBe(false);
 
     await settings.getByRole('button', { name: 'Open herdr in its own window' }).click();
-    await expect.poll(async () => (await titles(app)).map(([title]) => title)).toContain('herdr');
+    await expect
+      .poll(async () => (await titles(app)).map(([title]) => title))
+      .toContain(process.platform === 'darwin' ? 'Herdr' : 'herdr');
   } finally {
     await app.close();
   }

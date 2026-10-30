@@ -5,7 +5,28 @@ const { contextBridge, ipcRenderer } = require('electron');
 if (window.top === window) {
   // Main returns null unless this frame is the selected host or the bundled host picker.
   const device = ipcRenderer.sendSync('omarchy:device');
-  if (device)
+  if (device) {
+    ipcRenderer.on('omarchy:appearance', (event, update) => {
+      if (update.scope !== device.scope) return;
+      contextBridge.executeInMainWorld({
+        func: values => {
+          for (const [key, value] of Object.entries(values)) {
+            const oldValue = localStorage.getItem(key);
+            if (oldValue === value) continue;
+            localStorage.setItem(key, value);
+            window.dispatchEvent(
+              new StorageEvent('storage', {
+                key,
+                oldValue,
+                newValue: value,
+                storageArea: localStorage,
+              })
+            );
+          }
+        },
+        args: [update.values],
+      });
+    });
     contextBridge.executeInMainWorld({
       func: (device, send) => {
         const request = async (channel, body) => {
@@ -14,6 +35,16 @@ if (window.top === window) {
             throw new Error(value.error);
           return value;
         };
+        // Appearance is shared across app bundles; other local state stays private to each app.
+        for (const [key, value] of Object.entries(device.appearance || {}))
+          try {
+            localStorage.setItem(key, value);
+          } catch {}
+        window.addEventListener('hyprland-storage', event => {
+          const { key, value } = event.detail || {};
+          if (['omarchy-theme', 'omarchy-wallpapers'].includes(key) && typeof value === 'string')
+            request('shellAppearance', { key, value }).catch(() => {});
+        });
         window.__OMARCHY_DEVICE__ = device;
         window.__OMARCHY_PLATFORM__ = 'desktop';
         window.__HYPRLAND_NATIVE__ = true;
@@ -50,4 +81,5 @@ if (window.top === window) {
       },
       args: [device, (channel, body) => ipcRenderer.invoke('omarchy:bridge', channel, body)],
     });
+  }
 }
