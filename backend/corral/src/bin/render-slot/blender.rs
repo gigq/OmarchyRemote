@@ -451,7 +451,7 @@ fn post_file(
     Ok(said)
 }
 /// Brings a machine's copy of the project up to date; returns how many files went.
-fn sync(
+pub(crate) fn sync(
     machine: &Machine,
     root: &Path,
     rel: &str,
@@ -599,19 +599,31 @@ fn range(
     }
     let folder = landing.join(format!("{}-{}", piece.n, uuid::Uuid::new_v4().simple()));
     std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
-    let body = serde_json::json!({"dir": rel_root, "paths": made.join("\n")});
+    if !fetch(machine, rel_root, &made, &folder) {
+        return Err("its files did not come back".into());
+    }
+    Ok(folder)
+}
+
+/// Brings `paths` of a machine's project copy into `folder`, and removes them there.
+pub(crate) fn fetch(machine: &Machine, rel_root: &str, paths: &[String], folder: &Path) -> bool {
+    let body = serde_json::json!({"dir": rel_root, "paths": paths.join("\n")});
     let request = std::env::temp_dir().join(format!(
         "render-slot-{}.json",
         uuid::Uuid::new_v4().simple()
     ));
-    std::fs::write(&request, body.to_string()).map_err(|e| e.to_string())?;
+    if std::fs::write(&request, body.to_string()).is_err() {
+        return false;
+    }
     let data = format!("data-binary = \"@{}\"", request.display());
-    let options = Options::new(
+    let Ok(options) = Options::new(
         machine,
         "/api/corral/farm/fetch",
         &["header = \"Content-Type: application/json\"", &data],
-    )
-    .map_err(|e| e.to_string())?;
+    ) else {
+        let _ = std::fs::remove_file(&request);
+        return false;
+    };
     let fetched = Command::new("curl")
         .arg("--config")
         .arg(&options.0)
@@ -621,7 +633,7 @@ fn range(
             let out = curl.stdout.take().expect("piped");
             let tar = Command::new("tar")
                 .args(["-xf", "-"])
-                .current_dir(&folder)
+                .current_dir(folder)
                 .stdin(out)
                 .status()?;
             Ok(curl.wait()?.success() && tar.success())
@@ -631,12 +643,9 @@ fn range(
     let _ = ask(
         machine,
         "/api/corral/farm/tidy",
-        Some(&serde_json::json!({"dir": rel_root, "paths": made.join("\n")})),
+        Some(&serde_json::json!({"dir": rel_root, "paths": paths.join("\n")})),
     );
-    if !fetched {
-        return Err("its files did not come back".into());
-    }
-    Ok(folder)
+    fetched
 }
 /// Moves what a range made into the project, at the same places; returns how many files.
 fn place_files(folder: &Path, root: &Path) -> usize {

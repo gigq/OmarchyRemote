@@ -424,7 +424,7 @@ struct Running {
 }
 /// One of a machine's places for pieces: takes the next piece, or a copy of a slow one, until
 /// every piece is done.
-fn work(board: &Mutex<Board>, place: &Place, count: usize, run: &Runner) {
+pub(crate) fn work(board: &Mutex<Board>, place: &Place, count: usize, run: &Runner) {
     use std::sync::atomic::{AtomicBool, Ordering};
     let name = place.name();
     let mac = matches!(place, Place::Mac(_));

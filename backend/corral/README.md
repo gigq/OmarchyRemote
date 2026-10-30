@@ -185,9 +185,21 @@ draw quite alike on each:
 
 A documentary's whole picture from Moving Records' editor (`python tools/edit.py <ep>`, a copy in
 each project, which renders any stretch with `--range a,b` to the file `--out` names) is cut on
-whole seconds into pieces of at least 30 s, about twice as many as fit here at once (6 cores
-each), and they run side by side through this machine's queue. Each copy of the editor works out
-its length and file its own way, so `render-slot` asks it: the editor runs inside a small Python
-wrapper until it would start its encoder, and reports its length, frame rate, and file. One that
-ends before then (stills, a sheet, a report) runs as it is. The pieces are joined into that file,
-and each piece and the whole must have exactly the frames the editor would have rendered.
+whole seconds into pieces of at least 30 s, about twice as many as fit at once here (6 cores
+each) and on the Macs, and each machine takes the next piece whenever it has room. Each copy of
+the editor works out its length and file its own way, so `render-slot` asks it: the editor runs
+inside a small Python wrapper until it would start its encoder, and reports its length, frame
+rate, and file. One that ends before then (stills, a sheet, a report) runs as it is. The pieces
+are joined into that file, and each piece and the whole must have exactly the frames the editor
+would have rendered.
+
+The Macs start once they have the episode's files. The wrapper runs the editor over the episode
+with blank footage, a frame every quarter second, and notes every file it opens (clips, stills,
+fonts, timing); those, the editor's `tools/` and the episode's `video/<ep>/` are synced to each
+Mac's project copy, a few hundred megabytes rather than the archive. While a piece renders there,
+the wrapper notes any file it looked for and did not find; one this machine has is sent, and the
+piece runs again. A Mac takes pieces only with the `raqm` tag: its Pillow lays out text with
+libraqm, as tars's does (Homebrew's `libraqm`, found through `DYLD_FALLBACK_LIBRARY_PATH` in the
+settings' `env`); without it captions are spaced differently. With it, a Mac's frames match
+tars's to encoder noise, so a picture's pieces can come from both. Only a render run from the
+project's own folder goes to the Macs.
