@@ -19,6 +19,7 @@
   const MODE = 'omarchy-corral-dm-mode';
   const PANELS = [
     ['activity', 'Activity'],
+    ['pinned', 'Pinned'],
     ['search', 'Search'],
     ['renders', 'Renders'],
   ];
@@ -327,7 +328,14 @@
       this.settingsKey = button('', () => this.editOpen(), 'keycap corral-settings');
       this.settingsKey.textContent = '⋯';
       this.mainPanelKey = this.panelKey();
-      bar.append(this.backKey, titles, this.mainPanelKey, this.settingsKey);
+      // In a thread: pins it, to find again in the details panel's Pinned list.
+      this.pinKey = button(
+        '📌',
+        () => this.togglePin(this.openId, this.threadId),
+        'keycap corral-pin-key'
+      );
+      this.pinKey.hidden = true;
+      bar.append(this.backKey, titles, this.pinKey, this.mainPanelKey, this.settingsKey);
       this.list = node('div', 'corral-messages');
       // At the latest message, the list stays there as it changes size: when a working line
       // appears under it, a message arrives, or the keyboard comes and goes.
@@ -468,11 +476,16 @@
       this.renderList = node('div', 'corral-side-scroll corral-activity corral-renders');
       this.renderList.setAttribute('role', 'list');
       this.renderList.setAttribute('aria-label', 'Render queues');
+      // Pinned: threads marked to find again, by the name each was given.
+      this.pinList = node('div', 'corral-side-scroll corral-activity corral-pins');
+      this.pinList.setAttribute('role', 'list');
+      this.pinList.setAttribute('aria-label', 'Pinned threads');
       this.details.append(
         detailsBar,
         this.searchField,
         this.filterNote,
         this.activityList,
+        this.pinList,
         this.searchList,
         this.renderList
       );
@@ -597,6 +610,11 @@
         this.renderWorking();
         this.renderSide();
         if (this.detailsOpen) this.renderActivity();
+      } else if (e.type === 'pins') {
+        this.refresh().then(() => {
+          if (this.panel === 'pinned') this.renderPins();
+          if (this.threadId) this.renderHeader();
+        });
       } else if (e.type === 'closed') {
         if (this.detailsOpen) this.activityLater();
       } else if (e.type === 'edited') {
@@ -645,6 +663,7 @@
       this.renderSide();
       if (this.openId) this.renderHeader();
       this.renderWorking();
+      if (this.detailsOpen) this.renderPins();
     }
     conversation(id) {
       return this.data.conversations.find(c => c.id === id) || null;
@@ -928,12 +947,16 @@
       this.searchField.hidden = !searching;
       this.searchList.hidden = !searching;
       this.renderList.hidden = id !== 'renders';
-      this.filterKey.hidden = id === 'renders';
+      this.pinList.hidden = id !== 'pinned';
+      this.filterKey.hidden = id === 'renders' || id === 'pinned';
       clearTimeout(this.rendersTimer);
       if (!load) return;
       if (id === 'renders') {
         this.filterNote.hidden = true;
         this.loadRenders();
+      } else if (id === 'pinned') {
+        this.filterNote.hidden = true;
+        this.renderPins();
       } else if (searching) {
         this.renderSearch();
         // Ready to type, except where a keyboard would cover the panel.
@@ -1526,8 +1549,13 @@
         'aria-label',
         this.threadId ? 'Back to ' + this.label(c) : 'All conversations'
       );
+      const pin = this.threadId && this.pinOf(this.openId, this.threadId);
+      this.pinKey.hidden = !this.threadId;
+      this.pinKey.setAttribute('aria-pressed', String(!!pin));
+      this.pinKey.setAttribute('aria-label', pin ? 'Unpin thread' : 'Pin thread');
+      this.pinKey.title = this.pinKey.getAttribute('aria-label');
       if (this.threadId) {
-        this.title.textContent = 'Thread';
+        this.title.textContent = pin ? pin.name : 'Thread';
         this.subtitle.textContent = this.label(c);
         this.subtitle.title = '';
         this.placeholder.textContent = 'Reply in thread';
@@ -1645,6 +1673,10 @@
               ...this.textItems(m, text, pressed),
               { label: 'Edit', run: () => this.editMessage(m, text) },
               { label: 'Reply in thread', run: () => this.openThread(m.id) },
+              {
+                label: this.pinOf(this.openId, m.id) ? 'Unpin thread' : 'Pin thread',
+                run: () => this.togglePin(this.openId, m.id),
+              },
               this.deleteItem(m, these?.length || 0),
             ],
           }));
@@ -1831,6 +1863,92 @@
       element.replaceChildren(form);
       field.focus();
       field.setSelectionRange(field.value.length, field.value.length);
+    }
+    pinOf(conversation, thread) {
+      return (this.data.pins || []).find(
+        p => p.conversation === conversation && p.thread === thread
+      );
+    }
+    async togglePin(conversation, thread) {
+      const pinned = this.pinOf(conversation, thread);
+      try {
+        await request(pinned ? '/pins/remove' : '/pins', { conversation, thread });
+      } catch (e) {
+        this.workingText.textContent = e.message;
+        this.workingLine.hidden = false;
+      }
+    }
+    // Pinned threads, newest pinned first, each by its name, where it is, and its latest message.
+    renderPins() {
+      if (this.panel !== 'pinned') return;
+      const rows = [];
+      for (const pin of [...(this.data.pins || [])].reverse()) {
+        const c = this.conversation(pin.conversation);
+        if (!c) continue;
+        const busy = [...this.working.keys()].some(k => {
+          const [conv, , thread = ''] = k.split(' ');
+          return conv === pin.conversation && thread === pin.thread;
+        });
+        const item = { conversation: pin.conversation, thread: pin.thread };
+        const row = button('', () => this.goTo(item), 'corral-activity-row corral-pin');
+        row.setAttribute('role', 'listitem');
+        const head = node('div', 'corral-activity-place');
+        head.append(
+          node('span', 'corral-row-name corral-pin-name', pin.name),
+          node('time', '', when(pin.message.ts))
+        );
+        if (busy) head.append(dot());
+        const text = node('span', 'corral-row-text');
+        text.append(
+          head,
+          node('span', 'corral-activity-root', 'Thread in ' + this.label(c)),
+          node(
+            'span',
+            'corral-activity-text',
+            `${this.author(pin.message.author)}: ${pin.message.text}`
+          )
+        );
+        if (pin.replies)
+          text.append(
+            node(
+              'span',
+              'corral-row-status',
+              `${pin.replies} ${pin.replies === 1 ? 'reply' : 'replies'}`
+            )
+          );
+        row.append(text);
+        contextMenu(row, () => ({
+          title: pin.name,
+          items: [
+            {
+              label: 'Rename',
+              run: async () => {
+                const name = await window.HyprlandUtil.askText('Rename', {
+                  value: pin.name,
+                  label: 'Name',
+                  action: 'Rename',
+                });
+                if (name && name !== pin.name)
+                  request('/pins/rename', { ...item, name }).catch(e => {
+                    this.workingText.textContent = e.message;
+                    this.workingLine.hidden = false;
+                  });
+              },
+            },
+            { label: 'Unpin', run: () => this.togglePin(pin.conversation, pin.thread) },
+          ],
+        }));
+        rows.push(row);
+      }
+      if (!rows.length)
+        rows.push(
+          node(
+            'p',
+            'corral-empty',
+            'Pin a thread from its message’s menu, or with 📌 in the thread, to find it here.'
+          )
+        );
+      this.pinList.replaceChildren(...rows);
     }
     // Delete, for any message: the person's, an agent's, or Corral's. One a thread hangs from
     // takes its replies with it.

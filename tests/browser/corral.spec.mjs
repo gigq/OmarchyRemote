@@ -86,6 +86,7 @@ async function setup(page, { width = 402, height = 874 } = {}, before) {
         machine: 'linuxbox',
         hosts: state.hosts || [],
         background: state.background || [],
+        pins: state.pins || [],
         queued: state.queued || [],
         agents: state.agents,
         conversations: state.conversations.map(c => ({
@@ -182,6 +183,14 @@ async function setup(page, { width = 402, height = 874 } = {}, before) {
   await page.route(/\/api\/corral\/agents\/[^/]+\/recent$/, r =>
     r.fulfill({ json: { items: state.recent || [] } })
   );
+  await page.route(/\/api\/corral\/pins(\/rename|\/remove)?$/, r => {
+    const body = r.request().postDataJSON();
+    (state.pinCalls ||= []).push({
+      path: new URL(r.request().url()).pathname.split('/corral')[1],
+      ...body,
+    });
+    return r.fulfill({ json: { pinned: true } });
+  });
   await page.route('**/api/corral/activity/close', r => {
     const place = r.request().postDataJSON();
     (state.closed ||= []).push(place);
@@ -1134,6 +1143,65 @@ test('a path in a message opens the file to read: Markdown laid out, code colour
   await expect(code).toHaveCount(0);
 });
 
+test('a thread can be pinned, found again by its name in Pinned, renamed, and unpinned', async ({
+  page,
+}) => {
+  const { app, state, emit } = await setup(page, { width: 1400, height: 900 });
+  await app.getByRole('listitem').filter({ hasText: 'infra' }).first().click();
+  const list = app.locator('.corral-messages');
+  await list.locator('.corral-text', { hasText: 'rotate the certs' }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Pin thread' }).click();
+  await expect
+    .poll(() => state.pinCalls)
+    .toEqual([{ path: '/pins', conversation: INFRA, thread: 'm1' }]);
+  // The host names it and says so.
+  state.pins = [
+    {
+      conversation: INFRA,
+      thread: 'm1',
+      name: 'Certificate Rotation',
+      at: '2026-10-28T10:10:00.000Z',
+      root: { id: 'm1', ts: '2026-10-28T10:01:00.000Z', author: 'you', text: 'rotate the certs' },
+      message: {
+        id: 'r1',
+        ts: '2026-10-28T10:05:00.000Z',
+        author: ALEX,
+        text: 'All three renewed.',
+      },
+      replies: 1,
+    },
+  ];
+  state.messages[INFRA].push({ ...msg(ALEX, 'All three renewed.', 5), id: 'r1', thread: 'm1' });
+  emit({ type: 'pins' });
+  await app.getByRole('button', { name: 'Activity and Search' }).first().click();
+  await app.getByRole('tab', { name: 'Pinned' }).click();
+  const pinned = app.getByRole('list', { name: 'Pinned threads' });
+  await expect(pinned.getByRole('listitem')).toHaveCount(1);
+  await expect(pinned.getByRole('listitem')).toContainText('Certificate Rotation');
+  await expect(pinned.getByRole('listitem')).toContainText('alex: All three renewed.');
+  await page.screenshot({ path: 'artifacts/browser/corral-pinned.png' });
+  // It opens the thread, titled by its name, with the pin pressed.
+  await pinned.getByRole('listitem').click();
+  await expect(app.locator('.corral-title')).toHaveText('Certificate Rotation');
+  await expect(app.getByRole('button', { name: 'Unpin thread' })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  );
+  // Renamed and unpinned from its menu.
+  await pinned.getByRole('listitem').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Rename' }).click();
+  await page.locator('.context-field').fill('Certs');
+  await page.locator('.context-form').getByRole('menuitem', { name: 'Rename' }).click();
+  await pinned.getByRole('listitem').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Unpin' }).click();
+  await expect
+    .poll(() => state.pinCalls.slice(1))
+    .toEqual([
+      { path: '/pins/rename', conversation: INFRA, thread: 'm1', name: 'Certs' },
+      { path: '/pins/remove', conversation: INFRA, thread: 'm1' },
+    ]);
+});
+
 test('a thread stays open when Corral reconnects, and after a reload', async ({ page }) => {
   const { app, state } = await setup(page, {}, (page, state) => {
     state.messages[INFRA].push({ ...msg(ALEX, 'All three renewed.', 5), id: 'r1', thread: 'm1' });
@@ -1218,6 +1286,7 @@ test('a link in a message has its own menu items, and any message copies its tex
     'Copy text',
     'Edit',
     'Reply in thread',
+    'Pin thread',
     'Delete',
   ]);
   await page.getByRole('menuitem', { name: 'Copy link' }).click();
@@ -1230,6 +1299,7 @@ test('a link in a message has its own menu items, and any message copies its tex
     'Copy text',
     'Edit',
     'Reply in thread',
+    'Pin thread',
     'Delete',
   ]);
   await page.getByRole('menuitem', { name: 'Copy text' }).click();

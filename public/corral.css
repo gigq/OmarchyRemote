@@ -511,7 +511,7 @@
 /* The details panel: beside the conversation when there is room, in its place otherwise. */
 .corral-app.corral-roomy .corral-details {
   flex: none;
-  width: 300px;
+  width: 340px;
   padding-left: 8px;
   border-left: 1px solid color-mix(in srgb, var(--theme-border) 60%, transparent);
 }
@@ -659,9 +659,13 @@
   flex: 1;
   gap: 2px;
   min-width: 0;
+  /* Four panels fit a narrow panel by scrolling sideways, without a bar. */
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 .corral-tab {
-  padding: 5px 10px;
+  flex: none;
+  padding: 5px 7px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -986,4 +990,15 @@
 }
 .corral-doc-picture {
   max-width: 100%;
+}
+/* Pinned threads, and the key that pins one. */
+.corral-pins[hidden] {
+  display: none;
+}
+.corral-pin-name {
+  font-weight: 600;
+}
+.corral-pin-key[aria-pressed='false'] {
+  filter: grayscale(1);
+  opacity: 0.6;
 }
