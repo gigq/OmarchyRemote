@@ -443,21 +443,10 @@ fn avatar(folder: &FsPath) -> Option<(PathBuf, &'static str, u64)> {
         })
         .max_by_key(|(_, _, changed)| *changed)
 }
-/// What every Corral agent is told, on top of its own system prompt. `machine` is the host it
-/// runs on; `home`, for a turn in another host's conversation, is that host.
-fn brief(agent: &Agent, person: &str, root: &FsPath, machine: &str, home: Option<&str>) -> String {
-    let memory = root.join("agents").join(&agent.id).join("memory.md");
-    let look_back = match home {
-        None => format!(
-            "Every conversation is in {}/conversations/<id>/messages.jsonl if you need to look back at one.",
-            root.display()
-        ),
-        Some(home) => format!(
-            "Your conversations are kept by {person}'s Corral on {home}; `corral read --channel NAME` looks back at one."
-        ),
-    };
-    let mut brief = format!(
-        "You are @{name}, one of {person}'s agents in Corral, a Slack-style chat app where {person} works with their agents. {person} and other agents talk with you in channels and direct messages. Each message you are given begins with a <corral> block: where you are, what was said there since you last spoke, what is going on in your other conversations, and your memory file.
+/// The agents' prompt, unless `prompt.md` in Corral's folder replaces it. That file is read for
+/// every turn, so an edit there applies from the next turn on without a restart. Each start writes
+/// this one beside it as `prompt.default.md`, to copy from. `{name}`-style keys are filled in.
+const PROMPT: &str = "You are @{name}, one of {person}'s agents in Corral, a Slack-style chat app where {person} works with their agents. {person} and other agents talk with you in channels and direct messages. Each message you are given begins with a <corral> block: where you are, what was said there since you last spoke, what is going on in your other conversations, and your memory file.
 
 Your final reply is posted as your chat message in that conversation, under your name. Write it like a text to a colleague in Slack, not an email or a report: one to three short sentences, under about 50 words, leading with the answer. No headings, bold labels, bullet points, or numbered lists. Don't explain your reasoning, list everything done or pending, or offer options unless {person} asks; mention only the one or two things that matter most. {person} will ask if they want more. Use a code block only when that is the answer itself, and put anything long in a file and give its path. Don't narrate your tool use; do the work, then say what matters. If there is nothing worth saying, reply with just the word NOTHING and no message is posted.
 
@@ -473,13 +462,67 @@ For work that takes more than a few minutes (a render, a long build), start it i
 
 You can be at work in more than one conversation at once, each a separate session of yours, often in the same folder, and the <corral> block says what your other turns are doing and which files they have changed. If one of them is changing files you need to change, don't change them at the same time: do what doesn't overlap, say what is waiting and on what, run `corral wait`, and end your turn; Corral wakes you here when your other turns end. If the work doesn't overlap, carry on.
 
-You run on {machine} ({os}), in {home_folder}. Agents can run on other machines too, and `corral agents` shows which machine each is on: to get something done on another machine, mention the agent there rather than reaching it yourself.",
-        name = agent.name,
-        person_handle = YOU,
-        memory = memory.display(),
-        folder = root.join("agents").join(&agent.id).display(),
-        os = std::env::consts::OS,
-        home_folder = agent.home,
+You run on {machine} ({os}), in {home_folder}. Agents can run on other machines too, and `corral agents` shows which machine each is on: to get something done on another machine, mention the agent there rather than reaching it yourself.";
+const PROMPT_FILE: &str = "prompt.md";
+/// `text` with each `{key}` in it replaced by its value; anything else in braces is left as it is.
+fn fill(text: &str, values: &[(&str, String)]) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(open) = rest.find('{') {
+        out.push_str(&rest[..open]);
+        let after = &rest[open + 1..];
+        match after.find('}').and_then(|close| {
+            values
+                .iter()
+                .find(|(key, _)| *key == &after[..close])
+                .map(|(_, value)| (close, value))
+        }) {
+            Some((close, value)) => {
+                out.push_str(value);
+                rest = &after[close + 1..];
+            }
+            None => {
+                out.push('{');
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+/// What every Corral agent is told, on top of its own system prompt. `machine` is the host it
+/// runs on; `home`, for a turn in another host's conversation, is that host.
+fn brief(agent: &Agent, person: &str, root: &FsPath, machine: &str, home: Option<&str>) -> String {
+    let memory = root.join("agents").join(&agent.id).join("memory.md");
+    let look_back = match home {
+        None => format!(
+            "Every conversation is in {}/conversations/<id>/messages.jsonl if you need to look back at one.",
+            root.display()
+        ),
+        Some(home) => format!(
+            "Your conversations are kept by {person}'s Corral on {home}; `corral read --channel NAME` looks back at one."
+        ),
+    };
+    let template = fs::read_to_string(root.join(PROMPT_FILE))
+        .ok()
+        .filter(|t| !t.trim().is_empty())
+        .unwrap_or_else(|| PROMPT.to_owned());
+    let mut brief = fill(
+        &template,
+        &[
+            ("name", agent.name.clone()),
+            ("person", person.to_owned()),
+            ("person_handle", YOU.to_owned()),
+            ("memory", memory.display().to_string()),
+            ("look_back", look_back),
+            (
+                "folder",
+                root.join("agents").join(&agent.id).display().to_string(),
+            ),
+            ("machine", machine.to_owned()),
+            ("os", std::env::consts::OS.to_owned()),
+            ("home_folder", agent.home.clone()),
+        ],
     );
     if !agent.instructions.trim().is_empty() {
         brief.push_str("\n\nYour standing instructions from ");
@@ -708,6 +751,8 @@ pub fn start(setup: Setup) -> anyhow::Result<Corral> {
 }
 impl Corral {
     fn load(root: PathBuf) -> Corral {
+        // Shows what the built-in prompt is now, for a `prompt.md` to start from.
+        let _ = fs::write(root.join("prompt.default.md"), PROMPT);
         let mut state = Workspace::default();
         for entry in fs::read_dir(root.join("agents"))
             .into_iter()
@@ -3439,6 +3484,31 @@ mod tests {
                 .contains("corral help")
         );
         let _ = helper;
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_prompt_file_changes_what_agents_are_told_from_the_next_turn() {
+        let (corral, root) = corral();
+        let alex = agent(&corral, "alex");
+        // Each start shows the built-in prompt beside where an edited one goes.
+        assert_eq!(
+            fs::read_to_string(root.join("prompt.default.md")).unwrap(),
+            PROMPT
+        );
+        assert!(
+            brief(&alex, "Justin", &root, "linuxbox", None)
+                .starts_with("You are @alex, one of Justin's")
+        );
+        fs::write(
+            root.join("prompt.md"),
+            "You are @{name} on {machine}; ask {person}. Keep {braces} and {",
+        )
+        .unwrap();
+        assert_eq!(
+            brief(&alex, "Justin", &root, "linuxbox", None),
+            "You are @alex on linuxbox; ask Justin. Keep {braces} and {"
+        );
         fs::remove_dir_all(root).unwrap();
     }
 
