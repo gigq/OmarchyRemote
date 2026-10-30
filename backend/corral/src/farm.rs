@@ -19,6 +19,32 @@ fn root() -> anyhow::Result<PathBuf> {
         .ok_or_else(|| anyhow::anyhow!("No home folder"))?
         .join(".cache/corral-farm"))
 }
+/// Copies of projects other machines keep here, synced with rsync, which split renders run in.
+fn projects() -> anyhow::Result<PathBuf> {
+    Ok(root()?.join("projects"))
+}
+/// A path inside the farm's project copies, or why not.
+fn project(dir: &str) -> Result<PathBuf, ApiError> {
+    let relative = FsPath::new(dir);
+    if dir.is_empty()
+        || relative.is_absolute()
+        || relative
+            .components()
+            .any(|c| !matches!(c, std::path::Component::Normal(_)))
+    {
+        return Err(refuse(StatusCode::BAD_REQUEST, "Not a project folder"));
+    }
+    let path = projects().map_err(error)?.join(relative);
+    if !path.is_dir() {
+        return Err(refuse(
+            StatusCode::NOT_FOUND,
+            "That project is not copied here",
+        ));
+    }
+    // Copies not used for two weeks go.
+    let _ = fs::write(path.join(".farm-used"), crate::now());
+    Ok(path)
+}
 /// A job's folder, for an id made of letters, digits, and dashes only.
 fn folder(id: &str) -> Result<PathBuf, ApiError> {
     if id.is_empty() || id.len() > 64 || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
@@ -81,6 +107,10 @@ pub async fn farm(State(corral): State<Corral>) -> Json<Value> {
 /// Starts `tar` in `dir` with `args`, its input and output piped.
 async fn tar(dir: &FsPath, args: &[&str]) -> std::io::Result<tokio::process::Child> {
     let mut command = Command::new(if cfg!(windows) { "tar.exe" } else { "tar" });
+    // macOS's tar would add its file attributes, which other systems' tar warn about.
+    if cfg!(target_os = "macos") && args.first() == Some(&"-cf") {
+        command.arg("--no-xattrs");
+    }
     command
         .args(args)
         .current_dir(dir)
@@ -128,6 +158,9 @@ pub struct Job {
     /// The Corral place that sent it, so this machine's queue says whose it is.
     #[serde(default)]
     place: String,
+    /// A project copy to run in, instead of the job's own folder.
+    #[serde(default)]
+    dir: String,
 }
 /// Starts a job in its folder through this machine's render queue.
 pub async fn run_job(
@@ -171,9 +204,14 @@ pub async fn run_job(
     args.extend(job.command[1..].iter().cloned());
     let log = fs::File::create(farm.join("log")).map_err(error)?;
     let errors = log.try_clone().map_err(error)?;
+    let cwd = if job.dir.is_empty() {
+        dir.clone()
+    } else {
+        project(&job.dir)?
+    };
     let mut child = Command::new(&slot)
         .args(&args)
-        .current_dir(&dir)
+        .current_dir(&cwd)
         .env("CORRAL_PLACE", &job.place)
         .stdin(Stdio::null())
         .stdout(Stdio::from(log))
@@ -221,13 +259,20 @@ pub async fn job_status(Path(id): Path<String>) -> Result<Json<Value>, ApiError>
 pub struct Paths {
     #[serde(default)]
     paths: String,
+    /// A project copy to read from, instead of the job's folder.
+    #[serde(default)]
+    dir: String,
 }
 /// A job's output files, as a tar stream: the paths asked for, in its folder.
 pub async fn get_files(
     Path(id): Path<String>,
     Query(query): Query<Paths>,
 ) -> Result<Response, ApiError> {
-    let dir = folder(&id)?;
+    let dir = if query.dir.is_empty() {
+        folder(&id)?
+    } else {
+        project(&query.dir)?
+    };
     let paths: Vec<&str> = query.paths.split('\n').filter(|p| !p.is_empty()).collect();
     if paths.is_empty() {
         return Err(refuse(StatusCode::BAD_REQUEST, "Name the files to send"));
@@ -265,10 +310,57 @@ pub async fn get_files(
     )
         .into_response())
 }
+#[derive(Deserialize)]
+pub struct Listing {
+    dir: String,
+    /// The start of the files' paths, folder included, as `out/emu-war-12-`.
+    prefix: String,
+}
+/// The files in a project copy whose paths start with `prefix`, as a split render's pieces.
+pub async fn list(Query(query): Query<Listing>) -> Result<Json<Value>, ApiError> {
+    let dir = project(&query.dir)?;
+    let (folder, start) = query.prefix.rsplit_once('/').unwrap_or(("", &query.prefix));
+    if folder.split('/').any(|s| s == "..") {
+        return Err(refuse(
+            StatusCode::BAD_REQUEST,
+            "Not a folder in the project",
+        ));
+    }
+    let files: Vec<String> = fs::read_dir(dir.join(folder))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().into_owned();
+            name.starts_with(start).then(|| {
+                if folder.is_empty() {
+                    name
+                } else {
+                    format!("{folder}/{name}")
+                }
+            })
+        })
+        .collect();
+    Ok(Json(json!({"files": files})))
+}
+/// Removes files a split render made in a project copy, once they are back.
+pub async fn tidy(Json(query): Json<Paths>) -> Result<Json<Value>, ApiError> {
+    let dir = project(&query.dir)?;
+    let mut gone = 0;
+    for p in query.paths.split('\n').filter(|p| !p.is_empty()) {
+        let outside = FsPath::new(p).is_absolute() || p.split(['/', '\\']).any(|s| s == "..");
+        if !outside && fs::remove_file(dir.join(p)).is_ok() {
+            gone += 1;
+        }
+    }
+    Ok(Json(json!({"removed": gone})))
+}
 /// A finished job's folder is kept this long, for files that did not make it back; one with no
 /// job behind it, this long.
 const KEEP_FINISHED: Duration = Duration::from_secs(6 * 3600);
 const KEEP_ABANDONED: Duration = Duration::from_secs(24 * 3600);
+/// A project copy no split render has used for this long goes.
+const KEEP_PROJECT: Duration = Duration::from_secs(14 * 24 * 3600);
 /// How long since a file last changed.
 fn age(path: &FsPath) -> Option<Duration> {
     fs::metadata(path).ok()?.modified().ok()?.elapsed().ok()
@@ -286,8 +378,22 @@ pub fn sweep() -> usize {
         .map(|j| j.ticket.pid)
         .collect();
     let mut gone = 0;
+    // Project copies, two levels down (`projects/<group>/<project>`), go when unused.
+    if let Ok(copies) = projects() {
+        for marker in walk_markers(&copies, 4) {
+            if age(&marker).is_some_and(|a| a > KEEP_PROJECT)
+                && let Some(project) = marker.parent()
+                && fs::remove_dir_all(project).is_ok()
+            {
+                gone += 1;
+            }
+        }
+    }
     for entry in fs::read_dir(&root).into_iter().flatten().flatten() {
         let dir = entry.path();
+        if entry.file_name() == "projects" {
+            continue;
+        }
         let farm = dir.join(".farm");
         let stale = match age(&farm.join("exit")) {
             Some(age) => age > KEEP_FINISHED,
@@ -304,6 +410,40 @@ pub fn sweep() -> usize {
         }
     }
     gone
+}
+/// `.farm-used` markers in project copies, down to `depth` folders.
+fn walk_markers(dir: &FsPath, depth: usize) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    if dir.join(".farm-used").is_file() {
+        found.push(dir.join(".farm-used"));
+        return found;
+    }
+    if depth > 0 {
+        for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
+            if entry.path().is_dir() {
+                found.extend(walk_markers(&entry.path(), depth - 1));
+            }
+        }
+    }
+    found
+}
+/// Stops a job, as a split render does with a piece another machine finished first.
+pub async fn stop_job(Path(id): Path<String>) -> Result<Json<Value>, ApiError> {
+    let farm = folder(&id)?.join(".farm");
+    let pid: i32 = fs::read_to_string(farm.join("pid"))
+        .ok()
+        .and_then(|p| p.trim().parse().ok())
+        .ok_or_else(not_found)?;
+    #[cfg(unix)]
+    // SAFETY: a signal to the job's own process, which this Corral started.
+    unsafe {
+        libc::kill(pid, libc::SIGTERM);
+    }
+    #[cfg(not(unix))]
+    let _ = std::process::Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .output();
+    Ok(Json(json!({"stopped": true})))
 }
 /// Removes a job's folder, once its files are back.
 pub async fn delete_job(Path(id): Path<String>) -> Result<Json<Value>, ApiError> {

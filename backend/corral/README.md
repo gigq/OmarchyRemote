@@ -136,3 +136,27 @@ folders with no job behind them after a day. The farm's routes, under `/api/corr
 the machine's key: `GET /farm` (name, tags, queue), and for a job `POST …/jobs/<id>/files` (a tar
 stream in), `POST …/run`, `GET …/jobs/<id>` (waiting and its place, running, or done with its
 exit status, and its log's end), `GET …/files?paths=` (a tar stream out), and `POST …/delete`.
+
+### Split renders
+
+A whole-video render from the house Chrome renderer (a `tools/render.mjs` that takes
+`--from`/`--to`, `--audio-only`, `--keep-audio`, and `--print-segments`) is spread across the farm
+by `render-slot` itself, with nothing asked of whoever runs it:
+
+1. The soundtrack is mixed once, here (`--audio-only`).
+2. The video is cut on whole seconds into pieces, about twice as many as there are places to run
+   them (tars takes four at once at 6 cores each; each Mac, one).
+3. Each machine is handed the next piece whenever it has room. Once none is left, an idle Mac
+   takes a copy of the oldest piece still under way elsewhere; whichever copy finishes first is
+   used and the other is stopped, so a slow or busy machine does not hold up the rest. Only Macs
+   take copies, so tars stays free for other jobs.
+4. A Mac renders in its copy of the project (`~/.cache/corral-farm/projects/…`, synced with rsync,
+   without `out/`, `.git/`, or `work/`), with Playwright's Chrome for macOS behind a shim at the
+   Linux path the renderer looks in; a piece that fails there runs on tars, and that Mac takes no
+   more. Copies unused for two weeks are removed.
+5. The pieces' pictures are joined in order under the one mix, as the renderer joins its own
+   workers'; a join that does not match the soundtrack's length fails.
+
+macOS and Linux Chrome draw a frame alike except for text anti-aliasing (a 340 s test: 99.9% of
+pixels identical, the rest at glyph edges), so text held across a seam may change by a shade for
+one frame. Seams fall on whole seconds. `RENDER_SPLIT=0` renders whole, here.

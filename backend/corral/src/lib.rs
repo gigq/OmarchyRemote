@@ -1682,6 +1682,9 @@ pub fn router<S: Clone + std::marker::Send + Sync + 'static>(corral: Corral) -> 
         .route("/farm/jobs/{id}/run", post(farm::run_job))
         .route("/farm/jobs/{id}", get(farm::job_status))
         .route("/farm/jobs/{id}/delete", post(farm::delete_job))
+        .route("/farm/tidy", post(farm::tidy))
+        .route("/farm/jobs/{id}/stop", post(farm::stop_job))
+        .route("/farm/list", get(farm::list))
         .route("/ws", get(upgrade))
         // The `corral` command in an agent's turn, which sends the turn's token instead of the
         // app's credentials.
