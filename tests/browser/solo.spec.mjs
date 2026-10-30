@@ -116,6 +116,67 @@ test('a theme chosen in a Settings window repaints other app windows', async ({
   );
 });
 
+test('a background chosen in Settings is visible in other app windows and survives reload', async ({
+  page: p,
+  context,
+}) => {
+  await context.route('**/api/**', r => r.abort());
+  await context.route('**/backgrounds/catalog.js', r =>
+    r.fulfill({
+      contentType: 'text/javascript',
+      body: `window.OmarchyBackgroundCatalog = Object.fromEntries(
+        window.OmarchyThemeCatalog.map(t => [t.id, [
+          { id: 'qa-wallpaper', name: 'QA wallpaper', url: '/backgrounds/qa-wallpaper.svg' }
+        ]])
+      );`,
+    })
+  );
+  await context.route('**/backgrounds/qa-wallpaper.svg', r =>
+    r.fulfill({
+      contentType: 'image/svg+xml',
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><path fill="red" d="M0 0h10v10H0z"/></svg>',
+    })
+  );
+  await p.goto('/native/?app=codexbar');
+  const settings = await context.newPage();
+  await settings.goto('/native/?app=settings');
+  const theme = settings
+    .locator('[data-theme-choice]:not([data-theme-choice="prototype"])')
+    .first();
+  const selected = await theme.getAttribute('data-theme-choice');
+  await theme.click();
+  await expect.poll(() => p.evaluate(() => document.documentElement.dataset.theme)).toBe(selected);
+  await settings.locator('[data-background-choice="none"]').click();
+  await expect
+    .poll(() => p.evaluate(() => document.documentElement.dataset.background))
+    .toBe('none');
+  await settings.locator('[data-background-choice="qa-wallpaper"]').click();
+  await expect
+    .poll(() => p.evaluate(() => document.documentElement.dataset.background))
+    .toBe('qa-wallpaper');
+  const wallpaper = () =>
+    p.evaluate(() => {
+      const layer = getComputedStyle(document.querySelector('#touch-shell'), '::before');
+      const card = getComputedStyle(document.querySelector('[data-workspace="codexbar"]'));
+      return { display: layer.display, image: layer.backgroundImage, color: card.backgroundColor };
+    });
+  const painted = await wallpaper();
+  expect(painted.display).not.toBe('none');
+  expect(painted.image).toContain('/backgrounds/qa-wallpaper.svg');
+  // The app's background must let the wallpaper through, rather than covering it with solid color.
+  expect(painted.color).toMatch(/(?:,|\/)\s*0\.95\s*\)/);
+  await p.reload();
+  await expect
+    .poll(() => p.evaluate(() => document.documentElement.dataset.background))
+    .toBe('qa-wallpaper');
+  expect(await wallpaper()).toEqual(painted);
+  await settings.locator('[data-background-choice="none"]').click();
+  await expect
+    .poll(() => p.evaluate(() => document.documentElement.dataset.background))
+    .toBe('none');
+  expect((await wallpaper()).image).toBe('none');
+});
+
 test('a single-app page saved to the Home Screen opens that app, under its name', async ({
   page: p,
 }) => {

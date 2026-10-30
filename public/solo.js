@@ -15,7 +15,7 @@
     const style = document.createElement('style');
     const card = `[data-workspace="${CSS.escape(key)}"]`;
     style.textContent = `.solo-mode [data-workspace]:not(${card}) { display: none !important; }
-.solo-mode ${card} { inset: 0 !important; width: 100% !important; height: 100% !important; transform: none !important; border: 0 !important; border-radius: 0 !important; opacity: 1 !important; visibility: visible !important; background: var(--theme-background) !important; }`;
+.solo-mode ${card} { inset: 0 !important; width: 100% !important; height: 100% !important; transform: none !important; border: 0 !important; border-radius: 0 !important; opacity: 1 !important; visibility: visible !important; }`;
     document.head.append(style);
   }
 
