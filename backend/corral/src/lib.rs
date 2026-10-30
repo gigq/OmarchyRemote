@@ -3728,14 +3728,17 @@ pub async fn agent_action(
             Ok(format!("Posted in #{} ({}).", channel.name, message.id))
         }
         "thread" => {
-            if !me.thread.is_empty() {
-                return Err(bad("You are in a thread already; your reply goes here"));
+            let given = text_arg(&body, "message");
+            // From a thread, only to another message's thread, named.
+            if !me.thread.is_empty() && (given.is_empty() || given == me.thread) {
+                return Err(bad(
+                    "You are in a thread already; your reply goes here, or give another message with --message ID",
+                ));
             }
             let text = text_arg(&body, "text");
             if text.is_empty() || text.len() > 64 * 1024 {
                 return Err(bad("Give the reply as text after the arguments"));
             }
-            let given = text_arg(&body, "message");
             // Under the message given, or the latest one here that is not its own or Corral's.
             let root = {
                 let state = corral.state.lock().unwrap();
