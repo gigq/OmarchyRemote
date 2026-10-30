@@ -5,6 +5,7 @@ mod edit;
 mod split;
 
 use corral::queue;
+use std::path::Path;
 use std::process::{Command, ExitCode};
 
 const USAGE: &str = "render-slot: heavy jobs take turns for this machine's cores and GPU.
@@ -25,10 +26,22 @@ const USAGE: &str = "render-slot: heavy jobs take turns for this machine's cores
   render-slot status [--json]
       What is running and what waits here, with each job's place in line.
   render-slot COMMAND [ARGS...]
-      As run, with the defaults: how the old render-slot.sh was called.";
+      As run, with the defaults: how the old render-slot.sh was called.
+
+Linked as `blender` ahead of Blender on the path, it sends a background render (-b with -a, -f,
+or a script's --frames) through the queue with the GPU, where its frames split across the farm;
+Blender with a window, a background run that renders nothing, and Blender inside a queued job run
+as they are.";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    let called = std::env::args().next().unwrap_or_default();
+    if Path::new(&called)
+        .file_stem()
+        .is_some_and(|n| n.eq_ignore_ascii_case("blender"))
+    {
+        return as_blender(&args);
+    }
     match args.first().map(String::as_str) {
         None | Some("-h" | "--help" | "help") => {
             println!("{USAGE}");
@@ -44,6 +57,72 @@ fn main() -> ExitCode {
             .chain(args)
             .collect::<Vec<_>>()),
     }
+}
+
+/// Blender, through the queue when it renders in the background.
+fn as_blender(args: &[String]) -> ExitCode {
+    let Some(real) = next_on_path("blender") else {
+        return fail("no Blender on the path after this one");
+    };
+    let (options, script) = match args.iter().position(|a| a == "--") {
+        Some(at) => (&args[..at], &args[at..]),
+        None => (args, &[][..]),
+    };
+    let background = options.iter().any(|a| a == "-b" || a == "--background");
+    let renders = options
+        .iter()
+        .any(|a| ["-a", "--render-anim", "-f", "--render-frame"].contains(&a.as_str()))
+        || script.iter().any(|a| a == "--frames");
+    if std::env::var_os(JOB).is_some() || !background || !renders {
+        let mut blender = Command::new(&real);
+        blender.args(args);
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            let error = blender.exec();
+            return fail(&format!("could not run {}: {error}", real.display()));
+        }
+        #[cfg(not(unix))]
+        return ExitCode::from(
+            blender
+                .status()
+                .ok()
+                .and_then(|s| s.code())
+                .unwrap_or(1)
+                .clamp(0, 255) as u8,
+        );
+    }
+    // What it renders, for the queue: the script, or else the scene.
+    let named = options
+        .iter()
+        .position(|a| a == "-P" || a == "--python")
+        .and_then(|at| options.get(at + 1))
+        .or_else(|| options.iter().find(|a| a.ends_with(".blend")))
+        .and_then(|p| Path::new(p).file_name())
+        .map_or_else(String::new, |n| format!(" · {}", n.to_string_lossy()));
+    let mut queued = vec![
+        "--gpu".to_owned(),
+        "--label".into(),
+        format!("Blender{named}"),
+        "--".into(),
+        real.to_string_lossy().into_owned(),
+    ];
+    queued.extend(args.iter().cloned());
+    run(&queued)
+}
+/// Set in a queued job's environment, so a program inside it is not queued again.
+const JOB: &str = "RENDER_SLOT_JOB";
+/// The first `program` on the path that is not this one.
+fn next_on_path(program: &str) -> Option<std::path::PathBuf> {
+    let me = std::env::current_exe()
+        .ok()
+        .and_then(|p| std::fs::canonicalize(p).ok());
+    let names = [program.to_owned(), format!("{program}.exe")];
+    std::env::split_paths(&std::env::var_os("PATH")?)
+        .flat_map(|dir| names.iter().map(move |n| dir.join(n)))
+        .find(|candidate| {
+            candidate.is_file() && std::fs::canonicalize(candidate).ok().as_ref() != me.as_ref()
+        })
 }
 
 fn fail(message: &str) -> ExitCode {
@@ -138,7 +217,7 @@ fn run(args: &[String]) -> ExitCode {
         command.join(" ")
     ));
     let mut job = Command::new(&command[0]);
-    job.args(&command[1..]);
+    job.args(&command[1..]).env(JOB, &place.ticket.id);
     for (key, value) in settings_env() {
         if std::env::var_os(&key).is_none() {
             job.env(key, value);

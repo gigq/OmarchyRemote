@@ -165,8 +165,8 @@ pixels identical, the rest at glyph edges), so a video made on the Macs can diff
 on tars by that shade, but never from piece to piece. Seams fall on whole seconds.
 `RENDER_SPLIT=0` renders whole, here.
 
-A Blender render of a frame range (`blender … -P script.py -- … --frames A-B`, at least 16
-frames) is spread the same way, but never across two kinds of GPU, since Eevee and Cycles do not
+A Blender render of a frame range (`blender … -P script.py -- … --frames A-B`, or a list of
+spans as `1-99,124-521`, at least 16 frames) is spread the same way, but never across two kinds of GPU, since Eevee and Cycles do not
 draw quite alike on each:
 
 1. The machines form groups: gerty alone (CUDA/OptiX), the Macs together (Metal, all on the same
@@ -182,6 +182,14 @@ draw quite alike on each:
    project, where Blender would have written it. A group that renders nothing (a script that
    does not run on Windows, say) gives the whole job to the next group, which cuts it for its
    own machines; ranges no group could render run here.
+
+`deploy/install.sh` also links `~/.local/bin/blender` to `render-slot`, ahead of Blender on the
+path. Called by that name, `render-slot` finds the next `blender` on the path and sends a
+background render (`-b` with `-a`, `-f`, or a script's `--frames`) through the queue with the GPU,
+where its frames split as above, so a bare `blender` call, or one inside a project's own wrapper
+script, queues and splits without saying so. Blender with a window, a background run that renders
+nothing (building a scene), and Blender inside a job already queued (`RENDER_SLOT_JOB` is set in
+every job's environment) run as they are.
 
 A documentary's whole picture from Moving Records' editor (`python tools/edit.py <ep>`, a copy in
 each project, which renders any stretch with `--range a,b` to the file `--out` names) is cut on

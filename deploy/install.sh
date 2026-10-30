@@ -25,6 +25,14 @@ done
 echo "Wrote $target/omarchy-remote.service and $target/omarchy-remote-dev.service"
 # Corral's agents run in this slice, at a lower priority than the rest of the machine.
 cp "$repo/deploy/corral.slice" "$target/corral.slice"
+# The render queue's program, and Blender through it: `blender` ahead of the real one on the path
+# sends background renders to the queue (backend/corral/README.md).
+if [ -x "$repo/backend/target/release/render-slot" ]; then
+  mkdir -p "$HOME/.local/bin"
+  cp "$repo/backend/target/release/render-slot" "$HOME/.local/bin/render-slot.new"
+  mv "$HOME/.local/bin/render-slot.new" "$HOME/.local/bin/render-slot"
+  ln -sf render-slot "$HOME/.local/bin/blender"
+fi
 if [ "${1:-}" = "--no-enable" ]; then
   exit 0
 fi

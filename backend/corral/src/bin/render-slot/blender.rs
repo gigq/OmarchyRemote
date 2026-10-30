@@ -54,14 +54,47 @@ pub(crate) struct Job {
     frames_at: usize,
     /// Where the script's `-P` is in `args`, for the GPU's setup before it.
     script_at: usize,
-    first: u64,
-    last: u64,
+    /// The frames, as spans from first to last: one, or a list (`1-99,124-521`).
+    spans: Vec<(u64, u64)>,
     cwd: PathBuf,
     root: PathBuf,
     allowed: Allowed,
     label: String,
 }
 /// The project a render belongs to: the nearest folder up from `cwd` with an `AGENTS.md`.
+/// A `--frames` value's spans: `A-B`, or several, comma-separated. A single frame, a step, or
+/// spans out of order: not one to split.
+fn spans(value: &str) -> Option<Vec<(u64, u64)>> {
+    let mut spans: Vec<(u64, u64)> = Vec::new();
+    for part in value.split(',') {
+        let (a, b) = part.trim().split_once('-')?;
+        let (a, b): (u64, u64) = (a.parse().ok()?, b.parse().ok()?);
+        if b < a || spans.last().is_some_and(|(_, end)| a <= *end) {
+            return None;
+        }
+        spans.push((a, b));
+    }
+    (!spans.is_empty()).then_some(spans)
+}
+/// `count` ranges of the spans' frames, each span cut in proportion to its length, so no range
+/// crosses from one span to the next.
+fn ranges(spans: &[(u64, u64)], count: usize) -> Vec<Piece> {
+    let total: u64 = spans.iter().map(|(a, b)| b - a + 1).sum();
+    let mut pieces = Vec::new();
+    for (a, b) in spans {
+        let length = b - a + 1;
+        let share = ((count as u64 * length).div_ceil(total)).clamp(1, length) as usize;
+        for k in 0..share as u64 {
+            pieces.push(Piece {
+                n: pieces.len(),
+                from: a + length * k / share as u64,
+                to: Some(a + length * (k + 1) / share as u64 - 1),
+                frames: true,
+            });
+        }
+    }
+    pieces
+}
 fn project_root(cwd: &Path) -> PathBuf {
     let home = corral::home_dir().unwrap_or_default();
     let mut dir = cwd;
@@ -95,9 +128,8 @@ pub(crate) fn job(command: &[String], label: &str) -> Option<Job> {
         return None;
     }
     let frames_at = rest + args[rest..].iter().position(|a| a == "--frames")? + 1;
-    let (first, last) = args.get(frames_at)?.split_once('-')?;
-    let (first, last): (u64, u64) = (first.parse().ok()?, last.parse().ok()?);
-    if last < first || last - first + 1 < FEWEST {
+    let spans = spans(args.get(frames_at)?)?;
+    if spans.iter().map(|(a, b)| b - a + 1).sum::<u64>() < FEWEST {
         return None;
     }
     // Paths of this machine's would mean nothing to another.
@@ -118,8 +150,7 @@ pub(crate) fn job(command: &[String], label: &str) -> Option<Job> {
         args,
         frames_at,
         script_at,
-        first,
-        last,
+        spans,
         root: project_root(&cwd),
         cwd,
         allowed,
@@ -220,7 +251,8 @@ pub(crate) fn run(job: Job) -> Option<ExitCode> {
         .to_string_lossy()
         .replace('\\', "/");
     let files = listing(&job.root);
-    let total = job.last - job.first + 1;
+    let total: u64 = job.spans.iter().map(|(a, b)| b - a + 1).sum();
+    let frames = job.args[job.frames_at].clone();
     let landing =
         std::env::temp_dir().join(format!("render-frames-{}", uuid::Uuid::new_v4().simple()));
     let mut left: Option<Vec<Piece>> = None;
@@ -260,21 +292,12 @@ pub(crate) fn run(job: Job) -> Option<ExitCode> {
         // group before it could not render, as it was cut.
         let pieces = left.take().unwrap_or_else(|| {
             let count = ((total / FEWEST) as usize).min(ready.len() * 2).max(1);
-            (0..count)
-                .map(|n| Piece {
-                    n,
-                    from: job.first + total * n as u64 / count as u64,
-                    to: Some(job.first + total * (n as u64 + 1) / count as u64 - 1),
-                    frames: true,
-                })
-                .collect()
+            ranges(&job.spans, count)
         });
         let count = pieces.len();
         let names: Vec<&str> = ready.iter().map(|f| f.machine.name.as_str()).collect();
         queue::say(&format!(
-            "frames {}–{} in {} range{} on {}",
-            job.first,
-            job.last,
+            "frames {frames} in {} range{} on {}",
             count,
             if count == 1 { "" } else { "s" },
             names.join(", ")
@@ -330,7 +353,7 @@ pub(crate) fn run(job: Job) -> Option<ExitCode> {
     // Ranges no group could render, here.
     for piece in left.unwrap_or_default() {
         let mut args = job.args.clone();
-        args[job.frames_at] = format!("{}-{}", piece.from, piece.to.unwrap_or(job.last));
+        args[job.frames_at] = format!("{}-{}", piece.from, piece.to.unwrap_or(piece.from));
         let status = super::split::me()
             .args(["run", "--gpu", "--cores", "4", "--label"])
             .arg(format!("{} · {}", job.label, piece.span()))
@@ -344,9 +367,7 @@ pub(crate) fn run(job: Job) -> Option<ExitCode> {
     }
     let s = started.elapsed().as_secs();
     println!(
-        "rendered frames {}–{} · {} files back from {} · {}m{:02}s",
-        job.first,
-        job.last,
+        "rendered frames {frames} · {} files back from {} · {}m{:02}s",
         made,
         used.join(", "),
         s / 60,
@@ -361,7 +382,12 @@ fn why(log: &str) -> String {
     let lines: Vec<&str> = log
         .lines()
         .map(str::trim)
-        .filter(|l| !l.is_empty() && *l != "Blender quit" && !l.starts_with("Blender "))
+        .filter(|l| {
+            !l.is_empty()
+                && *l != "Blender quit"
+                && !l.starts_with("Blender ")
+                && !l.starts_with("Error: script failed")
+        })
         .collect();
     if let Some(error) = lines
         .iter()
@@ -526,7 +552,7 @@ fn range(
 ) -> Result<PathBuf, String> {
     let machine = &farmer.machine;
     let mut args = job.args.clone();
-    args[job.frames_at] = format!("{}-{}", piece.from, piece.to.unwrap_or(job.last));
+    args[job.frames_at] = format!("{}-{}", piece.from, piece.to.unwrap_or(piece.from));
     let mut command = vec!["blender".to_owned()];
     command.extend(args[..job.script_at].iter().cloned());
     // A script that raises fails the run: Blender otherwise exits 0.
@@ -713,10 +739,7 @@ mod tests {
             "",
         )
         .unwrap();
-        assert_eq!(
-            (eevee.first, eevee.last, eevee.allowed),
-            (0, 367, Allowed::Any)
-        );
+        assert_eq!((eevee.spans, eevee.allowed), (vec![(0, 367)], Allowed::Any));
         assert_eq!(eevee.args[eevee.frames_at], "0-367");
         assert_eq!(eevee.args[eevee.script_at], "-P");
         let optix = job(&command("scripts/gerty.py", &["--frames", "1-647"]), "").unwrap();
@@ -736,8 +759,24 @@ mod tests {
     }
 
     #[test]
+    fn a_list_of_spans_is_cut_within_each_span() {
+        assert_eq!(spans("1-99,124-521"), Some(vec![(1, 99), (124, 521)]));
+        for not_one in ["5", "1-99,50-60", "9-1", "1-9,x"] {
+            assert_eq!(spans(not_one), None, "{not_one}");
+        }
+        let pieces = ranges(&[(1, 99), (124, 521)], 6);
+        let cut: Vec<(u64, u64)> = pieces.iter().map(|p| (p.from, p.to.unwrap())).collect();
+        // Every frame once, in order, and none across the gap.
+        let frames: Vec<u64> = cut.iter().flat_map(|&(a, b)| a..=b).collect();
+        let wanted: Vec<u64> = (1..=99).chain(124..=521).collect();
+        assert_eq!(frames, wanted);
+        assert!(cut.iter().all(|&(a, b)| b <= 99 || a >= 124));
+        assert!(pieces.iter().enumerate().all(|(n, p)| p.n == n));
+    }
+
+    #[test]
     fn a_failed_range_says_its_error() {
-        let log = "Blender 5.2.1 LTS (hash x)\nTraceback (most recent call last):\n  File \"render.py\", line 4\nModuleNotFoundError: No module named 'resource'\n\nBlender quit\n";
+        let log = "Blender 5.2.1 LTS (hash x)\nTraceback (most recent call last):\n  File \"render.py\", line 4\nModuleNotFoundError: No module named 'resource'\nError: script failed, file: 'render.py', exiting.\n\nBlender quit\n";
         assert_eq!(why(log), "ModuleNotFoundError: No module named 'resource'");
         assert_eq!(
             why("one\ntwo\nthree\nfour\nBlender quit\n"),
