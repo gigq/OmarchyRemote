@@ -279,11 +279,14 @@ fn settings_env() -> Vec<(String, String)> {
 
 /// How long ago a time was, as "12 min".
 fn ago(time: &str) -> String {
-    let secs = queue::seconds_since(time);
+    span(queue::seconds_since(time))
+}
+fn span(secs: u64) -> String {
     match secs {
         0..60 => format!("{secs} s"),
         60..3600 => format!("{} min", secs / 60),
-        _ => format!("{} h {} min", secs / 3600, secs % 3600 / 60),
+        3600..172_800 => format!("{} h {} min", secs / 3600, secs % 3600 / 60),
+        _ => format!("{} days {} h", secs / 86_400, secs % 86_400 / 3600),
     }
 }
 fn status(json: bool) -> ExitCode {
@@ -338,6 +341,9 @@ fn status(json: bool) -> ExitCode {
             folder,
             what.chars().take(90).collect::<String>()
         );
+        if let Some(p) = &job.progress {
+            println!("{:<16} {}, about {} left", "", p.counted, span(p.left));
+        }
     }
     ExitCode::SUCCESS
 }

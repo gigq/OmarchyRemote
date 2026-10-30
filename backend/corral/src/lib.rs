@@ -36,6 +36,7 @@ use tokio::{
 mod background;
 pub mod farm;
 mod hosts;
+mod progress;
 pub mod queue;
 mod siblings;
 pub use hosts::Host;

@@ -1152,6 +1152,7 @@ test("Renders shows each machine's queue, and a job opens where it was started",
               since: iso(800),
               label: '4K recut',
               place: `${INFRA}\t${ALEX}\t`,
+              progress: { done: 0.25, left: 2160, counted: '1:15 of 5:00' },
             }),
             job({
               running: false,
@@ -1199,7 +1200,7 @@ test("Renders shows each machine's queue, and a job opens where it was started",
   await expect(list.getByRole('listitem')).toHaveText([
     /About 42 min left\s*3 of 12 pieces\s*@alex: Gulp final · running 25 min/,
     /Estimating time left…\s*0 of 8 pieces\s*wound-up: Drumbeat · running 1 min/,
-    /Running 12 min\s*6 cores\s*@alex: 4K recut/,
+    /Running 12 min · about 36 min left\s*6 cores\s*@alex: 4K recut · 1:15 of 5:00/,
     /#1 · waiting 2 min\s*8 cores \+ GPU\s*infra: blender -b scene.blend -a/,
   ]);
   await expect(list.locator('.corral-busy.background')).toHaveCount(1);

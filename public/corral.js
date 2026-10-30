@@ -834,7 +834,16 @@
           ? 'under a minute'
           : s < 3600
             ? `${Math.round(s / 60)} min`
-            : `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`;
+            : s < 172800
+              ? `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`
+              : `${Math.floor(s / 86400)} days ${Math.round((s % 86400) / 3600)} h`;
+      const progressBar = done => {
+        const bar = node('span', 'corral-split-bar');
+        const fill = node('span', '');
+        fill.style.width = `${Math.round(100 * Math.min(1, done))}%`;
+        bar.append(fill);
+        return bar;
+      };
       if (this.splits?.length) {
         const head = node('div', 'corral-render-machine');
         head.append(node('span', 'corral-row-name', 'Split across the farm'));
@@ -858,10 +867,7 @@
           ),
           node('time', '', `${split.done} of ${split.pieces} pieces`)
         );
-        const bar = node('span', 'corral-split-bar');
-        const fill = node('span', '');
-        fill.style.width = `${Math.round((100 * split.done) / Math.max(1, split.pieces))}%`;
-        bar.append(fill);
+        const bar = progressBar(split.done / Math.max(1, split.pieces));
         const text = node('span', 'corral-row-text');
         text.append(
           place,
@@ -925,10 +931,18 @@
             ),
             node('time', '', `${job.cores} cores${job.gpu ? ' + GPU' : ''}`)
           );
+          // How far along, when its log says.
+          const p = job.running && job.progress;
+          if (p) place.firstChild.textContent += ` · about ${span(p.left)} left`;
           const text = node('span', 'corral-row-text');
+          text.append(place);
+          if (p) text.append(progressBar(p.done));
           text.append(
-            place,
-            node('span', 'corral-activity-text', `${who}: ${job.label || job.command}`)
+            node(
+              'span',
+              'corral-activity-text',
+              `${who}: ${job.label || job.command}${p ? ' · ' + p.counted : ''}`
+            )
           );
           if (job.running) row.append(dot());
           else row.append(dot(true));

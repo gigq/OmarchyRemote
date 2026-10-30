@@ -219,6 +219,7 @@ pub async fn run_job(
         .args(&args)
         .current_dir(&cwd)
         .env("CORRAL_PLACE", &job.place)
+        .env("RENDER_SLOT_LOG", farm.join("log"))
         .stdin(Stdio::null())
         .stdout(Stdio::from(log))
         .stderr(Stdio::from(errors))

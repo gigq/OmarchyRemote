@@ -45,6 +45,10 @@ pub struct Ticket {
     pub started: String,
     #[serde(default)]
     pub cpus: Vec<usize>,
+    /// The file its output goes to, when what started it says (`RENDER_SLOT_LOG`, as the farm
+    /// does); on Linux it is found from the process otherwise.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub log: String,
 }
 /// A ticket in the queue now: running, or waiting with so many ahead of it.
 #[derive(Clone, Debug, Serialize)]
@@ -54,6 +58,9 @@ pub struct Entry {
     pub running: bool,
     /// Its place in line among those waiting, from 1.
     pub position: usize,
+    /// For one running, how far along it is and about how long it has left, when its log says.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress: Option<crate::progress::Progress>,
 }
 /// What a machine can give jobs at once.
 #[derive(Clone, Debug, Serialize)]
@@ -168,10 +175,12 @@ pub fn snapshot() -> Snapshot {
             if !running {
                 waiting += 1;
             }
+            let progress = running.then(|| progress_of(&ticket)).flatten();
             Entry {
                 ticket,
                 running,
                 position: if running { 0 } else { waiting },
+                progress,
             }
         })
         .collect();
@@ -180,6 +189,11 @@ pub fn snapshot() -> Snapshot {
         legacy: legacy(),
         jobs,
     }
+}
+/// How far along a running job is, from its log.
+fn progress_of(ticket: &Ticket) -> Option<crate::progress::Progress> {
+    let log = crate::progress::read(&crate::progress::log_of(ticket.pid, &ticket.log)?)?;
+    crate::progress::estimate(&ticket.command, &log, seconds_since(&ticket.started))
 }
 fn write(path: &Path, ticket: &Ticket) -> anyhow::Result<()> {
     let temporary = path.with_extension("tmp");
@@ -332,6 +346,7 @@ pub fn ticket(command: &[String], label: &str, cores: usize, gpu: bool) -> Ticke
         command: command.join(" "),
         label: label.to_owned(),
         place: std::env::var("CORRAL_PLACE").unwrap_or_default(),
+        log: std::env::var("RENDER_SLOT_LOG").unwrap_or_default(),
         cores,
         gpu,
         since: crate::now(),
