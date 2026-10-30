@@ -200,6 +200,46 @@ fn quoted(text: &str) -> String {
     format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
+/// Runs curl with these config lines, and gives back what came back, or why not.
+fn curl_send(lines: &[String], seconds: u32) -> Result<String, String> {
+    let mut config = lines.to_vec();
+    config.extend([
+        "silent".into(),
+        "show-error".into(),
+        format!("max-time = {seconds}"),
+        "write-out = \"\\n%{http_code}\"".into(),
+    ]);
+    let output = Command::new("curl")
+        .args(["--config", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .and_then(|mut child| {
+            child
+                .stdin
+                .take()
+                .expect("piped")
+                .write_all(config.join("\n").as_bytes())?;
+            child.wait_with_output()
+        })
+        .map_err(|e| format!("curl could not run ({e})"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "Corral is not reachable ({})",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let out = String::from_utf8_lossy(&output.stdout);
+    let (text, code) = out.rsplit_once('\n').unwrap_or(("", &out));
+    if code.trim().starts_with('2') {
+        return Ok(text.to_owned());
+    }
+    Err(serde_json::from_str::<serde_json::Value>(text)
+        .ok()
+        .and_then(|v| v["error"].as_str().map(str::to_owned))
+        .unwrap_or_else(|| text.trim().to_owned()))
+}
 /// The agent's `corral` command: `--key value` pairs, and any other words as the message text,
 /// sent to Corral with the turn's token.
 fn agent_command(args: &[String]) -> ExitCode {
@@ -229,7 +269,43 @@ fn agent_command(args: &[String]) -> ExitCode {
         }
         i += 1;
     }
-    if !words.is_empty() {
+    if action == "attach" {
+        // Each file goes first, as it is; the message then names them.
+        let mut names = Vec::new();
+        for path in &words {
+            let name = std::path::Path::new(path)
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            // The name goes in the query, the file as the body.
+            let encoded: String = name
+                .bytes()
+                .map(|b| {
+                    if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) {
+                        (b as char).to_string()
+                    } else {
+                        format!("%{b:02X}")
+                    }
+                })
+                .collect();
+            match curl_send(
+                &[
+                    format!("url = {}", quoted(&format!("{api}/file?name={encoded}"))),
+                    format!("header = {}", quoted(&format!("X-Corral-Token: {token}"))),
+                    "header = \"Content-Type: application/octet-stream\"".into(),
+                    format!("data-binary = {}", quoted(&format!("@{path}"))),
+                ],
+                600,
+            ) {
+                Ok(name) => names.push(serde_json::Value::from(name.trim())),
+                Err(e) => {
+                    eprintln!("corral attach: {path}: {e}");
+                    return ExitCode::FAILURE;
+                }
+            }
+        }
+        body.insert("files".into(), names.into());
+    } else if !words.is_empty() {
         body.insert("text".into(), words.join(" ").into());
     }
     let helping = matches!(action, "help" | "-h" | "--help");

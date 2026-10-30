@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 api, token = os.environ.get("CORRAL_API"), os.environ.get("CORRAL_TOKEN")
@@ -29,7 +30,35 @@ while i < len(rest):
     else:
         words.append(arg)
     i += 1
-if words:
+if action == "attach":
+    # Each file goes first, as it is; the message then names them.
+    body["files"] = []
+    for path in words:
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+        except OSError as e:
+            sys.exit(f"corral attach: {path}: {e.strerror}")
+        name = urllib.parse.quote(os.path.basename(path))
+        upload = urllib.request.Request(
+            f"{api}/file?name={name}",
+            data=data,
+            headers={"X-Corral-Token": token, "Content-Type": "application/octet-stream"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(upload, timeout=600) as response:
+                body["files"].append(response.read().decode().strip())
+        except urllib.error.HTTPError as e:
+            text = e.read().decode()
+            try:
+                text = json.loads(text).get("error", text)
+            except ValueError:
+                pass
+            sys.exit(f"corral attach: {path}: {text}")
+        except urllib.error.URLError as e:
+            sys.exit(f"corral: Corral is not reachable ({e.reason})")
+elif words:
     body["text"] = " ".join(words)
 helping = action in ("help", "-h", "--help")
 request = urllib.request.Request(

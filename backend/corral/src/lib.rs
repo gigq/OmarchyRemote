@@ -40,7 +40,7 @@ mod progress;
 pub mod queue;
 mod siblings;
 pub use hosts::Host;
-use hosts::{host_listing, host_turn};
+use hosts::{host_file, host_listing, host_turn};
 use siblings::Step;
 
 pub type ApiError = (StatusCode, Json<Value>);
@@ -198,6 +198,88 @@ pub struct Message {
     /// For the person's reaction, the message it is to; the app shows it on that message.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub reacts: String,
+    /// Files sent with it, by name, in the conversation's `files` folder.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<String>,
+}
+/// The most a file sent in a conversation may be, and how many one message may carry.
+pub const MAX_FILE: usize = 100 * 1024 * 1024;
+const MAX_FILES: usize = 20;
+/// Where a conversation's files are kept.
+fn files_dir(root: &FsPath, conversation: &str) -> PathBuf {
+    root.join("conversations").join(conversation).join("files")
+}
+/// A file name reduced to one safe component: its last segment, with anything but letters,
+/// digits, `.`, `-`, `_` and spaces replaced, leading dots and spaces dropped, at most 80 long.
+fn safe_name(name: &str) -> Option<String> {
+    let last = name.rsplit(['/', '\\']).next().unwrap_or("");
+    let cleaned: String = last
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | ' ') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let trimmed = cleaned.trim_start_matches(['.', ' ']).trim_end();
+    (!trimmed.is_empty()).then(|| trimmed.chars().take(80).collect())
+}
+/// Keeps a file in `dir` under its name, or `name-2.ext` and on if that is taken, and gives
+/// the name it got.
+fn keep_file(dir: &FsPath, name: &str, bytes: &[u8]) -> anyhow::Result<String> {
+    if bytes.is_empty() {
+        anyhow::bail!("The file is empty");
+    }
+    if bytes.len() > MAX_FILE {
+        anyhow::bail!("The file is over 100 MB");
+    }
+    let name = safe_name(name).unwrap_or_else(|| "file".into());
+    let (stem, extension) = match name.rsplit_once('.') {
+        Some((stem, ext)) if !stem.is_empty() => (stem.to_owned(), format!(".{ext}")),
+        _ => (name.clone(), String::new()),
+    };
+    fs::create_dir_all(dir)?;
+    for n in 1.. {
+        let candidate = if n == 1 {
+            name.clone()
+        } else {
+            format!("{stem}-{n}{extension}")
+        };
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(dir.join(&candidate))
+        {
+            Ok(mut file) => {
+                file.write_all(bytes)?;
+                return Ok(candidate);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e.into()),
+        }
+    }
+    unreachable!()
+}
+/// The names given, if each is a file in the conversation's folder.
+fn files_named(
+    root: &FsPath,
+    conversation: &str,
+    names: &[String],
+) -> Result<Vec<String>, ApiError> {
+    if names.len() > MAX_FILES {
+        return Err(bad(&format!("A message carries at most {MAX_FILES} files")));
+    }
+    let dir = files_dir(root, conversation);
+    names
+        .iter()
+        .map(|n| {
+            (safe_name(n).as_deref() == Some(n.as_str()) && dir.join(n).is_file())
+                .then(|| n.clone())
+                .ok_or_else(|| bad(&format!("No file {n} here; send it first")))
+        })
+        .collect()
 }
 /// The reactions a message can be given, and the words each is told as. The app offers the person
 /// all but `👀`, which agents use to say they have taken a message on.
@@ -473,6 +555,8 @@ Keep your memory file, {memory}, up to date with what you will want to know in y
 
 The `corral` command in your shell works Corral for you: listing, making, and inviting agents, making channels, and posting and reading in them. Run `corral help` to see what it does.
 
+Files sent to you show under their message as `attached:` lines with where they are; open them from there (you can look at pictures). To send files back, such as a screenshot, a render, or a document, run `corral attach FILE…` (with `--text 'a line about them'` if you like); they post where you are, as a message of their own, and your reply follows as usual.
+
 When you take on a message whose answer will take more than a minute or two, first run `corral react 👀`, so {person} sees on their message that you have it, then do the work and reply when it is done. A reaction can also be the whole answer: `corral react 👍` (or 👌) for a note that needs no reply, then reply NOTHING.
 
 When you are given a task, do all of it, through to the finished result, the way you would in a terminal session: if asked for a video, make the video. Don't stop after a step to show a draft, ask which way to go, or ask leave to carry on; make the judgment calls yourself, keep going across as many turns as it takes (each time background work ends and wakes you, take the next step), and say what you chose when it is done. Stop to ask only when you are truly blocked: a choice only {person} can make that would be costly to undo, something you cannot reach, or a real risk.
@@ -611,12 +695,20 @@ fn context_parts(
         .and_then(|s| s.get(&seat_key(&agent.id, thread)));
     let seen = seat.map_or(0, |s| s.seen).min(messages.len());
     let line = |m: &Message| {
-        format!(
+        let mut line = format!(
             "[{}] {}: {}\n",
             m.ts.get(..16).unwrap_or(&m.ts).replace('T', " "),
             handle(state, &m.author),
             m.text.trim()
-        )
+        );
+        // Its files, where the agent can open them.
+        for name in &m.files {
+            line.push_str(&format!(
+                "  attached: {}\n",
+                files_dir(root, &conversation.id).join(name).display()
+            ));
+        }
+        line
     };
     let mut out = String::from("<corral>\n");
     let members: Vec<String> = std::iter::once(format!("@{YOU}"))
@@ -1387,6 +1479,7 @@ impl Corral {
                 chain,
                 thread: thread.to_owned(),
                 reacts: String::new(),
+                files: Vec::new(),
             },
         )
     }
@@ -1749,6 +1842,11 @@ pub fn router<S: Clone + std::marker::Send + Sync + 'static>(corral: Corral) -> 
         .route("/conversations/{id}", get(read).post(update_conversation))
         .route("/conversations/{id}/messages", post(send))
         .route(
+            "/conversations/{id}/files",
+            post(upload_file).layer(axum::extract::DefaultBodyLimit::max(MAX_FILE)),
+        )
+        .route("/conversations/{id}/files/{name}", get(file))
+        .route(
             "/conversations/{id}/messages/{message}/delete",
             post(delete_message),
         )
@@ -1785,10 +1883,18 @@ pub fn router<S: Clone + std::marker::Send + Sync + 'static>(corral: Corral) -> 
         // The `corral` command in an agent's turn, which sends the turn's token instead of the
         // app's credentials.
         .route("/agent", get(agent_help))
+        .route(
+            "/agent/file",
+            post(agent_file).layer(axum::extract::DefaultBodyLimit::max(MAX_FILE)),
+        )
         .route("/agent/{action}", post(agent_action))
         // For another host's Corral: this host's agents, and their turns there.
         .route("/host", get(host_listing))
         .route("/host/turn", post(host_turn))
+        .route(
+            "/host/file",
+            post(host_file).layer(axum::extract::DefaultBodyLimit::max(MAX_FILE)),
+        )
         .with_state(corral)
 }
 fn refuse(status: StatusCode, message: &str) -> ApiError {
@@ -2574,6 +2680,9 @@ pub struct SendForm {
     /// For a reaction, the message it is to; `text` is then one of `REACTIONS`.
     #[serde(default)]
     reacts: String,
+    /// Files sent with it, by the names they were given when they came (`/files`).
+    #[serde(default)]
+    files: Vec<String>,
 }
 pub async fn send(
     State(corral): State<Corral>,
@@ -2584,12 +2693,13 @@ pub async fn send(
     if !form.reacts.is_empty() {
         return react(&corral, &id, &form.reacts, text, YOU).map(Json);
     }
-    if text.is_empty() || text.len() > 64 * 1024 {
+    if (text.is_empty() && form.files.is_empty()) || text.len() > 64 * 1024 {
         return Err(refuse(
             StatusCode::BAD_REQUEST,
             "A message is 1 byte to 64 KiB",
         ));
     }
+    let files = files_named(&corral.root, &id, &form.files)?;
     {
         let state = corral.state.lock().unwrap();
         if !state.conversations.contains_key(&id) {
@@ -2609,9 +2719,95 @@ pub async fn send(
         }
     }
     let message = corral
-        .post(&id, YOU, text, 0, &form.thread)
+        .post_message(
+            &id,
+            Message {
+                id: uuid::Uuid::new_v4().to_string(),
+                ts: now(),
+                author: YOU.to_owned(),
+                text: text.to_owned(),
+                chain: 0,
+                thread: form.thread.clone(),
+                reacts: String::new(),
+                files,
+            },
+        )
         .map_err(error)?;
     Ok(Json(json!(message)))
+}
+#[derive(Deserialize)]
+pub struct FileName {
+    #[serde(default)]
+    name: String,
+}
+/// A file for a message, before the message is sent: kept in the conversation's folder under
+/// its name (numbered if taken), which the message then gives.
+pub async fn upload_file(
+    State(corral): State<Corral>,
+    Path(id): Path<String>,
+    Query(query): Query<FileName>,
+    body: axum::body::Bytes,
+) -> Result<Json<Value>, ApiError> {
+    if !corral.state.lock().unwrap().conversations.contains_key(&id) {
+        return Err(not_found());
+    }
+    let name = keep_file(&files_dir(&corral.root, &id), &query.name, &body)
+        .map_err(|e| bad(&e.to_string()))?;
+    Ok(Json(
+        json!({"name": name, "image": image_type(&name).is_some()}),
+    ))
+}
+/// A picture's type, by its name.
+fn image_type(name: &str) -> Option<&'static str> {
+    let ext = name.rsplit_once('.')?.1.to_ascii_lowercase();
+    Some(match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "heic" => "image/heic",
+        "avif" => "image/avif",
+        _ => return None,
+    })
+}
+/// A file sent in a conversation.
+pub async fn file(
+    State(corral): State<Corral>,
+    Path((id, name)): Path<(String, String)>,
+) -> Result<Response, ApiError> {
+    if safe_name(&name).as_deref() != Some(name.as_str()) {
+        return Err(not_found());
+    }
+    let path = files_dir(&corral.root, &id).join(&name);
+    let bytes = tokio::fs::read(&path).await.map_err(|_| not_found())?;
+    let kind = image_type(&name).unwrap_or(
+        match name
+            .rsplit_once('.')
+            .map(|(_, e)| e.to_ascii_lowercase())
+            .as_deref()
+        {
+            Some("pdf") => "application/pdf",
+            Some("txt" | "md" | "log") => "text/plain; charset=utf-8",
+            Some("mp4") => "video/mp4",
+            Some("mov") => "video/quicktime",
+            _ => "application/octet-stream",
+        },
+    );
+    Ok((
+        [
+            (axum::http::header::CONTENT_TYPE, kind.to_owned()),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                format!("inline; filename=\"{}\"", name.replace('"', "")),
+            ),
+            (
+                axum::http::header::CACHE_CONTROL,
+                "private, max-age=86400".to_owned(),
+            ),
+        ],
+        bytes,
+    )
+        .into_response())
 }
 /// A reaction to a message, the person's or an agent's: posted beside it, saying in words what it
 /// is and what it is to, so whoever reads the conversation reads it like any other message. The
@@ -2678,6 +2874,7 @@ fn react(
                 chain: 0,
                 thread,
                 reacts: to.to_owned(),
+                files: Vec::new(),
             },
         )
         .map_err(error)?;
@@ -2746,6 +2943,12 @@ impl Corral {
         let temporary = path.with_extension("tmp");
         fs::write(&temporary, lines).map_err(error)?;
         fs::rename(&temporary, &path).map_err(error)?;
+        // Their files go with them.
+        for (_, m) in &gone {
+            for name in &m.files {
+                let _ = fs::remove_file(files_dir(&self.root, conversation).join(name));
+            }
+        }
         let said: HashMap<String, String> = gone
             .iter()
             .map(|(_, m)| {
@@ -2836,7 +3039,7 @@ async fn events(mut socket: WebSocket, corral: Corral) {
 // ---- The agent API, behind the `corral` command in each turn ----
 
 /// What the `corral` command offers, as `corral help` lists it: action, arguments, and what it does.
-const ACTIONS: [(&str, &str, &str); 13] = [
+const ACTIONS: [(&str, &str, &str); 14] = [
     ("whoami", "", "Who and where you are."),
     (
         "working",
@@ -2885,6 +3088,11 @@ const ACTIONS: [(&str, &str, &str); 13] = [
         "Post in a channel, or in a thread there, as yourself. @mentions wake agents as usual.",
     ),
     (
+        "attach",
+        "FILE… [--text TEXT]",
+        "Send files where your turn is (a screenshot, a render, a PDF), with a line of text if you like, as a message of their own; pictures show in the conversation, any file can be opened from it.",
+    ),
+    (
         "react",
         "[--message ID] EMOJI",
         "React to the latest message to you here (or the one given) without a reply: 👀 (on it), 👍 (thumbs up), 👌 (OK, noted), ❓ (please explain), 👎 (thumbs down), or 🚀 (do it). It wakes no one.",
@@ -2906,6 +3114,22 @@ fn caller(corral: &Corral, headers: &axum::http::HeaderMap) -> Result<Caller, Ap
                 "This works only inside a Corral turn",
             )
         })
+}
+/// A file from an agent's `corral attach`, kept in the conversation of its turn for the message
+/// that follows; gives the name it was kept under.
+pub async fn agent_file(
+    State(corral): State<Corral>,
+    headers: axum::http::HeaderMap,
+    Query(query): Query<FileName>,
+    body: axum::body::Bytes,
+) -> Result<String, ApiError> {
+    let me = caller(&corral, &headers)?;
+    keep_file(
+        &files_dir(&corral.root, &me.conversation),
+        &query.name,
+        &body,
+    )
+    .map_err(|e| bad(&e.to_string()))
 }
 pub async fn agent_help(
     State(corral): State<Corral>,
@@ -3326,6 +3550,39 @@ pub async fn agent_action(
                 .map_err(error)?;
             Ok(format!("Posted in #{} ({}).", channel.name, message.id))
         }
+        "attach" => {
+            // The files `corral attach` sent first (`/file`), by the names they were kept under.
+            let names: Vec<String> = body["files"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|f| f.as_str().map(str::to_owned))
+                .collect();
+            if names.is_empty() {
+                return Err(bad("Give the files to send: corral attach FILE…"));
+            }
+            let files = files_named(&corral.root, &me.conversation, &names)?;
+            let message = corral
+                .post_message(
+                    &me.conversation,
+                    Message {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        ts: now(),
+                        author: me.agent.clone(),
+                        text: text_arg(&body, "text"),
+                        chain: me.chain,
+                        thread: me.thread.clone(),
+                        reacts: String::new(),
+                        files,
+                    },
+                )
+                .map_err(error)?;
+            Ok(format!(
+                "Sent {} here ({}).",
+                message.files.join(", "),
+                message.id
+            ))
+        }
         "react" => {
             let emoji = text_arg(&body, "text");
             let given = text_arg(&body, "message");
@@ -3459,6 +3716,7 @@ mod tests {
             chain,
             thread: String::new(),
             reacts: String::new(),
+            files: Vec::new(),
         }
     }
     fn reply(author: &str, text: &str, thread: &str) -> Message {
@@ -3668,6 +3926,152 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    #[test]
+    fn files_go_with_messages_both_ways_and_agents_are_told_where_they_are() {
+        let (corral, root) = corral();
+        let alex = agent(&corral, "alex");
+        let talk = channel(&corral, "ebay", vec![]);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        // A file comes first, kept under its name, numbered when taken.
+        let up = |name: &str, bytes: &[u8]| {
+            rt.block_on(upload_file(
+                State(corral.clone()),
+                Path(talk.id.clone()),
+                Query(FileName { name: name.into() }),
+                axum::body::Bytes::copy_from_slice(bytes),
+            ))
+        };
+        assert_eq!(
+            up("../lamp.jpg", b"\xff\xd8\xffjpg").unwrap()["name"],
+            "lamp.jpg"
+        );
+        let second = up("lamp.jpg", b"\xff\xd8\xffjpg2").unwrap();
+        assert_eq!(second["name"], "lamp-2.jpg");
+        assert_eq!(second["image"], true);
+        assert!(up("empty.txt", b"").is_err());
+        // Then the message that carries it, which may have no words.
+        let send = |text: &str, files: Vec<&str>| {
+            rt.block_on(send(
+                State(corral.clone()),
+                Path(talk.id.clone()),
+                Json(SendForm {
+                    text: text.into(),
+                    thread: String::new(),
+                    reacts: String::new(),
+                    files: files.into_iter().map(str::to_owned).collect(),
+                }),
+            ))
+        };
+        let sent = send("", vec!["lamp.jpg", "lamp-2.jpg"]).unwrap();
+        assert_eq!(sent["files"], json!(["lamp.jpg", "lamp-2.jpg"]));
+        assert!(send("", vec![]).is_err());
+        assert!(send("hi", vec!["../../etc/passwd"]).is_err());
+        assert!(send("hi", vec!["nope.jpg"]).is_err());
+        // An agent is told where each is.
+        let state = corral.state.lock().unwrap();
+        let (body, _) = context_parts(&state, &root, &alex, &talk, "", None);
+        drop(state);
+        let kept = root.join("conversations").join(&talk.id).join("files");
+        assert!(body.contains(&format!(
+            "  attached: {}\n",
+            kept.join("lamp.jpg").display()
+        )));
+        // The app gets it back.
+        let served = rt
+            .block_on(file(
+                State(corral.clone()),
+                Path((talk.id.clone(), "lamp.jpg".into())),
+            ))
+            .unwrap();
+        assert_eq!(served.headers()["content-type"], "image/jpeg");
+        assert!(
+            rt.block_on(file(
+                State(corral.clone()),
+                Path((talk.id.clone(), "..".into()))
+            ))
+            .is_err()
+        );
+        // An agent sends files back from its turn: each first, then the message naming them.
+        let token = "f1l3s";
+        corral.callers.lock().unwrap().insert(
+            token.into(),
+            Caller {
+                agent: alex.id.clone(),
+                conversation: talk.id.clone(),
+                thread: String::new(),
+                chain: 1,
+            },
+        );
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("x-corral-token", token.parse().unwrap());
+        let name = rt
+            .block_on(agent_file(
+                State(corral.clone()),
+                headers.clone(),
+                Query(FileName {
+                    name: "/tmp/shot.png".into(),
+                }),
+                axum::body::Bytes::from_static(b"\x89PNG\r\n\x1a\nimg"),
+            ))
+            .unwrap();
+        assert_eq!(name, "shot.png");
+        let said = rt
+            .block_on(agent_action(
+                State(corral.clone()),
+                headers,
+                Path("attach".into()),
+                Json(json!({"files": [name], "text": "the listing"})),
+            ))
+            .unwrap();
+        assert!(said.starts_with("Sent shot.png here"), "{said}");
+        let posted = corral.state.lock().unwrap().messages[&talk.id]
+            .last()
+            .cloned()
+            .unwrap();
+        assert_eq!(
+            (posted.author.as_str(), posted.text.as_str()),
+            (alex.id.as_str(), "the listing")
+        );
+        assert_eq!(posted.files, ["shot.png"]);
+        // Deleting a message takes its files.
+        let first = sent["id"].as_str().unwrap().to_owned();
+        corral.delete_messages(&talk.id, &first).unwrap();
+        assert!(!kept.join("lamp.jpg").exists());
+        assert!(kept.join("shot.png").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn another_hosts_files_for_a_visit_are_kept_by_host_and_conversation() {
+        let (corral, root) = corral();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let kept = rt
+            .block_on(hosts::host_file(
+                State(corral.clone()),
+                Query(hosts::Visiting {
+                    home: "tars".into(),
+                    conversation: "c1".into(),
+                    name: "lamp.jpg".into(),
+                }),
+                axum::body::Bytes::from_static(b"jpg"),
+            ))
+            .unwrap();
+        let path = root.join("files").join("tars").join("c1").join("lamp.jpg");
+        assert_eq!(kept["path"], path.display().to_string());
+        assert_eq!(fs::read(&path).unwrap(), b"jpg");
+        assert!(
+            rt.block_on(hosts::host_file(
+                State(corral.clone()),
+                Query(hosts::Visiting {
+                    home: "..".into(),
+                    conversation: "c1".into(),
+                    name: "x".into(),
+                }),
+                axum::body::Bytes::from_static(b"x"),
+            ))
+            .is_err()
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn an_agents_corral_command_acts_for_it_while_its_turn_runs() {
         let (corral, root) = corral();

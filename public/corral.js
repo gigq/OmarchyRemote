@@ -60,6 +60,23 @@
     ['\u2753', 'please explain'],
   ];
   const OFFERED = REACTIONS.filter(([e]) => e !== '\u{1F440}');
+  // Files: the paperclip, a file, and closing.
+  const FILE_ICONS = {
+    attach: 'm8 13 7-7a3 3 0 0 1 4 4l-9 9a5 5 0 0 1-7-7l9-9m-6 12 9-9',
+    file: 'M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8Zm0 0v5h5',
+    close: 'M18 6 6 18M6 6l12 12',
+  };
+  function fileIcon(name) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', FILE_ICONS[name]);
+    svg.append(path);
+    return svg;
+  }
+  const PICTURE = /\.(png|jpe?g|gif|webp|heic|avif)$/i;
+  const MAX_FILES = 20;
   const COLORS = ['blue', 'green', 'magenta', 'cyan', 'yellow', 'red'];
   const colorOf = name => {
     let hash = 0;
@@ -268,6 +285,37 @@
       this.placeholder = node('span', 'corral-placeholder', 'Message');
       this.promptField.append(this.placeholder);
       this.promptRow.append(this.promptField);
+      // The paperclip offers the photo library and Files; pasted files attach too. They wait in
+      // the tray, each kept in the conversation already, until the message goes with them.
+      this.filePicker = node('input');
+      this.filePicker.type = 'file';
+      this.filePicker.multiple = true;
+      this.filePicker.hidden = true;
+      this.filePicker.onchange = () => {
+        const files = [...this.filePicker.files];
+        this.filePicker.value = '';
+        this.upload(files);
+      };
+      this.attachButton = button(
+        '',
+        () => {
+          this.nativeInput.field.blur();
+          this.filePicker.click();
+        },
+        'herdr-attach keycap chat-attach corral-attach'
+      );
+      this.attachButton.setAttribute('aria-label', 'Attach files');
+      this.attachButton.title = 'Attach files';
+      this.attachButton.append(fileIcon('attach'));
+      this.promptRow.prepend(this.attachButton, this.filePicker);
+      this.pending = new Map();
+      this.previews = new Map();
+      this.uploads = [];
+      this.tray = node('div', 'chat-uploads corral-uploads');
+      this.tray.setAttribute('aria-label', 'Attachments');
+      this.tray.hidden = true;
+      // Pictures in messages load with the client header, as blobs.
+      this.blobs = new Map();
       // As in Chat, the conversation's stage holds Voice's floating controls.
       this.stage = node('div', 'herdr-output-stage corral-stage');
       this.voiceTools = node('div', 'herdr-output-tools corral-voice-tools');
@@ -298,6 +346,7 @@
         this.stage,
         this.workingLine,
         this.suggestions,
+        this.tray,
         this.promptRow
       );
       this.main.hidden = true;
@@ -372,6 +421,16 @@
         draftStore: 'omarchy-corral-drafts',
       });
       this.nativeInput.field.addEventListener('input', () => this.suggest());
+      this.nativeInput.field.addEventListener('paste', e => {
+        const files = [...(e.clipboardData?.items || [])]
+          .filter(i => i.kind === 'file')
+          .map(i => i.getAsFile())
+          .filter(Boolean);
+        if (files.length) {
+          e.preventDefault();
+          this.upload(files);
+        }
+      });
       // Ahead of the composer's own keys, which would send Tab and Escape on.
       this.nativeInput.field.addEventListener('keydown', e => this.mentionKeys(e), true);
       // The microphone works as in Chat: tap to talk and send, hold for replies read aloud. The
@@ -1265,6 +1324,7 @@
       this.backKey.hidden = wide && !this.threadId;
       this.sidePanelKey.hidden = !this.main.hidden;
       this.layoutMode();
+      if (this.tray) this.renderTray();
       this.followVoice();
     }
     // The Messages and Work tabs, for an agent's direct message outside a thread.
@@ -1466,6 +1526,7 @@
         const text = node('div', 'corral-text');
         text.dataset.message = m.id;
         markdown(text, m.text, names);
+        if (m.files?.length) text.append(this.fileChips(m));
         last.body.append(text);
         // Sent, but the agent it is for is still at work: it gets it when that turn ends.
         const waiting = this.queued.get(m.id);
@@ -1754,14 +1815,26 @@
     send(text) {
       text = text.trim();
       const id = this.openId;
-      if (!text || !id) return false;
+      const draft = this.draftKey();
+      if (this.uploads.some(u => u.draft === draft)) {
+        this.uploadError = 'Wait for the upload to finish.';
+        this.renderTray();
+        return false;
+      }
+      const files = this.pending.get(draft) || [];
+      if ((!text && !files.length) || !id) return false;
+      this.setPending(draft, []);
       this.suggestions.hidden = true;
       this.cycle = null;
       // What you send is what you want to see.
       this.pinned = true;
       if (this.workAgent()) this.setMode('messages');
       const thread = this.threadId || '';
-      return request(`/conversations/${encodeURIComponent(id)}/messages`, { text, thread }).then(
+      return request(`/conversations/${encodeURIComponent(id)}/messages`, {
+        text,
+        thread,
+        files: files.map(f => f.name),
+      }).then(
         message => {
           if (this.openId === id && !this.messages.some(m => m.id === message.id)) {
             this.messages.push(message);
@@ -1770,11 +1843,203 @@
           return true;
         },
         e => {
+          // The files wait to go again.
+          this.setPending(draft, [...files, ...(this.pending.get(draft) || [])]);
           this.workingText.textContent = e.message;
           this.workingLine.hidden = false;
           return false;
         }
       );
+    }
+    // Where the composer is: the conversation, or a thread in it.
+    draftKey() {
+      return (this.openId || '') + '/' + (this.threadId || '');
+    }
+    setPending(draft, files) {
+      if (files.length) this.pending.set(draft, files);
+      else this.pending.delete(draft);
+      this.renderTray();
+    }
+    async upload(files) {
+      const id = this.openId;
+      if (!id || !files.length) return;
+      const draft = this.draftKey();
+      const errors = [];
+      for (const file of files) {
+        const name = file.name || 'pasted.png';
+        const waiting = (this.pending.get(draft) || []).length;
+        if (waiting + this.uploads.filter(u => u.draft === draft).length >= MAX_FILES) {
+          errors.push(`A message carries at most ${MAX_FILES} files.`);
+          break;
+        }
+        if (file.size > 100 * 1024 * 1024) {
+          errors.push(name + ': larger than 100 MB');
+          continue;
+        }
+        const job = { draft, name };
+        this.uploads.push(job);
+        this.renderTray();
+        try {
+          const response = await fetch(
+            `/api/corral/conversations/${encodeURIComponent(id)}/files?name=${encodeURIComponent(name)}`,
+            {
+              method: 'POST',
+              headers: {
+                'X-Hyprland-Client': '1',
+                'Content-Type': file.type || 'application/octet-stream',
+              },
+              body: file,
+              signal: AbortSignal.timeout(600000),
+            }
+          );
+          if (response.status === 413) throw Error('larger than 100 MB');
+          const kept = await response.json().catch(() => ({}));
+          if (!response.ok || !kept.name) throw Error(kept.error || 'upload failed');
+          if (kept.image) this.previews.set(id + '/' + kept.name, URL.createObjectURL(file));
+          this.setPending(draft, [...(this.pending.get(draft) || []), kept]);
+        } catch (e) {
+          errors.push(
+            name + ': ' + (e.name === 'TimeoutError' ? 'the upload timed out' : e.message)
+          );
+        } finally {
+          this.uploads.splice(this.uploads.indexOf(job), 1);
+        }
+      }
+      this.uploadError = errors.join(' · ');
+      this.renderTray();
+    }
+    renderTray() {
+      const draft = this.draftKey();
+      const chips = (this.pending.get(draft) || []).map(file => {
+        const chip = node('div', 'chat-upload');
+        const preview = this.previews.get(this.openId + '/' + file.name);
+        if (preview) {
+          const img = node('img');
+          img.src = preview;
+          img.alt = '';
+          chip.append(img);
+        } else chip.append(fileIcon('file'));
+        chip.append(node('span', 'chat-upload-name', file.name));
+        const remove = button(
+          '',
+          () =>
+            this.setPending(
+              draft,
+              (this.pending.get(draft) || []).filter(f => f !== file)
+            ),
+          'chat-icon-button chat-upload-remove'
+        );
+        remove.setAttribute('aria-label', 'Remove ' + file.name);
+        remove.append(fileIcon('close'));
+        chip.append(remove);
+        return chip;
+      });
+      for (const job of this.uploads.filter(u => u.draft === draft)) {
+        const chip = node('div', 'chat-upload uploading');
+        chip.append(fileIcon('attach'), node('span', 'chat-upload-name', `Uploading ${job.name}…`));
+        chips.push(chip);
+      }
+      if (this.uploadError) chips.push(node('p', 'chat-upload-error', this.uploadError));
+      this.tray.replaceChildren(...chips);
+      this.tray.hidden = !chips.length;
+    }
+    // A conversation's file, as a blob URL, loaded once.
+    blob(name) {
+      const key = this.openId + '/' + name;
+      if (this.previews.has(key)) return Promise.resolve(this.previews.get(key));
+      if (!this.blobs.has(key)) {
+        const url = fetch(
+          `/api/corral/conversations/${encodeURIComponent(this.openId)}/files/${encodeURIComponent(name)}`,
+          { headers: { 'X-Hyprland-Client': '1' } }
+        )
+          .then(r => {
+            if (!r.ok) throw Error('Not found');
+            return r.blob();
+          })
+          .then(b => URL.createObjectURL(b));
+        url.catch(() => this.blobs.delete(key));
+        this.blobs.set(key, url);
+      }
+      return this.blobs.get(key);
+    }
+    // A message's files: pictures as small previews that open large, others by name, which open
+    // in a new tab or download.
+    fileChips(m) {
+      const list = node('div', 'corral-files');
+      const pictures = m.files.filter(f => PICTURE.test(f));
+      for (const name of m.files) {
+        const chip = button('', () => this.openFile(name, pictures), 'chat-attachment corral-file');
+        chip.title = name;
+        chip.setAttribute('aria-label', name);
+        if (PICTURE.test(name)) {
+          chip.classList.add('image');
+          const img = node('img');
+          img.alt = name;
+          img.onload = () => this.pin();
+          chip.append(img);
+          this.blob(name)
+            .then(url => (img.src = url))
+            .catch(() => chip.replaceChildren(fileIcon('file'), node('span', '', name)));
+        } else chip.append(fileIcon('file'), node('span', '', name));
+        list.append(chip);
+      }
+      return list;
+    }
+    async openFile(name, pictures) {
+      if (PICTURE.test(name)) return this.viewer(pictures, pictures.indexOf(name));
+      const url = await this.blob(name).catch(() => null);
+      if (!url) return;
+      const a = node('a');
+      a.href = url;
+      a.download = name;
+      a.target = '_blank';
+      a.click();
+    }
+    // A picture large, over everything: arrows step through the message's pictures; a tap
+    // outside it, ×, or Escape closes it.
+    viewer(names, at) {
+      this.closeViewer?.();
+      const shade = node('div', 'corral-viewer');
+      shade.setAttribute('role', 'dialog');
+      shade.setAttribute('aria-label', 'Picture');
+      const img = node('img');
+      const caption = node('span', 'corral-viewer-name');
+      const close = button('', () => this.closeViewer(), 'keycap corral-viewer-close');
+      close.setAttribute('aria-label', 'Close');
+      close.append(fileIcon('close'));
+      const step = by => show((at + by + names.length) % names.length);
+      const prev = button('‹', () => step(-1), 'keycap corral-viewer-step prev');
+      const next = button('›', () => step(1), 'keycap corral-viewer-step next');
+      prev.setAttribute('aria-label', 'Previous picture');
+      next.setAttribute('aria-label', 'Next picture');
+      prev.hidden = next.hidden = names.length < 2;
+      const show = n => {
+        at = n;
+        img.alt = caption.textContent = names[n];
+        this.blob(names[n]).then(url => {
+          if (at === n) img.src = url;
+        });
+      };
+      const keys = e => {
+        if (e.key === 'Escape') this.closeViewer();
+        else if (e.key === 'ArrowLeft') step(-1);
+        else if (e.key === 'ArrowRight') step(1);
+        else return;
+        e.preventDefault();
+        e.stopPropagation();
+      };
+      shade.onclick = e => {
+        if (e.target === shade) this.closeViewer();
+      };
+      document.addEventListener('keydown', keys, true);
+      this.closeViewer = () => {
+        document.removeEventListener('keydown', keys, true);
+        shade.remove();
+        this.closeViewer = null;
+      };
+      shade.append(img, caption, prev, next, close);
+      document.body.append(shade);
+      show(at);
     }
     async stop() {
       if (this.openId) await request(`/conversations/${encodeURIComponent(this.openId)}/stop`, {});

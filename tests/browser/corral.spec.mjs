@@ -103,7 +103,18 @@ async function setup(page, { width = 402, height = 874 } = {}, before) {
   });
   await page.route(/\/api\/corral\/conversations\/[^/]+\/messages$/, r => {
     const id = r.request().url().split('/').at(-2);
-    const { text, thread, reacts } = r.request().postDataJSON();
+    const { text, thread, reacts, files } = r.request().postDataJSON();
+    if (files?.length) {
+      state.sent.push({ id, text, files });
+      const m = {
+        ...msg('you', text, 9),
+        id: 'sent' + state.sent.length,
+        thread: thread || '',
+        files,
+      };
+      state.messages[id].push(m);
+      return r.fulfill({ json: m });
+    }
     if (reacts) {
       state.sent.push({ id, text, reacts });
       return r.fulfill({
@@ -146,6 +157,20 @@ async function setup(page, { width = 402, height = 874 } = {}, before) {
   await page.route('**/api/corral/activity', r =>
     r.fulfill({ json: { items: state.activity || [] } })
   );
+  // A tiny picture for any file: kept under the name it came with.
+  const PNG = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    'base64'
+  );
+  await page.route(/\/api\/corral\/conversations\/[^/]+\/files(\?|\/)/, r => {
+    const url = new URL(r.request().url());
+    if (r.request().method() === 'POST') {
+      const name = url.searchParams.get('name');
+      (state.uploaded ||= []).push(name);
+      return r.fulfill({ json: { name, image: /\.png$/.test(name) } });
+    }
+    return r.fulfill({ body: PNG, contentType: 'image/png' });
+  });
   await page.route(/\/api\/corral\/agents\/[^/]+\/recent$/, r =>
     r.fulfill({ json: { items: state.recent || [] } })
   );
@@ -989,6 +1014,45 @@ test('reactions show on the message, counted, naming who gave them, and a tap ta
   await rocket.click();
   await expect.poll(() => state.deleted).toEqual(['react6']);
   await expect(rocket).toHaveCount(0);
+});
+
+test('files go with a message, pictures open large, and an agent can send them back', async ({
+  page,
+}) => {
+  const { app, state, emit } = await setup(page);
+  await app.getByRole('listitem').filter({ hasText: 'infra' }).first().click();
+  // The paperclip's picker: each file goes up and waits in the tray.
+  await app.locator('input[type=file]').setInputFiles([
+    { name: 'lamp.png', mimeType: 'image/png', buffer: Buffer.from('png') },
+    { name: 'receipt.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF') },
+  ]);
+  const tray = app.getByLabel('Attachments');
+  await expect(tray.locator('.chat-upload-name')).toHaveText(['lamp.png', 'receipt.pdf']);
+  await page.screenshot({ path: 'artifacts/browser/corral-tray.png' });
+  await tray.getByRole('button', { name: 'Remove receipt.pdf' }).click();
+  await expect(tray.locator('.chat-upload-name')).toHaveText(['lamp.png']);
+  // A message with no words carries them.
+  await app.getByRole('button', { name: 'Write a message' }).click();
+  await app.locator('textarea.native-input').press('Enter');
+  await expect.poll(() => state.sent).toEqual([{ id: INFRA, text: '', files: ['lamp.png'] }]);
+  await expect(tray).toBeHidden();
+  const list = app.locator('.corral-messages');
+  const lamp = list.getByRole('button', { name: 'lamp.png' });
+  await expect(lamp.locator('img')).toHaveJSProperty('complete', true);
+  // An agent's message with pictures: one opens large, and arrows step through them.
+  emit({
+    type: 'message',
+    conversation: INFRA,
+    message: { ...msg(ALEX, 'Two angles.', 7), id: 'shots', files: ['front.png', 'back.png'] },
+  });
+  await list.getByRole('button', { name: 'front.png' }).click();
+  const viewer = page.getByRole('dialog', { name: 'Picture' });
+  await expect(viewer.locator('.corral-viewer-name')).toHaveText('front.png');
+  await page.screenshot({ path: 'artifacts/browser/corral-viewer.png' });
+  await page.keyboard.press('ArrowRight');
+  await expect(viewer.locator('.corral-viewer-name')).toHaveText('back.png');
+  await page.keyboard.press('Escape');
+  await expect(viewer).toHaveCount(0);
 });
 
 test('a thread stays open when Corral reconnects, and after a reload', async ({ page }) => {

@@ -78,6 +78,58 @@ fn curl(
         .kill_on_drop(true);
     Ok((command, config.join("\n")))
 }
+/// A value for a URL's query.
+fn query_part(text: &str) -> String {
+    text.bytes()
+        .map(|b| {
+            if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) {
+                (b as char).to_string()
+            } else {
+                format!("%{b:02X}")
+            }
+        })
+        .collect()
+}
+/// Sends a file to a host as `path`'s body, and gives back where the host kept it.
+async fn push_file(host: &Host, path: &str, file: &FsPath) -> anyhow::Result<String> {
+    let config = [
+        format!(
+            "url = {}",
+            quoted(&format!("{}{path}", host.url.trim_end_matches('/')))
+        ),
+        format!(
+            "header = {}",
+            quoted(&format!("Authorization: Bearer {}", host.key))
+        ),
+        "header = \"Content-Type: application/octet-stream\"".into(),
+        format!("data-binary = {}", quoted(&format!("@{}", file.display()))),
+        "silent".into(),
+        "show-error".into(),
+        "connect-timeout = 8".into(),
+        "max-time = 600".into(),
+        "fail-with-body".into(),
+    ]
+    .join("\n");
+    let mut command = Command::new(program("curl")?);
+    command
+        .args(["--config", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    let output = spawn((command, config)).await?.wait_with_output().await?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "{}",
+            clip(String::from_utf8_lossy(&output.stderr).trim(), 160)
+        );
+    }
+    let said: Value = serde_json::from_slice(&output.stdout)?;
+    said["path"]
+        .as_str()
+        .map(str::to_owned)
+        .ok_or_else(|| anyhow::anyhow!("no path"))
+}
 /// Starts curl with its config on its input.
 async fn spawn((mut command, config): (Command, String)) -> anyhow::Result<tokio::process::Child> {
     let mut child = command.spawn()?;
@@ -376,6 +428,35 @@ impl Corral {
         status: impl Fn(Step),
     ) -> Result<(String, String, String), String> {
         let host = self.host(&agent.host)?;
+        // Files in what is new go there first, and the agent is told where they are there.
+        let mut body = body;
+        let here = self
+            .root
+            .join("conversations")
+            .join(conversation)
+            .join("files");
+        let attached: Vec<String> = body
+            .lines()
+            .filter_map(|l| l.trim_start().strip_prefix("attached: "))
+            .filter(|p| FsPath::new(p).starts_with(&here))
+            .map(str::to_owned)
+            .collect();
+        for path in attached {
+            let name = FsPath::new(&path)
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let at = format!(
+                "/api/corral/host/file?home={}&conversation={}&name={}",
+                query_part(&self.name),
+                query_part(conversation),
+                query_part(&name)
+            );
+            match push_file(&host, &at, FsPath::new(&path)).await {
+                Ok(there) => body = body.replace(&path, &there),
+                Err(e) => eprintln!("corral: could not send {name} to {}: {e}", host.name),
+            }
+        }
         let visit = json!({
             "home": self.name,
             "conversation": conversation,
@@ -518,6 +599,31 @@ pub async fn host_listing(State(corral): State<Corral>) -> Json<Value> {
         "engines": engines,
         "agents": agents,
     }))
+}
+#[derive(Deserialize)]
+pub struct Visiting {
+    pub(crate) home: String,
+    pub(crate) conversation: String,
+    pub(crate) name: String,
+}
+/// A file of another host's conversation, sent before a turn of this host's agent there: kept
+/// here, in `files/<host>/<conversation>/`, so the agent can open it.
+pub async fn host_file(
+    State(corral): State<Corral>,
+    Query(at): Query<Visiting>,
+    body: axum::body::Bytes,
+) -> Result<Json<Value>, ApiError> {
+    let part = |p: &str| safe_name(p).filter(|s| s == p);
+    let (Some(home), Some(conversation), Some(name)) =
+        (part(&at.home), part(&at.conversation), part(&at.name))
+    else {
+        return Err(refuse(StatusCode::BAD_REQUEST, "Not a file name"));
+    };
+    let dir = corral.root.join("files").join(home).join(conversation);
+    fs::create_dir_all(&dir).map_err(error)?;
+    let path = dir.join(name);
+    fs::write(&path, &body).map_err(error)?;
+    Ok(Json(json!({"path": path.display().to_string()})))
 }
 /// A turn in another host's conversation, as that host sends it.
 #[derive(Deserialize)]
