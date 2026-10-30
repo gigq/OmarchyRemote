@@ -1,0 +1,27 @@
+/* Native dragging overlays the content; controls explicitly subtract their hit areas. */
+.desktop-shell.solo-mode::before {
+  content: '';
+  position: fixed;
+  inset: 0 0 auto;
+  height: 25px;
+  pointer-events: none;
+  -webkit-app-region: drag;
+  z-index: 0;
+}
+.desktop-shell.solo-mode
+  :is(
+    button,
+    a[href],
+    input,
+    textarea,
+    select,
+    summary,
+    [role='button'],
+    [role='tab'],
+    [role='checkbox'],
+    [role='switch'],
+    [contenteditable]:not([contenteditable='false']),
+    [tabindex]:not([tabindex='-1'])
+  ) {
+  -webkit-app-region: no-drag;
+}

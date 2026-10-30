@@ -148,3 +148,56 @@ test('macOS single-app windows close with Command-W before the shell consumes it
     await app.close().catch(() => {});
   }
 });
+
+test('the Mac drag strip overlays 25 pixels while leaving controls clickable', async ({
+  profile,
+}) => {
+  test.skip(process.platform !== 'darwin', 'macOS titlebar dragging');
+  const { app, window } = await launch(profile, { OMARCHY_REMOTE_URL: HOST }, ['--app=codexbar']);
+  try {
+    await expect(window.locator('html')).toHaveClass(/solo-mode/);
+    await window.waitForFunction(
+      () => document.querySelector('#touch-shell')?.getBoundingClientRect().width > 0
+    );
+    await expect
+      .poll(() =>
+        window.evaluate(() => getComputedStyle(document.documentElement, '::before').height)
+      )
+      .toBe('25px');
+    const geometry = await window.evaluate(() => {
+      const shell = document.querySelector('#touch-shell').getBoundingClientRect();
+      const layer = getComputedStyle(document.documentElement, '::before');
+      const button = document.createElement('button');
+      button.textContent = 'Drag QA';
+      button.style.cssText = 'position:fixed;top:5px;left:5px;width:80px;height:30px;z-index:1';
+      button.onclick = () => {
+        document.documentElement.dataset.dragQaClicked = 'yes';
+      };
+      document.body.append(button);
+      const control = getComputedStyle(button);
+      const bounds = button.getBoundingClientRect();
+      return {
+        shellTop: shell.top,
+        stripHeight: layer.height,
+        pointerEvents: layer.pointerEvents,
+        drag: layer.webkitAppRegion,
+        controlDrag: control.webkitAppRegion,
+        controlTop: bounds.top,
+        hit: document.elementFromPoint(20, 15) === button,
+      };
+    });
+    expect(geometry).toEqual({
+      shellTop: 0,
+      stripHeight: '25px',
+      pointerEvents: 'none',
+      drag: 'drag',
+      controlDrag: 'no-drag',
+      controlTop: 5,
+      hit: true,
+    });
+    await window.getByRole('button', { name: 'Drag QA', exact: true }).click();
+    await expect(window.locator('html')).toHaveAttribute('data-drag-qa-clicked', 'yes');
+  } finally {
+    await app.close();
+  }
+});

@@ -206,11 +206,7 @@ class ShellWindow {
     });
     contents.on('did-finish-load', () => {
       if (process.platform === 'darwin' && this.key && this.allowed(contents.getURL()))
-        contents
-          .insertCSS(
-            '.desktop-shell.solo-mode::after { content: \"\"; position: fixed; inset: 0 0 auto; height: 6px; -webkit-app-region: drag; z-index: 2147483647; }'
-          )
-          .catch(() => {});
+        contents.insertCSS(fs.readFileSync(path.join(here, 'window.css'), 'utf8')).catch(() => {});
       if (!this.pickerError || origin(contents.getURL()) !== BUNDLE) return;
       contents
         .executeJavaScript(
