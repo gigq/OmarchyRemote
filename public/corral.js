@@ -762,6 +762,8 @@
     // Opens a conversation, or with `thread`, that thread in it, which alone counts as seen.
     async open(id, thread = '') {
       this.closeSheet();
+      // A message left half edited is let go.
+      this.editing = null;
       this.threadId = null;
       this.openId = id;
       storage.set(OPEN, id);
