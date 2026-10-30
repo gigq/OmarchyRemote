@@ -130,6 +130,8 @@ exits with its status. A program named in the command (`blender`, `ffmpeg`, `nod
 that machine, through its settings' `tools` where it is not on the path, as Blender on Windows.
 A machine's `tags` are those in its settings, the programs it has, and its system.
 
+The sender gives a job up as lost, and a split puts its piece back in line for another machine, when the job was waiting or running and then leaves the machine's queue without finishing for a minute (the machine restarted, say), when it never reaches the queue in ten minutes, or when the machine does not answer for ten minutes; it asks the machine to stop the job, in case it is still there.
+
 Job folders go as soon as their files are back; each machine also sweeps its own every five
 minutes, removing a finished job its sender never came back for after ten minutes and a folder
 with no job behind it after an hour. The farm's routes, under `/api/corral/farm`, take

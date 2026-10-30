@@ -800,6 +800,7 @@ fn range(
                 Some(&serde_json::json!({})),
             );
         };
+        let mut watch = super::Watch::new();
         let (code, log) = loop {
             std::thread::sleep(Duration::from_secs(3));
             if stop.load(std::sync::atomic::Ordering::Relaxed) {
@@ -811,7 +812,16 @@ fn range(
                 cleanup();
                 return Err("stopped".into());
             }
-            let Ok(status) = ask(machine, &jobs, None) else {
+            let answer = ask(machine, &jobs, None);
+            if let Some(why) = watch.lost(&machine.name, &answer) {
+                let _ = ask(
+                    machine,
+                    &format!("{jobs}/stop"),
+                    Some(&serde_json::json!({})),
+                );
+                return Err(why);
+            }
+            let Ok(status) = answer else {
                 continue;
             };
             if status["state"] == "done" {

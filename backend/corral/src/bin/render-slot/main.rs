@@ -7,6 +7,7 @@ mod split;
 use corral::queue;
 use std::path::Path;
 use std::process::{Command, ExitCode};
+use std::time::{Duration, Instant};
 
 const USAGE: &str = "render-slot: heavy jobs take turns for this machine's cores and GPU.
 
@@ -424,6 +425,73 @@ impl Drop for Options {
     }
 }
 /// Asks a machine for `path`, with an optional JSON body, and reads its JSON answer.
+/// How long a machine may go unanswered, or a job it had stay gone from its queue, before the job
+/// counts as lost.
+const UNREACHABLE: Duration = Duration::from_secs(10 * 60);
+const VANISHED: Duration = Duration::from_secs(60);
+const NEVER_QUEUED: Duration = Duration::from_secs(10 * 60);
+/// A farm job, as its sender sees it poll by poll: lost when it was waiting or running and is no
+/// longer in the machine's queue without having finished (the machine restarted, say), when it
+/// never reaches the queue, or when the machine stops answering for long.
+pub(crate) struct Watch {
+    began: Instant,
+    answered: Instant,
+    queued: bool,
+    missing: Option<Instant>,
+}
+impl Watch {
+    pub fn new() -> Watch {
+        Watch {
+            began: Instant::now(),
+            answered: Instant::now(),
+            queued: false,
+            missing: None,
+        }
+    }
+    /// Why the job is lost, given this poll's answer; `None` to keep waiting.
+    /// Why the job is lost, given this poll's answer; `None` to keep waiting.
+    pub fn lost(
+        &mut self,
+        machine: &str,
+        answer: &Result<serde_json::Value, String>,
+    ) -> Option<String> {
+        self.lost_at(Instant::now(), machine, answer)
+    }
+    pub fn lost_at(
+        &mut self,
+        now: Instant,
+        machine: &str,
+        answer: &Result<serde_json::Value, String>,
+    ) -> Option<String> {
+        let Ok(status) = answer else {
+            return (now - self.answered >= UNREACHABLE).then(|| {
+                format!(
+                    "{machine} has not answered for {} min",
+                    UNREACHABLE.as_secs() / 60
+                )
+            });
+        };
+        self.answered = now;
+        match status["state"].as_str().unwrap_or_default() {
+            "waiting" | "running" => {
+                self.queued = true;
+                self.missing = None;
+                None
+            }
+            "done" => None,
+            _ if self.queued => {
+                let since = *self.missing.get_or_insert(now);
+                (now - since >= VANISHED).then(|| {
+                    format!(
+                        "its job left {machine}'s queue without finishing (did {machine} restart?)"
+                    )
+                })
+            }
+            _ => (now - self.began >= NEVER_QUEUED)
+                .then(|| format!("its job never reached {machine}'s queue")),
+        }
+    }
+}
 fn ask(
     machine: &Machine,
     path: &str,
@@ -608,9 +676,19 @@ fn send(machine: &Machine, job: &Remote) -> ExitCode {
     }
     // Its place in that machine's line, then its end.
     let mut told = String::new();
+    let mut watch = Watch::new();
     let (code, log) = loop {
         std::thread::sleep(std::time::Duration::from_secs(5));
-        let Ok(status) = ask(machine, &jobs, None) else {
+        let answer = ask(machine, &jobs, None);
+        if let Some(why) = watch.lost(&machine.name, &answer) {
+            let _ = ask(
+                machine,
+                &format!("{jobs}/stop"),
+                Some(&serde_json::json!({})),
+            );
+            return fail(&format!("the job was lost: {why}"));
+        }
+        let Ok(status) = answer else {
             continue;
         };
         let state = status["state"].as_str().unwrap_or_default();
@@ -701,4 +779,51 @@ fn machines() -> ExitCode {
         }
     }
     ExitCode::SUCCESS
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn state(s: &str) -> Result<serde_json::Value, String> {
+        Ok(serde_json::json!({ "state": s }))
+    }
+    #[test]
+    fn a_farm_job_is_lost_when_it_leaves_the_queue_or_its_machine_goes_quiet() {
+        let t = Instant::now();
+        let at = |s: u64| t + Duration::from_secs(s);
+        // Queued, then gone without finishing: lost a minute on.
+        let mut w = Watch::new();
+        w.began = t;
+        w.answered = t;
+        assert!(w.lost_at(at(5), "case", &state("starting")).is_none());
+        assert!(w.lost_at(at(10), "case", &state("waiting")).is_none());
+        assert!(w.lost_at(at(20), "case", &state("starting")).is_none());
+        assert!(w.lost_at(at(60), "case", &state("starting")).is_none());
+        let why = w.lost_at(at(81), "case", &state("starting")).unwrap();
+        assert!(why.contains("left case's queue"), "{why}");
+        // A moment between leaving the queue and saying it is done is not lost.
+        let mut w = Watch::new();
+        w.began = t;
+        assert!(w.lost_at(at(5), "r2d2", &state("running")).is_none());
+        assert!(w.lost_at(at(10), "r2d2", &state("starting")).is_none());
+        assert!(w.lost_at(at(15), "r2d2", &state("done")).is_none());
+        // Unanswered for ten minutes.
+        let mut w = Watch::new();
+        w.answered = t;
+        let down = Err("not reachable".to_string());
+        assert!(w.lost_at(at(300), "c3po", &down).is_none());
+        assert!(
+            w.lost_at(at(601), "c3po", &down)
+                .unwrap()
+                .contains("not answered")
+        );
+        // Never reaching the queue.
+        let mut w = Watch::new();
+        w.began = t;
+        assert!(
+            w.lost_at(at(601), "gerty", &state("starting"))
+                .unwrap()
+                .contains("never reached")
+        );
+    }
 }
