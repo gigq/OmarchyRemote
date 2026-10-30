@@ -122,3 +122,29 @@ test('a theme chosen in the Settings window repaints the other app windows', asy
     await app.close();
   }
 });
+
+test('macOS single-app windows close with Command-W before the shell consumes it', async ({
+  profile,
+}) => {
+  test.skip(process.platform !== 'darwin', 'macOS window shortcut');
+  const { app, window } = await launch(profile, { OMARCHY_REMOTE_URL: HOST }, ['--app=codexbar']);
+  try {
+    await expect(window).toHaveURL(HOST + '/native/?app=codexbar');
+    await expect(window.locator('html')).toHaveClass(/solo-mode/);
+    const closed = app.waitForEvent('close');
+    // Native menu accelerators and before-input-event use Electron input, not CDP input.
+    await app
+      .evaluate(({ BrowserWindow }) => {
+        const native = BrowserWindow.getAllWindows()[0];
+        native.show();
+        native.focus();
+        native.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'W', modifiers: ['meta'] });
+      })
+      .catch(error => {
+        if (!/closed|destroyed/.test(error.message)) throw error;
+      });
+    await closed;
+  } finally {
+    await app.close().catch(() => {});
+  }
+});

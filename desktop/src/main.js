@@ -105,6 +105,22 @@ class ShellWindow {
     });
     if (process.platform === 'darwin' && key) this.window.setWindowButtonVisibility(false);
     this.contents = this.window.webContents;
+    // An app window closes before the hosted shell can consume Command-W.
+    this.contents.on('before-input-event', (event, input) => {
+      if (
+        process.platform === 'darwin' &&
+        key &&
+        input.type === 'keyDown' &&
+        input.code === 'KeyW' &&
+        input.meta &&
+        !input.control &&
+        !input.alt &&
+        !input.shift
+      ) {
+        event.preventDefault();
+        this.window.close();
+      }
+    });
     this.window.on('focus', () => {
       const close = Menu.getApplicationMenu()?.getMenuItemById('close-window');
       if (close) close.enabled = !!key;

@@ -37,8 +37,11 @@ export class Appearance {
         previous = next;
         this.changed(scope, values);
       };
-      fs.watchFile(file, { interval: 100, persistent: false }, listener);
-      this.watches.set(file, listener);
+      // Poll from our synchronous baseline: fs.watchFile can miss a file created
+      // before its first asynchronous stat, especially when apps start together.
+      const timer = setInterval(listener, 100);
+      timer.unref();
+      this.watches.set(file, timer);
     }
     return this.read(file);
   }
@@ -62,7 +65,7 @@ export class Appearance {
     return values;
   }
   close() {
-    for (const [file, listener] of this.watches) fs.unwatchFile(file, listener);
+    for (const timer of this.watches.values()) clearInterval(timer);
     this.watches.clear();
   }
 }
