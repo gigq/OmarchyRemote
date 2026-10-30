@@ -198,12 +198,15 @@ pub struct Message {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub reacts: String,
 }
-/// The reactions the person can give a message, and the word each is told to an agent as.
-pub const REACTIONS: [(&str, &str); 4] = [
+/// The reactions a message can be given, and the words each is told as. The app offers the person
+/// the first four; agents use any, `👀` to say they have taken a message on.
+pub const REACTIONS: [(&str, &str); 6] = [
     ("👍", "thumbs up"),
     ("👎", "thumbs down"),
     ("👌", "OK, noted"),
     ("🚀", "do it"),
+    ("👀", "on it"),
+    ("❓", "not sure"),
 ];
 /// An agent's place in a conversation, or in one of its threads: its engine session there and
 /// how many of the conversation's messages it has been given. A conversation's seat also marks
@@ -465,6 +468,8 @@ Mention someone with @name to bring them in: that wakes them, so mention another
 Keep your memory file, {memory}, up to date with what you will want to know in your other conversations: commitments, decisions, and where things are. {look_back} Your picture in Corral is {folder}/avatar.png (or .jpg, .webp, .gif, or .svg); save a square image there to set or change it. It shows about 30 pixels across, so make it one bold, simple shape or symbol that fills the square, with strong contrast and thick strokes, and no fine lines, small details, or text. Render it at 32 by 32 (rsvg-convert works for SVG) and look at it to check that it reads before you save it.
 
 The `corral` command in your shell works Corral for you: listing, making, and inviting agents, making channels, and posting and reading in them. Run `corral help` to see what it does.
+
+When you take on a message whose answer will take more than a minute or two, first run `corral react 👀`, so {person} sees on their message that you have it, then do the work and reply when it is done. A reaction can also be the whole answer: `corral react 👍` (or 👌) for a note that needs no reply, then reply NOTHING.
 
 When you are given a task, do all of it, through to the finished result, the way you would in a terminal session: if asked for a video, make the video. Don't stop after a step to show a draft, ask which way to go, or ask leave to carry on; make the judgment calls yourself, keep going across as many turns as it takes (each time background work ends and wakes you, take the next step), and say what you chose when it is done. Stop to ask only when you are truly blocked: a choice only {person} can make that would be costly to undo, something you cannot reach, or a real risk.
 
@@ -1478,9 +1483,10 @@ impl Corral {
             .into_iter()
             .flatten()
             .find(|m| !message.reacts.is_empty() && m.id == message.reacts);
-        // A reaction wakes whoever wrote the message, and no one else.
+        // The person's reaction wakes whoever wrote the message, and an agent's wakes no one.
         let mut wake: Vec<String> = if !message.reacts.is_empty() {
             reacted_to
+                .filter(|_| message.author == YOU)
                 .map(|m| vec![m.author.clone()])
                 .unwrap_or_default()
         } else if (talk.kind == "dm" && message.author == YOU) || everyone {
@@ -2474,7 +2480,7 @@ pub async fn send(
 ) -> Result<Json<Value>, ApiError> {
     let text = form.text.trim();
     if !form.reacts.is_empty() {
-        return react(&corral, &id, &form.reacts, text).map(Json);
+        return react(&corral, &id, &form.reacts, text, YOU).map(Json);
     }
     if text.is_empty() || text.len() > 64 * 1024 {
         return Err(refuse(
@@ -2505,11 +2511,28 @@ pub async fn send(
         .map_err(error)?;
     Ok(Json(json!(message)))
 }
-/// The person's reaction to a message: posted beside it, saying in words what it is and what it is
-/// to, so the agent that wrote the message is woken there and reads it like any other.
-fn react(corral: &Corral, id: &str, to: &str, emoji: &str) -> Result<Value, ApiError> {
-    let Some((_, word)) = REACTIONS.iter().find(|(e, _)| *e == emoji) else {
-        return Err(refuse(StatusCode::BAD_REQUEST, "Not one of the reactions"));
+/// A reaction to a message, the person's or an agent's: posted beside it, saying in words what it
+/// is and what it is to, so whoever reads the conversation reads it like any other message. The
+/// person's wakes the agent that wrote the message.
+fn react(
+    corral: &Corral,
+    id: &str,
+    to: &str,
+    emoji: &str,
+    author: &str,
+) -> Result<Value, ApiError> {
+    let Some((emoji, word)) = REACTIONS
+        .iter()
+        .find(|(e, w)| *e == emoji || w.eq_ignore_ascii_case(emoji))
+    else {
+        let offered: Vec<String> = REACTIONS
+            .iter()
+            .map(|(e, w)| format!("{e} ({w})"))
+            .collect();
+        return Err(bad(&format!(
+            "Not one of the reactions: {}",
+            offered.join(", ")
+        )));
     };
     let (thread, text) = {
         let state = corral.state.lock().unwrap();
@@ -2520,8 +2543,17 @@ fn react(corral: &Corral, id: &str, to: &str, emoji: &str) -> Result<Value, ApiE
             .flatten()
             .find(|m| m.id == to && m.reacts.is_empty())
             .ok_or_else(not_found)?;
-        let whose = if target.author == YOU {
-            "your own".to_owned()
+        if state.messages[id]
+            .iter()
+            .any(|m| m.reacts == to && m.author == author && m.text.starts_with(emoji))
+        {
+            return Err(refuse(
+                StatusCode::CONFLICT,
+                "That reaction is already there",
+            ));
+        }
+        let whose = if target.author == author {
+            if author == YOU { "your own" } else { "its own" }.to_owned()
         } else {
             format!("{}'s", handle(&state, &target.author))
         };
@@ -2539,7 +2571,7 @@ fn react(corral: &Corral, id: &str, to: &str, emoji: &str) -> Result<Value, ApiE
             Message {
                 id: uuid::Uuid::new_v4().to_string(),
                 ts: now(),
-                author: YOU.to_owned(),
+                author: author.to_owned(),
                 text,
                 chain: 0,
                 thread,
@@ -2702,7 +2734,7 @@ async fn events(mut socket: WebSocket, corral: Corral) {
 // ---- The agent API, behind the `corral` command in each turn ----
 
 /// What the `corral` command offers, as `corral help` lists it: action, arguments, and what it does.
-const ACTIONS: [(&str, &str, &str); 12] = [
+const ACTIONS: [(&str, &str, &str); 13] = [
     ("whoami", "", "Who and where you are."),
     (
         "working",
@@ -2749,6 +2781,11 @@ const ACTIONS: [(&str, &str, &str); 12] = [
         "post",
         "--channel NAME [--thread ID] TEXT",
         "Post in a channel, or in a thread there, as yourself. @mentions wake agents as usual.",
+    ),
+    (
+        "react",
+        "[--message ID] EMOJI",
+        "React to the latest message to you here (or the one given) without a reply: 👀 (on it), 👍 (thumbs up), 👌 (OK, noted), ❓ (not sure), 👎 (thumbs down), or 🚀 (do it). It wakes no one.",
     ),
     (
         "read",
@@ -3187,6 +3224,46 @@ pub async fn agent_action(
                 .map_err(error)?;
             Ok(format!("Posted in #{} ({}).", channel.name, message.id))
         }
+        "react" => {
+            let emoji = text_arg(&body, "text");
+            let given = text_arg(&body, "message");
+            // By default, the latest message here that is not its own or Corral's.
+            let to = {
+                let state = corral.state.lock().unwrap();
+                state
+                    .messages
+                    .get(&me.conversation)
+                    .into_iter()
+                    .flatten()
+                    .rev()
+                    .filter(|m| m.reacts.is_empty())
+                    .find(|m| {
+                        if !given.is_empty() {
+                            return m.id == given;
+                        }
+                        let here = if me.thread.is_empty() {
+                            m.thread.is_empty()
+                        } else {
+                            m.id == me.thread || m.thread == me.thread
+                        };
+                        here && m.author != me.agent && m.author != CORRAL
+                    })
+                    .map(|m| (m.id.clone(), handle(&state, &m.author)))
+            };
+            let Some((to, by)) = to else {
+                return Err(bad(if given.is_empty() {
+                    "There is no message here to react to"
+                } else {
+                    "No such message here; `corral read` gives ids"
+                }));
+            };
+            let posted = react(&corral, &me.conversation, &to, &emoji, &me.agent)?;
+            let text = posted["text"].as_str().unwrap_or_default();
+            Ok(format!(
+                "Reacted {} to {by}'s message.",
+                text.split(" to ").next().unwrap_or_default()
+            ))
+        }
         "read" => {
             let channel = corral.channel_named(&text_arg(&body, "channel"))?;
             let thread = text_arg(&body, "thread");
@@ -3550,6 +3627,39 @@ mod tests {
         // Channels are found whatever the case.
         let read = run("read", json!({"channel":"DOCS"})).unwrap();
         assert!(read.contains("@maker: hello docs"));
+        // It reacts to the latest message to it where its turn is, not to Corral's notes.
+        let asked = message(YOU, "can you look at the logs", 0);
+        corral
+            .state
+            .lock()
+            .unwrap()
+            .messages
+            .get_mut(&infra.id)
+            .unwrap()
+            .insert(0, asked.clone());
+        assert_eq!(
+            run("react", json!({"text":"👀"})).unwrap(),
+            "Reacted 👀 (on it) to @you's message."
+        );
+        assert!(run("react", json!({"text":"on it"})).is_err());
+        assert!(run("react", json!({"text":"🎉"})).is_err());
+        let reacted = corral.state.lock().unwrap().messages[&infra.id]
+            .iter()
+            .find(|m| m.reacts == asked.id)
+            .cloned()
+            .unwrap();
+        assert_eq!(
+            reacted.text,
+            "👀 (on it) to @you's message: \u{201c}can you look at the logs\u{201d}"
+        );
+        corral
+            .state
+            .lock()
+            .unwrap()
+            .messages
+            .get_mut(&infra.id)
+            .unwrap()
+            .retain(|m| m.id != asked.id && m.reacts != asked.id);
         let state = corral.state.lock().unwrap();
         let notes: Vec<&str> = state.messages[&infra.id]
             .iter()
@@ -4009,16 +4119,26 @@ mod tests {
             // On the person's own message, no one.
             let (wake, _, _) = corral.targets(&mut state, &talk, &reaction(&mine));
             assert!(wake.is_empty());
+            // An agent's reaction, even to another agent's message, wakes no one.
+            let (wake, _, _) = corral.targets(
+                &mut state,
+                &talk,
+                &Message {
+                    author: walt.id.clone(),
+                    ..reaction(&started)
+                },
+            );
+            assert!(wake.is_empty());
         }
         // It is told in words, where the message is.
-        let posted = react(&corral, &talk.id, &mine.id, "🚀").unwrap();
+        let posted = react(&corral, &talk.id, &mine.id, "🚀", YOU).unwrap();
         assert_eq!(posted["reacts"], mine.id.as_str());
         assert_eq!(
             posted["text"],
             "🚀 (do it) to your own message: \u{201c}Ship it on Friday.\u{201d}"
         );
-        assert!(react(&corral, &talk.id, &mine.id, "🎉").is_err());
-        assert!(react(&corral, &talk.id, "nope", "👍").is_err());
+        assert!(react(&corral, &talk.id, &mine.id, "🎉", YOU).is_err());
+        assert!(react(&corral, &talk.id, "nope", "👍", YOU).is_err());
         fs::remove_dir_all(root).unwrap();
     }
     #[test]

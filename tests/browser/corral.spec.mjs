@@ -883,31 +883,38 @@ test('any message can be deleted, and a thread goes with the message it hangs fr
   await expect(list).not.toContainText('rotate the certs');
 });
 
-test('a message menu reacts with a tap, shown on the message rather than as one', async ({
+test('reactions show on the message, counted, naming who gave them, and a tap takes yours back', async ({
   page,
 }) => {
   const { app, state, emit } = await setup(page);
   await app.getByRole('listitem').filter({ hasText: 'infra' }).first().click();
   const list = app.locator('.corral-messages');
-  const said = list.locator('.corral-text', { hasText: 'On it.' });
-  await said.click({ button: 'right' });
+  await list.locator('.corral-text', { hasText: 'On it.' }).click({ button: 'right' });
+  // The menu offers four; agents have two more of their own.
   for (const name of ['Thumbs up', 'Thumbs down', 'OK, noted', 'Do it'])
     await expect(page.getByRole('menuitem', { name })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'On it' })).toHaveCount(0);
   await page.getByRole('menuitem', { name: 'Do it' }).click();
   await expect.poll(() => state.sent).toEqual([{ id: INFRA, text: '\u{1F680}', reacts: 'm2' }]);
   // The host tells the agent in words; the app shows only the emoji, on the message.
-  emit({
-    type: 'message',
-    conversation: INFRA,
-    message: {
-      ...msg('you', "\u{1F680} (do it) to @alex's message: \u201cOn it.\u201d", 6),
-      reacts: 'm2',
-    },
-  });
-  const chip = list.locator('.corral-reaction');
-  await expect(chip).toHaveText('\u{1F680}');
-  await expect(chip).toHaveAttribute('title', 'You: do it');
+  const given = (author, text, i, reacts) => {
+    const m = { ...msg(author, text, i), id: 'react' + i, reacts };
+    state.messages[INFRA].push(m);
+    emit({ type: 'message', conversation: INFRA, message: m });
+  };
+  given('you', "\u{1F680} (do it) to @alex's message: \u201cOn it.\u201d", 6, 'm2');
+  const rocket = list.getByRole('button', { name: 'You: do it' });
+  await expect(rocket).toHaveText('\u{1F680}1');
   await expect(list).not.toContainText('(do it)');
+  // Agents' reactions to the same emoji count together, and name them.
+  given(ALEX, "\u{1F440} (on it) to @you's message: \u201crotate the certs\u201d", 7, 'm1');
+  given(SAM, "\u{1F440} (on it) to @you's message: \u201crotate the certs\u201d", 8, 'm1');
+  const eyes = list.getByRole('button', { name: '@alex, @sam: on it' });
+  await expect(eyes).toHaveText('\u{1F440}2');
+  // A tap on your own takes it back.
+  await rocket.click();
+  await expect.poll(() => state.deleted).toEqual(['react6']);
+  await expect(rocket).toHaveCount(0);
 });
 
 test('a thread stays open when Corral reconnects, and after a reload', async ({ page }) => {

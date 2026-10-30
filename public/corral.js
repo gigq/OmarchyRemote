@@ -47,13 +47,17 @@
     if (!response.ok) throw Error(data.error || 'The host did not respond.');
     return data;
   }
-  // Quick replies from a message's menu; the host keeps the same list.
+  // Reactions, as the host lists them: a message's menu offers the first four, and agents use any,
+  // 👀 to say they have taken a message on.
   const REACTIONS = [
     ['\u{1F44D}', 'thumbs up'],
     ['\u{1F44E}', 'thumbs down'],
     ['\u{1F44C}', 'OK, noted'],
     ['\u{1F680}', 'do it'],
+    ['\u{1F440}', 'on it'],
+    ['\u2753', 'not sure'],
   ];
+  const OFFERED = REACTIONS.slice(0, 4);
   const COLORS = ['blue', 'green', 'magenta', 'cyan', 'yellow', 'red'];
   const colorOf = name => {
     let hash = 0;
@@ -1232,17 +1236,7 @@
         }
         last.author = m.author;
         const given = reactions.get(m.id);
-        if (given) {
-          const row = node('div', 'corral-reactions');
-          for (const r of given) {
-            const [emoji, word] = REACTIONS.find(([e]) => r.text.startsWith(e)) || [r.text, ''];
-            const chip = node('span', 'corral-reaction', emoji);
-            chip.title = 'You: ' + word;
-            contextMenu(chip, () => ({ title: chip.title, items: [this.deleteItem(r, 0)] }));
-            row.append(chip);
-          }
-          last.body.append(row);
-        }
+        if (given) last.body.append(this.reactionChips(m, given));
         if (!thread) {
           // Reply in thread: on hover, or from the message's menu.
           const answer = button('Reply', () => this.openThread(m.id), 'corral-reply-key');
@@ -1353,19 +1347,43 @@
     // which one it got and to what.
     reactRow(m) {
       return {
-        row: REACTIONS.map(([emoji, word]) => ({
+        row: OFFERED.map(([emoji, word]) => ({
           label: emoji,
           title: word[0].toUpperCase() + word.slice(1),
-          run: () =>
-            request(`/conversations/${encodeURIComponent(this.openId)}/messages`, {
-              text: emoji,
-              reacts: m.id,
-            }).catch(e => {
-              this.workingText.textContent = e.message;
-              this.workingLine.hidden = false;
-            }),
+          run: () => this.react(m, emoji),
         })),
       };
+    }
+    react(m, emoji) {
+      request(`/conversations/${encodeURIComponent(this.openId)}/messages`, {
+        text: emoji,
+        reacts: m.id,
+      }).catch(e => {
+        this.workingText.textContent = e.message;
+        this.workingLine.hidden = false;
+      });
+    }
+    // A message's reactions, as Slack shows them: one chip for each emoji with how many gave it,
+    // naming them on hover. A tap on one adds yours, or takes yours back.
+    reactionChips(m, given) {
+      const row = node('div', 'corral-reactions');
+      const byEmoji = new Map();
+      for (const r of given) {
+        const [emoji] = REACTIONS.find(([e]) => r.text.startsWith(e)) || [r.text.split(' ')[0]];
+        byEmoji.set(emoji, [...(byEmoji.get(emoji) || []), r]);
+      }
+      for (const [emoji, list] of byEmoji) {
+        const word = REACTIONS.find(([e]) => e === emoji)?.[1] || '';
+        const mine = list.find(r => r.author === 'you');
+        const chip = button('', () => (mine ? this.deleteMessage(mine) : this.react(m, emoji)));
+        chip.className = 'corral-reaction' + (mine ? ' mine' : '');
+        chip.append(node('span', '', emoji), node('span', 'corral-reaction-count', list.length));
+        const who = list.map(r => (r.author === 'you' ? 'You' : '@' + this.author(r.author)));
+        chip.title = `${who.join(', ')}${word ? ': ' + word : ''}`;
+        chip.setAttribute('aria-label', chip.title);
+        row.append(chip);
+      }
+      return row;
     }
     // Delete, for any message: the person's, an agent's, or Corral's. One a thread hangs from
     // takes its replies with it.

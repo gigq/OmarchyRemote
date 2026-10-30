@@ -325,12 +325,26 @@
   margin-top: 4px;
 }
 .corral-reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 1px 7px;
   border: 1px solid var(--theme-border);
   border-radius: 10px;
   background: var(--theme-surface);
+  color: var(--theme-foreground);
+  font: inherit;
   font-size: 13px;
   line-height: 1.5;
+  cursor: pointer;
+}
+.corral-reaction.mine {
+  border-color: var(--theme-accent);
+}
+.corral-reaction-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--theme-secondary);
 }
 .corral-replies {
   display: inline-flex;
