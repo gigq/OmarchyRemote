@@ -21,16 +21,24 @@ jobs:
   backend:
     runs-on: ubuntu-latest
     steps:
+      # The backend uses Corral's server from its own repository, beside this one.
       - uses: actions/checkout@v4
+        with:
+          path: OmarchyRemote
+      - uses: actions/checkout@v4
+        with:
+          repository: gigq/Corral
+          path: Corral
+          ssh-key: ${{ secrets.CORRAL_DEPLOY_KEY }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: backend
-      - run: cargo fmt --manifest-path backend/Cargo.toml --all --check
-      - run: cargo clippy --manifest-path backend/Cargo.toml --workspace --all-targets -- -D warnings
-      - run: cargo test --manifest-path backend/Cargo.toml --workspace
+          workspaces: OmarchyRemote/backend
+      - run: cargo fmt --manifest-path OmarchyRemote/backend/Cargo.toml --all --check
+      - run: cargo clippy --manifest-path OmarchyRemote/backend/Cargo.toml --workspace --all-targets -- -D warnings
+      - run: cargo test --manifest-path OmarchyRemote/backend/Cargo.toml --workspace
   ios:
     runs-on: macos-latest
     steps:
