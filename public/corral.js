@@ -75,6 +75,13 @@
     svg.append(path);
     return svg;
   }
+  // A file's text, if it is text: no NUL bytes in its start, and not over 5 MB.
+  async function readable(blob) {
+    if (blob.size > 5 * 1024 * 1024) return null;
+    const head = new Uint8Array(await blob.slice(0, 8192).arrayBuffer());
+    if (head.includes(0)) return null;
+    return blob.text();
+  }
   const PICTURE = /\.(png|jpe?g|gif|webp|heic|avif)$/i;
   const MAX_FILES = 20;
   const COLORS = ['blue', 'green', 'magenta', 'cyan', 'yellow', 'red'];
@@ -116,6 +123,68 @@
       t.replaceWith(fragment);
     }
   }
+  // A path to a file on the host in a message, as agents write them: `~/…`, `/home/…`, or
+  // `/Users/…`, perhaps with `:line` after it.
+  const PATH =
+    /(?:~|\/home\/[\w.-]+|\/Users\/[\w.-]+)\/[^\s`'"<>()\[\]{}]*[^\s`'"<>()\[\]{}.,:;!?]/g;
+  // Each path in a message becomes something to tap, which opens the file to read.
+  function linkPaths(target, open) {
+    const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT);
+    const texts = [];
+    while (walker.nextNode())
+      if (!walker.currentNode.parentElement.closest('a')) texts.push(walker.currentNode);
+    for (const t of texts) {
+      PATH.lastIndex = 0;
+      if (!PATH.test(t.data)) continue;
+      PATH.lastIndex = 0;
+      const fragment = document.createDocumentFragment();
+      let at = 0;
+      for (const m of t.data.matchAll(PATH)) {
+        fragment.append(t.data.slice(at, m.index));
+        const path = m[0].replace(/:\d+(?::\d+)?$/, '');
+        const link = node('a', 'corral-path', m[0]);
+        link.href = '#';
+        link.title = 'Open ' + path;
+        link.onclick = e => {
+          e.preventDefault();
+          e.stopPropagation();
+          open(path);
+        };
+        fragment.append(link);
+        at = m.index + m[0].length;
+      }
+      fragment.append(t.data.slice(at));
+      t.replaceWith(fragment);
+    }
+  }
+  // Code, coloured simply: comments, strings, numbers, and common keywords.
+  const KEYWORDS =
+    /\b(?:const|let|var|function|return|if|else|elif|for|while|in|of|import|from|export|class|def|async|await|pub|fn|use|struct|enum|impl|match|mod|self|Self|true|false|null|None|True|False|nil|try|catch|except|raise|throw|new|type|interface|echo|then|fi|do|done|case|esac)\b/;
+  function colour(el, text) {
+    const re = new RegExp(
+      '(#[^\\n]*|//[^\\n]*|"(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\'|' +
+        KEYWORDS.source +
+        '|\\b\\d+(?:\\.\\d+)?\\b)',
+      'g'
+    );
+    let at = 0;
+    for (const m of text.matchAll(re)) {
+      el.append(text.slice(at, m.index));
+      const token = m[0];
+      const kind = /^(#|\/\/)/.test(token)
+        ? 'comment'
+        : /^["']/.test(token)
+          ? 'string'
+          : /^\d/.test(token)
+            ? 'number'
+            : 'keyword';
+      el.append(node('span', 'syntax-' + kind, token));
+      at = m.index + token.length;
+    }
+    el.append(text.slice(at));
+  }
+  const CODE =
+    /\.(rs|js|mjs|cjs|ts|tsx|jsx|py|sh|bash|zsh|fish|json|toml|ya?ml|css|html|swift|kt|go|c|h|cpp|hpp|java|rb|lua|sql|ini|conf|env)$/i;
   function avatar(name, label) {
     const a = node('span', 'corral-avatar', (label || name).slice(0, 1).toUpperCase());
     a.style.background = colorOf(name);
@@ -1536,6 +1605,7 @@
         const text = node('div', 'corral-text');
         text.dataset.message = m.id;
         markdown(text, m.text, names);
+        linkPaths(text, path => this.openPath(path));
         if (m.edited) {
           const mark = node('span', 'corral-edited', '(edited)');
           mark.title = 'Edited ' + when(m.edited);
@@ -2058,11 +2128,95 @@
       if (PICTURE.test(name)) return this.viewer(pictures, pictures.indexOf(name));
       const url = await this.blob(name).catch(() => null);
       if (!url) return;
+      // Something to read opens to read; anything else opens or downloads.
+      const blob = await fetch(url).then(r => r.blob());
+      const text = await readable(blob);
+      if (text !== null) return this.reader(name, text);
       const a = node('a');
       a.href = url;
       a.download = name;
       a.target = '_blank';
       a.click();
+    }
+    // A file on the host, from a path in a message: read it if it can be read, see it if it is a
+    // picture.
+    async openPath(path) {
+      const at = path.startsWith('~/') ? path.slice(2) : path;
+      const shown = this.reader(path, null);
+      try {
+        const response = await fetch('/api/files/content?path=' + encodeURIComponent(at), {
+          headers: { 'X-Hyprland-Client': '1' },
+        });
+        if (!response.ok) {
+          const said = await response.json().catch(() => ({}));
+          throw Error(said.error || 'It could not be opened.');
+        }
+        const blob = await response.blob();
+        if (PICTURE.test(path)) return shown.picture(URL.createObjectURL(blob));
+        const text = await readable(blob);
+        if (text === null) return shown.fail('This file is not text, so it cannot be shown here.');
+        shown.fill(text);
+      } catch (e) {
+        shown.fail(e.message);
+      }
+    }
+    // A file to read, over everything: Markdown laid out, code coloured, other text as it is. A tap
+    // outside it, ×, or Escape closes it. Given no text yet, it waits for `fill`.
+    reader(name, text) {
+      this.closeViewer?.();
+      const shade = node('div', 'corral-viewer corral-reader');
+      shade.setAttribute('role', 'dialog');
+      shade.setAttribute('aria-label', name.split('/').pop());
+      const panel = node('div', 'corral-doc');
+      const head = node('div', 'corral-doc-head');
+      const close = button('', () => this.closeViewer(), 'keycap corral-viewer-close');
+      close.setAttribute('aria-label', 'Close');
+      close.append(fileIcon('close'));
+      head.append(node('span', 'corral-doc-name', name), close);
+      const body = node('div', 'corral-doc-body');
+      body.append(node('p', 'corral-empty', 'Opening…'));
+      panel.append(head, body);
+      shade.append(panel);
+      const keys = e => {
+        if (e.key !== 'Escape') return;
+        e.preventDefault();
+        e.stopPropagation();
+        this.closeViewer();
+      };
+      shade.onclick = e => {
+        if (e.target === shade) this.closeViewer();
+      };
+      document.addEventListener('keydown', keys, true);
+      this.closeViewer = () => {
+        document.removeEventListener('keydown', keys, true);
+        shade.remove();
+        this.closeViewer = null;
+      };
+      document.body.append(shade);
+      const shown = {
+        fill: content => {
+          if (/\.(md|markdown)$/i.test(name)) {
+            const doc = node('div', 'corral-doc-markdown');
+            markdown(doc, content, this.names());
+            linkPaths(doc, path => this.openPath(path));
+            body.replaceChildren(doc);
+          } else {
+            const pre = node('pre', 'corral-doc-code');
+            if (CODE.test(name)) colour(pre, content);
+            else pre.textContent = content;
+            body.replaceChildren(pre);
+          }
+        },
+        picture: url => {
+          const img = node('img', 'corral-doc-picture');
+          img.src = url;
+          img.alt = name;
+          body.replaceChildren(img);
+        },
+        fail: why => body.replaceChildren(node('p', 'corral-empty', why)),
+      };
+      if (text !== null) shown.fill(text);
+      return shown;
     }
     // A picture large, over everything: arrows step through the message's pictures; a tap
     // outside it, ×, or Escape closes it.

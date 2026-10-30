@@ -1093,6 +1093,47 @@ test('any message can be edited where it is, and says so after', async ({ page }
   await expect.poll(() => state.edited.length).toBe(2);
 });
 
+test('a path in a message opens the file to read: Markdown laid out, code coloured', async ({
+  page,
+}) => {
+  const { app, emit } = await setup(page);
+  await page.route(/\/api\/files\/content\?/, r => {
+    const path = new URL(r.request().url()).searchParams.get('path');
+    if (path.endsWith('plan.md'))
+      return r.fulfill({
+        body: '# The plan\n\n- **one** thing\n- see ~/notes/run.sh',
+        contentType: 'application/octet-stream',
+      });
+    if (path.endsWith('run.sh'))
+      return r.fulfill({
+        body: '# start it\nif true; then echo "hi"; fi\n',
+        contentType: 'application/octet-stream',
+      });
+    return r.fulfill({ status: 400, json: { error: 'Choose a regular file' } });
+  });
+  await app.getByRole('listitem').filter({ hasText: 'infra' }).first().click();
+  const list = app.locator('.corral-messages');
+  await expect(list).toContainText('On it.');
+  emit({
+    type: 'message',
+    conversation: INFRA,
+    message: { ...msg(ALEX, 'The full plan is in `/home/justin/Corral/plan.md`.', 7), id: 'plan' },
+  });
+  const link = list.getByRole('link', { name: '/home/justin/Corral/plan.md' });
+  await link.click();
+  const reader = page.getByRole('dialog', { name: 'plan.md' });
+  await expect(reader.getByRole('heading', { name: 'The plan' })).toBeVisible();
+  await expect(reader.locator('strong')).toHaveText('one');
+  await page.screenshot({ path: 'artifacts/browser/corral-reader.png' });
+  // A path in the file opens that file in its place, coloured as code.
+  await reader.getByRole('link', { name: '~/notes/run.sh' }).click();
+  const code = page.getByRole('dialog', { name: 'run.sh' });
+  await expect(code.locator('.syntax-comment')).toHaveText('# start it');
+  await expect(code.locator('.syntax-string')).toHaveText('"hi"');
+  await page.keyboard.press('Escape');
+  await expect(code).toHaveCount(0);
+});
+
 test('a thread stays open when Corral reconnects, and after a reload', async ({ page }) => {
   const { app, state } = await setup(page, {}, (page, state) => {
     state.messages[INFRA].push({ ...msg(ALEX, 'All three renewed.', 5), id: 'r1', thread: 'm1' });

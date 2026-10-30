@@ -905,3 +905,85 @@
   color: var(--theme-secondary);
   font-size: 11px;
 }
+/* A path to a file in a message, and the file opened to read over everything. */
+.corral-path {
+  color: var(--theme-accent);
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.corral-reader {
+  padding: calc(16px + env(safe-area-inset-top)) 12px calc(16px + env(safe-area-inset-bottom));
+}
+.corral-doc {
+  display: flex;
+  flex-direction: column;
+  width: min(900px, 100%);
+  max-height: 100%;
+  min-height: 0;
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  background: var(--theme-background);
+  color: var(--theme-foreground);
+  overflow: hidden;
+}
+.corral-doc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 14px;
+  border-bottom: 1px solid var(--theme-border);
+}
+.corral-doc-head .corral-viewer-close {
+  position: static;
+}
+.corral-doc-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--theme-secondary);
+}
+.corral-doc-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 18px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.corral-doc-markdown {
+  font-size: 14px;
+  line-height: 1.6;
+}
+.corral-doc-markdown pre,
+.corral-doc-markdown code {
+  font-size: 12px;
+}
+.corral-doc-markdown pre {
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--theme-surface);
+  overflow: auto;
+}
+.corral-doc-markdown table {
+  border-collapse: collapse;
+}
+.corral-doc-markdown th,
+.corral-doc-markdown td {
+  padding: 4px 8px;
+  border: 1px solid var(--theme-border);
+}
+.corral-doc-code {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.corral-doc-picture {
+  max-width: 100%;
+}
