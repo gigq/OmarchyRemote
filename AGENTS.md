@@ -39,6 +39,8 @@ The two user services from `deploy/install.sh` are `omarchy-remote.service` (the
 
 # Host app integration
 
+- Corral's server is its own repository beside this one, `~/git/gigq/Corral` (its `server/` crate is a path dependency of `backend/`). Change Corral's API there, and its web view here (`public/corral.js`, `tests/browser/corral.spec.mjs`, `docs/features.md`) in the same sitting; commit each repository. `deploy/install.sh` installs `render-slot` from `../Corral/target/release`.
+
 - One Rust backend in `backend/` serves all host apps. Terminal owns PTYs; Herdr uses the local Unix socket. Add future app adapters under this shared backend, not separate servers per app. Terminal programs are rows in `backend/src/apps.rs`; every app is a `define` in `public/apps.js` plus a `provide` from its module (see CONTRIBUTING.md).
 - Allowed origins and the host's display name come from `OMARCHY_ORIGINS` and `OMARCHY_HOST_NAME` in `~/.config/omarchy-remote/backend.env`, which both services load.
 - `public/desk.js` and `public/desk.css` own desk mode (viewports with both edges ≥ 600px: iPad, Mac, desktop windows): tiled workspaces, ⌘/Ctrl+Alt bindings, and the ⌘/ sheet. Keep the phone shell below that threshold unchanged; `tests/browser/desk.spec.mjs` covers both.

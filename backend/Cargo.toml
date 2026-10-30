@@ -5,10 +5,10 @@ edition = "2024"
 license = "MIT"
 
 [workspace]
-members = ["corral"]
 
 [dependencies]
-corral = { path = "corral" }
+# Corral lives in its own repository beside this one (~/git/gigq/Corral).
+corral = { path = "../../Corral/server" }
 axum = { version = "0.8", features = ["ws"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
