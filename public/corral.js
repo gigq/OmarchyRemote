@@ -49,8 +49,7 @@
     if (!response.ok) throw Error(data.error || 'The host did not respond.');
     return data;
   }
-  // Reactions, as the host lists them: a message's menu offers all but 👀, which agents use to say
-  // they have taken a message on.
+  // Reactions, as the host lists them; a message's menu offers them all.
   const REACTIONS = [
     ['\u{1F44D}', 'thumbs up'],
     ['\u{1F44E}', 'thumbs down'],
@@ -59,7 +58,7 @@
     ['\u{1F440}', 'on it'],
     ['\u2753', 'please explain'],
   ];
-  const OFFERED = REACTIONS.filter(([e]) => e !== '\u{1F440}');
+  const OFFERED = REACTIONS;
   // Files: the paperclip, a file, and closing.
   const FILE_ICONS = {
     attach: 'm8 13 7-7a3 3 0 0 1 4 4l-9 9a5 5 0 0 1-7-7l9-9m-6 12 9-9',
