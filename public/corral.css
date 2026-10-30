@@ -873,3 +873,35 @@
     order: 3;
   }
 }
+/* A message being edited where it is, and the mark one carries after. */
+.corral-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+}
+.corral-edit-field {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.corral-edit-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.corral-edit-error {
+  flex: 1;
+  margin: 0;
+  color: var(--theme-red);
+  font-size: 11px;
+}
+.corral-edited {
+  margin-left: 6px;
+  color: var(--theme-secondary);
+  font-size: 11px;
+}

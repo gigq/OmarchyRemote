@@ -240,6 +240,9 @@ pub struct Message {
     /// Files sent with it, by name, in the conversation's `files` folder.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<String>,
+    /// When its text was last changed, if it was.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub edited: String,
 }
 /// The most a file sent in a conversation may be, and how many one message may carry.
 pub const MAX_FILE: usize = 100 * 1024 * 1024;
@@ -1535,6 +1538,7 @@ impl Corral {
                 thread: thread.to_owned(),
                 reacts: String::new(),
                 files: Vec::new(),
+                edited: String::new(),
             },
         )
     }
@@ -1901,6 +1905,10 @@ pub fn router<S: Clone + std::marker::Send + Sync + 'static>(corral: Corral) -> 
             post(upload_file).layer(axum::extract::DefaultBodyLimit::max(MAX_FILE)),
         )
         .route("/conversations/{id}/files/{name}", get(file))
+        .route(
+            "/conversations/{id}/messages/{message}/edit",
+            post(edit_message),
+        )
         .route(
             "/conversations/{id}/messages/{message}/delete",
             post(delete_message),
@@ -2785,6 +2793,7 @@ pub async fn send(
                 thread: form.thread.clone(),
                 reacts: String::new(),
                 files,
+                edited: String::new(),
             },
         )
         .map_err(error)?;
@@ -2930,12 +2939,118 @@ fn react(
                 thread,
                 reacts: to.to_owned(),
                 files: Vec::new(),
+                edited: String::new(),
             },
         )
         .map_err(error)?;
     Ok(json!(message))
 }
 /// Deletes a message, and the replies of one a thread hangs from.
+#[derive(Deserialize)]
+pub struct Edit {
+    text: String,
+}
+/// Changes a message's text, anyone's: in the conversation's file, so what is kept is what it
+/// now says, and in the sessions of the agents here that read it, as far as they can be found.
+pub async fn edit_message(
+    State(corral): State<Corral>,
+    Path((id, message)): Path<(String, String)>,
+    Json(edit): Json<Edit>,
+) -> Result<Json<Value>, ApiError> {
+    let text = edit.text.trim().to_owned();
+    if text.len() > 64 * 1024 {
+        return Err(bad("A message is at most 64 KiB"));
+    }
+    let (edited, before, sessions) = {
+        let mut state = corral.state.lock().unwrap();
+        let messages = state.messages.get_mut(&id).ok_or_else(not_found)?;
+        let m = messages
+            .iter_mut()
+            .find(|m| m.id == message && m.reacts.is_empty())
+            .ok_or_else(not_found)?;
+        if text.is_empty() && m.files.is_empty() {
+            return Err(bad("A message needs words or files; delete it instead"));
+        }
+        let before = std::mem::replace(&mut m.text, text.clone());
+        m.edited = now();
+        let edited = m.clone();
+        let path = corral
+            .root
+            .join("conversations")
+            .join(&id)
+            .join("messages.jsonl");
+        let mut lines = String::new();
+        for m in messages.iter() {
+            lines.push_str(&serde_json::to_string(m).map_err(error)?);
+            lines.push('\n');
+        }
+        let temporary = path.with_extension("tmp");
+        fs::write(&temporary, lines).map_err(error)?;
+        fs::rename(&temporary, &path).map_err(error)?;
+        // The Claude sessions of this host's agents here, which were given the old words.
+        let sessions: Vec<String> = state
+            .seats
+            .get(&id)
+            .into_iter()
+            .flat_map(|seats| seats.values())
+            .filter(|seat| seat.engine == "claude" && !seat.session.is_empty())
+            .flat_map(|seat| {
+                std::iter::once(seat.session.clone())
+                    .chain(seat.marks.iter().map(|m| m.session.clone()))
+            })
+            .collect();
+        (edited, before, sessions)
+    };
+    let scrubbed = home_dir()
+        .map(|h| {
+            scrub_sessions(
+                &h.join(".claude").join("projects"),
+                &sessions,
+                &before,
+                &text,
+            )
+        })
+        .unwrap_or_default();
+    corral.emit(json!({"type":"edited","conversation":id,"message":edited}));
+    Ok(Json(json!({"message": edited, "sessions": scrubbed})))
+}
+/// Replaces a message's old words with its new ones in Claude's session files for these
+/// sessions, so a changed secret is not left there; gives how many files changed. Only words
+/// long enough not to be found by chance elsewhere.
+fn scrub_sessions(projects: &FsPath, sessions: &[String], before: &str, after: &str) -> usize {
+    let before = before.trim();
+    if before.chars().count() < 12 || before == after {
+        return 0;
+    }
+    // As the files hold them: inside JSON strings.
+    let quoted = |t: &str| {
+        let q = serde_json::to_string(t).unwrap_or_default();
+        q[1..q.len() - 1].to_owned()
+    };
+    let (old, new) = (quoted(before), quoted(after));
+    let mut changed = 0;
+    let mut unique: Vec<&String> = sessions.iter().collect();
+    unique.sort();
+    unique.dedup();
+    for folder in fs::read_dir(projects).into_iter().flatten().flatten() {
+        for session in &unique {
+            let path = folder.path().join(format!("{session}.jsonl"));
+            let Ok(content) = fs::read_to_string(&path) else {
+                continue;
+            };
+            if !content.contains(&old) {
+                continue;
+            }
+            let temporary = path.with_extension("jsonl.tmp");
+            if fs::write(&temporary, content.replace(&old, &new)).is_ok()
+                && fs::rename(&temporary, &path).is_ok()
+            {
+                changed += 1;
+            }
+        }
+    }
+    changed
+}
 pub async fn delete_message(
     State(corral): State<Corral>,
     Path((id, message)): Path<(String, String)>,
@@ -3629,6 +3744,7 @@ pub async fn agent_action(
                         thread: me.thread.clone(),
                         reacts: String::new(),
                         files,
+                        edited: String::new(),
                     },
                 )
                 .map_err(error)?;
@@ -3772,6 +3888,7 @@ mod tests {
             thread: String::new(),
             reacts: String::new(),
             files: Vec::new(),
+            edited: String::new(),
         }
     }
     fn reply(author: &str, text: &str, thread: &str) -> Message {
@@ -4125,6 +4242,82 @@ mod tests {
             ))
             .is_err()
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn any_message_can_be_edited_and_the_old_words_leave_the_file_and_the_sessions() {
+        let (corral, root) = corral();
+        let alex = agent(&corral, "alex");
+        let talk = channel(&corral, "infra", vec![]);
+        let leaked = message(YOU, "the password is hunter2-correct-horse", 0);
+        let said = message(&alex.id, "Noted.", 1);
+        corral
+            .state
+            .lock()
+            .unwrap()
+            .messages
+            .insert(talk.id.clone(), vec![leaked.clone(), said.clone()]);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let edit = |m: &str, text: &str| {
+            rt.block_on(edit_message(
+                State(corral.clone()),
+                Path((talk.id.clone(), m.to_owned())),
+                Json(Edit { text: text.into() }),
+            ))
+        };
+        let done = edit(&leaked.id, "the password is [removed]").unwrap();
+        assert_eq!(done["message"]["text"], "the password is [removed]");
+        assert!(!done["message"]["edited"].as_str().unwrap().is_empty());
+        let file = fs::read_to_string(
+            root.join("conversations")
+                .join(&talk.id)
+                .join("messages.jsonl"),
+        )
+        .unwrap();
+        assert!(!file.contains("hunter2"));
+        assert!(file.contains("[removed]"));
+        // An agent's message too, but not to nothing.
+        assert!(edit(&said.id, "Noted, thanks.").is_ok());
+        assert!(edit(&said.id, "  ").is_err());
+        assert!(edit("nope", "x").is_err());
+        // The sessions that were given the old words lose them; others are left alone.
+        let projects = root.join("projects");
+        fs::create_dir_all(projects.join("-w-infra")).unwrap();
+        let line = |t: &str| {
+            format!(
+                "{}\n",
+                json!({"message": {"content": format!("[10:00] @you: {t}")}})
+            )
+        };
+        fs::write(
+            projects.join("-w-infra/s1.jsonl"),
+            line("say \"hi\" to the long secret line"),
+        )
+        .unwrap();
+        fs::write(
+            projects.join("-w-infra/s2.jsonl"),
+            line("say \"hi\" to the long secret line"),
+        )
+        .unwrap();
+        let n = scrub_sessions(
+            &projects,
+            &["s1".into()],
+            "say \"hi\" to the long secret line",
+            "[removed]",
+        );
+        assert_eq!(n, 1);
+        assert!(
+            fs::read_to_string(projects.join("-w-infra/s1.jsonl"))
+                .unwrap()
+                .contains("@you: [removed]")
+        );
+        assert!(
+            fs::read_to_string(projects.join("-w-infra/s2.jsonl"))
+                .unwrap()
+                .contains("secret")
+        );
+        // Short words could be anywhere; they are not hunted for.
+        assert_eq!(scrub_sessions(&projects, &["s2".into()], "hi", "x"), 0);
         fs::remove_dir_all(root).unwrap();
     }
     #[test]

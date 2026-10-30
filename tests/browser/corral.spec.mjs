@@ -127,6 +127,14 @@ async function setup(page, { width = 402, height = 874 } = {}, before) {
     return r.fulfill({ json: m });
   });
   await page.route('**/api/corral/dm', r => r.fulfill({ json: state.conversations[1] }));
+  await page.route(/\/api\/corral\/conversations\/[^/]+\/messages\/[^/]+\/edit$/, r => {
+    const [id, , message] = r.request().url().split('/').slice(-4, -1);
+    const { text } = r.request().postDataJSON();
+    const m = state.messages[id].find(m => m.id === message);
+    Object.assign(m, { text, edited: '2026-10-28T10:30:00.000Z' });
+    (state.edited ||= []).push({ message, text });
+    return r.fulfill({ json: { message: m, sessions: 0 } });
+  });
   await page.route(/\/api\/corral\/conversations\/[^/]+\/messages\/[^/]+\/delete$/, r => {
     const [id, , message] = r.request().url().split('/').slice(-4, -1);
     const gone = state.messages[id]
@@ -1055,6 +1063,36 @@ test('files go with a message, pictures open large, and an agent can send them b
   await expect(viewer).toHaveCount(0);
 });
 
+test('any message can be edited where it is, and says so after', async ({ page }) => {
+  const { app, state } = await setup(page);
+  await app.getByRole('listitem').filter({ hasText: 'infra' }).first().click();
+  const list = app.locator('.corral-messages');
+  const said = list.locator('.corral-text', { hasText: 'rotate the certs' });
+  await said.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Edit' }).click();
+  const field = list.getByRole('textbox', { name: 'Message' });
+  await expect(field).toHaveValue('@alex can you rotate the certs? See https://example.com/certs');
+  // Escape leaves it as it was.
+  await field.press('Escape');
+  await expect(field).toHaveCount(0);
+  await said.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Edit' }).click();
+  await field.fill('@alex can you rotate the certs?');
+  await list.getByRole('button', { name: 'Save' }).click();
+  await expect
+    .poll(() => state.edited)
+    .toEqual([{ message: 'm1', text: '@alex can you rotate the certs?' }]);
+  const now = list.locator('.corral-text', { hasText: 'rotate the certs' });
+  await expect(now.locator('p').first()).toHaveText('@alex can you rotate the certs?(edited)');
+  await expect(now).not.toContainText('example.com');
+  // An agent's message too.
+  await list.locator('.corral-text', { hasText: 'On it.' }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Edit' }).click();
+  await field.fill('On it.');
+  await field.press('Control+Enter');
+  await expect.poll(() => state.edited.length).toBe(2);
+});
+
 test('a thread stays open when Corral reconnects, and after a reload', async ({ page }) => {
   const { app, state } = await setup(page, {}, (page, state) => {
     state.messages[INFRA].push({ ...msg(ALEX, 'All three renewed.', 5), id: 'r1', thread: 'm1' });
@@ -1137,6 +1175,7 @@ test('a link in a message has its own menu items, and any message copies its tex
     'Open in the default browser',
     'Copy link',
     'Copy text',
+    'Edit',
     'Reply in thread',
     'Delete',
   ]);
@@ -1148,6 +1187,7 @@ test('a link in a message has its own menu items, and any message copies its tex
   await expect(page.getByRole('menuitem')).toHaveText([
     ...reactions,
     'Copy text',
+    'Edit',
     'Reply in thread',
     'Delete',
   ]);

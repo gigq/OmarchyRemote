@@ -528,6 +528,12 @@
         if (this.detailsOpen) this.renderActivity();
       } else if (e.type === 'closed') {
         if (this.detailsOpen) this.activityLater();
+      } else if (e.type === 'edited') {
+        if (e.conversation === this.openId) {
+          this.messages = this.messages.map(m => (m.id === e.message.id ? e.message : m));
+          if (!this.editing) this.renderMessages();
+        }
+        this.later();
       } else if (e.type === 'deleted') {
         this.removeMessages(e.conversation, e.messages || []);
       } else if (e.type === 'queued') {
@@ -1479,6 +1485,8 @@
       this.settingsKey.title = this.settingsKey.getAttribute('aria-label');
     }
     renderMessages(append = false) {
+      // Not under a message being edited; that redraws when it is done.
+      if (this.editing && this.messages.some(m => m.id === this.editing)) return;
       const names = this.names();
       const items = [];
       let last = null;
@@ -1526,6 +1534,13 @@
         const text = node('div', 'corral-text');
         text.dataset.message = m.id;
         markdown(text, m.text, names);
+        if (m.edited) {
+          const mark = node('span', 'corral-edited', '(edited)');
+          mark.title = 'Edited ' + when(m.edited);
+          // At the end of its last paragraph, not on a line of its own.
+          const end = text.lastElementChild;
+          (end && /^(P|LI)$/.test(end.tagName) ? end : text).append(mark);
+        }
         if (m.files?.length) text.append(this.fileChips(m));
         last.body.append(text);
         // Sent, but the agent it is for is still at work: it gets it when that turn ends.
@@ -1554,6 +1569,7 @@
             items: [
               this.reactRow(m),
               ...this.textItems(m, text, pressed),
+              { label: 'Edit', run: () => this.editMessage(m, text) },
               { label: 'Reply in thread', run: () => this.openThread(m.id) },
               this.deleteItem(m, these?.length || 0),
             ],
@@ -1571,6 +1587,7 @@
             items: [
               this.reactRow(m),
               ...this.textItems(m, text, pressed),
+              { label: 'Edit', run: () => this.editMessage(m, text) },
               this.deleteItem(m, m.id === thread ? replies.get(thread)?.length || 0 : 0),
             ],
           }));
@@ -1690,6 +1707,56 @@
         row.append(chip);
       }
       return row;
+    }
+    // Changes a message's words where it is: its text becomes a box, with Save and Cancel (or
+    // ⌘/Ctrl-Return and Escape).
+    editMessage(m, element) {
+      if (this.editing) return;
+      this.editing = m.id;
+      const form = node('form', 'corral-edit');
+      const field = node('textarea', 'corral-input corral-edit-field');
+      field.value = m.text;
+      field.rows = Math.min(12, Math.max(2, m.text.split('\n').length + 1));
+      field.setAttribute('aria-label', 'Message');
+      const error = node('p', 'corral-edit-error');
+      const actions = node('div', 'corral-edit-actions');
+      const done = () => {
+        this.editing = null;
+        this.renderMessages();
+      };
+      const cancel = button('Cancel', done, 'keycap small');
+      const save = button('Save', () => {}, 'keycap small primary');
+      save.type = 'submit';
+      actions.append(error, cancel, save);
+      form.append(field, actions);
+      form.onsubmit = async e => {
+        e.preventDefault();
+        save.disabled = true;
+        try {
+          const { message } = await request(
+            `/conversations/${encodeURIComponent(this.openId)}/messages/${encodeURIComponent(m.id)}/edit`,
+            { text: field.value }
+          );
+          this.messages = this.messages.map(x => (x.id === message.id ? message : x));
+          done();
+        } catch (err) {
+          error.textContent = err.message;
+          save.disabled = false;
+        }
+      };
+      field.onkeydown = e => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          done();
+        } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+          e.preventDefault();
+          form.requestSubmit();
+        }
+      };
+      element.replaceChildren(form);
+      field.focus();
+      field.setSelectionRange(field.value.length, field.value.length);
     }
     // Delete, for any message: the person's, an agent's, or Corral's. One a thread hangs from
     // takes its replies with it.
