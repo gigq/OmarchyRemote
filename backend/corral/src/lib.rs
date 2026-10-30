@@ -597,6 +597,8 @@ Keep your memory file, {memory}, up to date with what you will want to know in y
 
 The `corral` command in your shell works Corral for you: listing, making, and inviting agents, making channels, and posting and reading in them. Run `corral help` to see what it does.
 
+When a message starts a separate piece of work that is better kept apart from the rest of the conversation, such as a long task in a busy channel or a side project in a direct message, you may answer it in a thread instead: `corral thread 'your reply'` posts under the latest message to you, and then you reply NOTHING; what follows in that thread wakes you there. Do it only when that keeps things clearer, not as a habit; a quick answer belongs where it was asked.
+
 Files sent to you show under their message as `attached:` lines with where they are; open them from there (you can look at pictures). To send files back, such as a screenshot, a render, or a document, run `corral attach FILE…` (with `--text 'a line about them'` if you like); they post where you are, as a message of their own, and your reply follows as usual.
 
 When you take on a message whose answer will take more than a minute or two, first run `corral react 👀`, so {person} sees on their message that you have it, then do the work and reply when it is done. A reaction can also be the whole answer: `corral react 👍` (or 👌) for a note that needs no reply, then reply NOTHING.
@@ -3209,7 +3211,7 @@ async fn events(mut socket: WebSocket, corral: Corral) {
 // ---- The agent API, behind the `corral` command in each turn ----
 
 /// What the `corral` command offers, as `corral help` lists it: action, arguments, and what it does.
-const ACTIONS: [(&str, &str, &str); 14] = [
+const ACTIONS: [(&str, &str, &str); 15] = [
     ("whoami", "", "Who and where you are."),
     (
         "working",
@@ -3258,6 +3260,11 @@ const ACTIONS: [(&str, &str, &str); 14] = [
         "Post in a channel, or in a thread there, as yourself. @mentions wake agents as usual.",
     ),
     (
+        "thread",
+        "[--message ID] TEXT",
+        "Reply in a thread under the latest message to you here (or the one given), to keep a separate piece of work apart from the rest of the conversation; then reply NOTHING. Later messages in that thread wake you there.",
+    ),
+    (
         "attach",
         "FILE… [--text TEXT]",
         "Send files where your turn is (a screenshot, a render, a PDF), with a line of text if you like, as a message of their own; pictures show in the conversation, any file can be opened from it.",
@@ -3269,8 +3276,8 @@ const ACTIONS: [(&str, &str, &str); 14] = [
     ),
     (
         "read",
-        "--channel NAME [--thread ID] [--limit N]",
-        "The latest messages in a channel or one of its threads, with their ids.",
+        "[--channel NAME] [--thread ID] [--limit N]",
+        "The latest messages in a channel (or where you are, without --channel) or one of its threads, with their ids.",
     ),
 ];
 fn caller(corral: &Corral, headers: &axum::http::HeaderMap) -> Result<Caller, ApiError> {
@@ -3720,6 +3727,49 @@ pub async fn agent_action(
                 .map_err(error)?;
             Ok(format!("Posted in #{} ({}).", channel.name, message.id))
         }
+        "thread" => {
+            if !me.thread.is_empty() {
+                return Err(bad("You are in a thread already; your reply goes here"));
+            }
+            let text = text_arg(&body, "text");
+            if text.is_empty() || text.len() > 64 * 1024 {
+                return Err(bad("Give the reply as text after the arguments"));
+            }
+            let given = text_arg(&body, "message");
+            // Under the message given, or the latest one here that is not its own or Corral's.
+            let root = {
+                let state = corral.state.lock().unwrap();
+                state
+                    .messages
+                    .get(&me.conversation)
+                    .into_iter()
+                    .flatten()
+                    .rev()
+                    .filter(|m| m.reacts.is_empty() && m.thread.is_empty())
+                    .find(|m| {
+                        if given.is_empty() {
+                            m.author != me.agent && m.author != CORRAL
+                        } else {
+                            m.id == given
+                        }
+                    })
+                    .map(|m| m.id.clone())
+            };
+            let Some(root) = root else {
+                return Err(bad(if given.is_empty() {
+                    "There is no message here to answer in a thread"
+                } else {
+                    "No such message here outside a thread; `corral read` gives ids"
+                }));
+            };
+            let message = corral
+                .post(&me.conversation, &me.agent, &text, me.chain, &root)
+                .map_err(error)?;
+            Ok(format!(
+                "Replied in the thread under {root} ({}); end your turn with NOTHING so nothing is posted here too.",
+                message.id
+            ))
+        }
         "attach" => {
             // The files `corral attach` sent first (`/file`), by the names they were kept under.
             let names: Vec<String> = body["files"]
@@ -3795,7 +3845,19 @@ pub async fn agent_action(
             ))
         }
         "read" => {
-            let channel = corral.channel_named(&text_arg(&body, "channel"))?;
+            // A channel by name, or where the turn is.
+            let channel = if text_arg(&body, "channel").is_empty() {
+                corral
+                    .state
+                    .lock()
+                    .unwrap()
+                    .conversations
+                    .get(&me.conversation)
+                    .cloned()
+                    .ok_or_else(not_found)?
+            } else {
+                corral.channel_named(&text_arg(&body, "channel"))?
+            };
             let thread = text_arg(&body, "thread");
             let limit: usize = text_arg(&body, "limit").parse().unwrap_or(30).clamp(1, 100);
             let state = corral.state.lock().unwrap();
@@ -4406,6 +4468,27 @@ mod tests {
             reacted.text,
             "👀 (on it) to @you's message: \u{201c}can you look at the logs\u{201d}"
         );
+        // It answers that message in a thread, and reads where it is without naming it.
+        let threaded = run("thread", json!({"text": "Looking into it here."})).unwrap();
+        assert!(
+            threaded.contains(&format!("under {}", asked.id)),
+            "{threaded}"
+        );
+        let reply = corral.state.lock().unwrap().messages[&infra.id]
+            .iter()
+            .find(|m| m.thread == asked.id)
+            .cloned()
+            .unwrap();
+        assert_eq!(
+            (reply.author.as_str(), reply.text.as_str()),
+            (maker.id.as_str(), "Looking into it here.")
+        );
+        assert!(
+            run("read", json!({}))
+                .unwrap()
+                .contains("can you look at the logs")
+        );
+        assert!(run("thread", json!({"text": "x", "message": "nope"})).is_err());
         corral
             .state
             .lock()
@@ -4413,7 +4496,7 @@ mod tests {
             .messages
             .get_mut(&infra.id)
             .unwrap()
-            .retain(|m| m.id != asked.id && m.reacts != asked.id);
+            .retain(|m| m.id != asked.id && m.reacts != asked.id && m.thread != asked.id);
         let state = corral.state.lock().unwrap();
         let notes: Vec<&str> = state.messages[&infra.id]
             .iter()
