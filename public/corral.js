@@ -49,7 +49,7 @@
     if (!response.ok) throw Error(data.error || 'The host did not respond.');
     return data;
   }
-  // Reactions, as the host lists them; a message's menu offers them all.
+  // Reactions, as the host lists them.
   const REACTIONS = [
     ['\u{1F44D}', 'thumbs up'],
     ['\u{1F44E}', 'thumbs down'],
@@ -58,7 +58,10 @@
     ['\u{1F440}', 'on it'],
     ['\u2753', 'please explain'],
   ];
-  const OFFERED = REACTIONS;
+  // The person's row, in the order they reach for them; 👌 is the agents' alone.
+  const OFFERED = ['\u{1F44D}', '\u{1F44E}', '\u{1F440}', '\u{1F680}', '\u2753'].map(e =>
+    REACTIONS.find(([r]) => r === e)
+  );
   // Files: the paperclip, a file, and closing.
   const FILE_ICONS = {
     attach: 'm8 13 7-7a3 3 0 0 1 4 4l-9 9a5 5 0 0 1-7-7l9-9m-6 12 9-9',

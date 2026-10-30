@@ -997,9 +997,10 @@ test('reactions show on the message, counted, naming who gave them, and a tap ta
   await app.getByRole('listitem').filter({ hasText: 'infra' }).first().click();
   const list = app.locator('.corral-messages');
   await list.locator('.corral-text', { hasText: 'On it.' }).click({ button: 'right' });
-  // The menu offers every reaction, 👀 included.
-  for (const name of ['Thumbs up', 'Thumbs down', 'OK, noted', 'Do it', 'On it', 'Please explain'])
+  // The menu offers the person's five; 👌 is the agents' alone.
+  for (const name of ['Thumbs up', 'Thumbs down', 'On it', 'Do it', 'Please explain'])
     await expect(page.getByRole('menuitem', { name })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'OK, noted' })).toHaveCount(0);
   await page.getByRole('menuitem', { name: 'Do it' }).click();
   await expect.poll(() => state.sent).toEqual([{ id: INFRA, text: '\u{1F680}', reacts: 'm2' }]);
   // The host tells the agent in words; the app shows only the emoji, on the message.
@@ -1208,7 +1209,7 @@ test('a link in a message has its own menu items, and any message copies its tex
   const list = app.locator('.corral-messages');
   await list.getByRole('link', { name: 'https://example.com/certs' }).click({ button: 'right' });
   // The quick reactions come first, in a row of their own.
-  const reactions = ['\u{1F44D}', '\u{1F44E}', '\u{1F44C}', '\u{1F680}', '\u{1F440}', '\u2753'];
+  const reactions = ['\u{1F44D}', '\u{1F44E}', '\u{1F440}', '\u{1F680}', '\u2753'];
   await expect(page.getByRole('menuitem')).toHaveText([
     ...reactions,
     'Open in the Omarchy browser',
