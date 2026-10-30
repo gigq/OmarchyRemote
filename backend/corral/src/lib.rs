@@ -2473,7 +2473,11 @@ pub async fn renders(State(corral): State<Corral>) -> Json<Value> {
         .unwrap_or_default();
     let mut machines = vec![json!({"name": corral.name, "online": true, "queue": local})];
     machines.extend(corral.host_queues().await);
-    Json(json!({"machines": machines}))
+    // Renders this machine shares out across the farm, with about how long each has left.
+    let splits = tokio::task::spawn_blocking(queue::splits)
+        .await
+        .unwrap_or_default();
+    Json(json!({"machines": machines, "splits": splits}))
 }
 /// An agent's latest message in each place it has written, newest first: where it has been working
 /// and what it last said there, wherever that is.

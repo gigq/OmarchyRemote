@@ -141,7 +141,7 @@ async function setup(page, { width = 402, height = 874 } = {}, before) {
     return r.fulfill({ json: { items: items.reverse() } });
   });
   await page.route('**/api/corral/renders', r =>
-    r.fulfill({ json: { machines: state.renders || [] } })
+    r.fulfill({ json: { machines: state.renders || [], splits: state.splits || [] } })
   );
   await page.route('**/api/corral/activity', r =>
     r.fulfill({ json: { items: state.activity || [] } })
@@ -1167,20 +1167,43 @@ test("Renders shows each machine's queue, and a job opens where it was started",
       },
       { name: 'winbox', online: false, error: 'not reachable' },
     ];
+    // A render shared out across the farm, with about how long it has left.
+    state.splits = [
+      {
+        label: 'Gulp final',
+        place: `${INFRA}\t${ALEX}\t`,
+        cwd: '/home/qa/git/deep-end',
+        pieces: 12,
+        done: 3,
+        started: Math.round(now / 1000) - 1500,
+        left: 2520,
+      },
+      {
+        label: 'Drumbeat',
+        place: '',
+        cwd: '/home/qa/git/wound-up',
+        pieces: 8,
+        done: 0,
+        started: Math.round(now / 1000) - 75,
+      },
+    ];
   });
   await app.getByRole('button', { name: 'Activity and Search' }).click();
   await app.getByRole('tab', { name: 'Renders' }).click();
   const list = app.getByRole('list', { name: 'Render queues' });
   await expect(list.locator('.corral-render-machine')).toHaveText([
+    'Split across the farm',
     /tars\s*10 of 24 cores · GPU 0 of 2/,
     /winbox\s*not reachable/,
   ]);
   await expect(list.getByRole('listitem')).toHaveText([
+    /About 42 min left\s*3 of 12 pieces\s*@alex: Gulp final · running 25 min/,
+    /Estimating time left…\s*0 of 8 pieces\s*wound-up: Drumbeat · running 1 min/,
     /Running 12 min\s*6 cores\s*@alex: 4K recut/,
     /#1 · waiting 2 min\s*8 cores \+ GPU\s*infra: blender -b scene.blend -a/,
   ]);
   await expect(list.locator('.corral-busy.background')).toHaveCount(1);
   await page.screenshot({ path: 'artifacts/browser/corral-renders.png' });
-  await list.getByRole('listitem').first().click();
+  await list.getByRole('listitem').nth(2).click();
   await expect(app.locator('.corral-title')).toHaveText('#infra');
 });

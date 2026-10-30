@@ -354,7 +354,7 @@ pub(crate) fn run(edit: Edit) -> ExitCode {
             format!(", and on {} once they have its files", names.join(", "))
         }
     ));
-    let board = Mutex::new(Board::new(cut(duration, count)));
+    let board = Mutex::new(Board::new(cut(duration, count), &edit.label));
     let rel_root = rel_root.unwrap_or_default();
     let run_piece = |place: &Place, piece: &Piece, stop: &std::sync::atomic::AtomicBool| match place
     {

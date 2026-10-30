@@ -807,7 +807,9 @@
     async loadRenders() {
       clearTimeout(this.rendersTimer);
       try {
-        this.renders = (await request('/renders')).machines || [];
+        const renders = await request('/renders');
+        this.renders = renders.machines || [];
+        this.splits = renders.splits || [];
         this.rendersError = '';
       } catch (e) {
         this.rendersError = e.message;
@@ -826,6 +828,53 @@
             : `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`;
       };
       const rows = [];
+      // Renders shared out across the farm: how far along, and about how long is left.
+      const span = s =>
+        s < 60
+          ? 'under a minute'
+          : s < 3600
+            ? `${Math.round(s / 60)} min`
+            : `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`;
+      if (this.splits?.length) {
+        const head = node('div', 'corral-render-machine');
+        head.append(node('span', 'corral-row-name', 'Split across the farm'));
+        rows.push(head);
+      }
+      for (const split of this.splits || []) {
+        const [conversation = '', agent = '', thread = ''] = (split.place || '').split('\t');
+        const who = this.agent(agent) ? '@' + this.author(agent) : split.cwd.split(/[\\/]/).pop();
+        const row = button(
+          '',
+          () => this.conversation(conversation) && this.goTo({ conversation, thread }),
+          'corral-activity-row corral-render-job corral-split'
+        );
+        row.setAttribute('role', 'listitem');
+        const place = node('div', 'corral-activity-place');
+        place.append(
+          node(
+            'span',
+            'corral-row-name',
+            split.left == null ? 'Estimating time left…' : `About ${span(split.left)} left`
+          ),
+          node('time', '', `${split.done} of ${split.pieces} pieces`)
+        );
+        const bar = node('span', 'corral-split-bar');
+        const fill = node('span', '');
+        fill.style.width = `${Math.round((100 * split.done) / Math.max(1, split.pieces))}%`;
+        bar.append(fill);
+        const text = node('span', 'corral-row-text');
+        text.append(
+          place,
+          bar,
+          node(
+            'span',
+            'corral-activity-text',
+            `${who}: ${split.label} · running ${ago(new Date(split.started * 1000).toISOString())}`
+          )
+        );
+        row.append(dot(), text);
+        rows.push(row);
+      }
       for (const machine of this.renders || []) {
         const q = machine.queue;
         const head = node('div', 'corral-render-machine');

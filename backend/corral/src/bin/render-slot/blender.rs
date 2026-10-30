@@ -499,7 +499,7 @@ pub(crate) fn run(job: Job) -> Option<ExitCode> {
             if count == 1 { "" } else { "s" },
             names.join(", ")
         ));
-        let board = Arc::new(Mutex::new(Board::new(pieces)));
+        let board = Arc::new(Mutex::new(Board::new(pieces, &job.label)));
         let places: Vec<(Place, usize)> = ready
             .iter()
             .map(|f| (Place::Mac(f.machine.clone()), 1))

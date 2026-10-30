@@ -338,6 +338,138 @@ pub fn ticket(command: &[String], label: &str, cores: usize, gpu: bool) -> Ticke
         ..Ticket::default()
     }
 }
+/// A render split into pieces across the farm, as the `render-slot` sharing it out writes it while
+/// it runs: in `splits/` in the queue's folder, beside a lock it holds, so one that dies is not
+/// listed. How long is left is worked out from the pieces done when it is read.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Split {
+    pub id: String,
+    pub label: String,
+    /// The Corral place that started it, and the folder it runs in.
+    #[serde(default)]
+    pub place: String,
+    #[serde(default)]
+    pub cwd: String,
+    pub pieces: usize,
+    pub done: usize,
+    /// When it began, and when each piece under way began, in seconds since 1970.
+    pub started: u64,
+    pub running: Vec<u64>,
+    /// How long each piece done took, in seconds.
+    pub took: Vec<f64>,
+    /// Seconds left, about, once a piece is done to go by.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub left: Option<u64>,
+}
+pub fn now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+impl Split {
+    /// About how long is left at `now`: the pieces under way finish at the pace of those done, and
+    /// the rest follow as many at a time as are running now.
+    pub fn left(&self, now: u64) -> Option<u64> {
+        if self.took.is_empty() {
+            return None;
+        }
+        let pace = self.took.iter().sum::<f64>() / self.took.len() as f64;
+        let under_way: Vec<f64> = self
+            .running
+            .iter()
+            .map(|&at| (pace - now.saturating_sub(at) as f64).max(0.0))
+            .collect();
+        let after = self.pieces.saturating_sub(self.done + self.running.len()) as f64;
+        let left = if after == 0.0 {
+            under_way.iter().copied().fold(0.0, f64::max)
+        } else {
+            let at_once = self.running.len().max(1) as f64;
+            (under_way.iter().sum::<f64>() + after * pace) / at_once
+        };
+        Some(left.ceil() as u64)
+    }
+}
+fn splits_dir() -> PathBuf {
+    dir().join("splits")
+}
+/// The splits under way on this machine, each with how long it has left.
+pub fn splits() -> Vec<Split> {
+    splits_in(&splits_dir())
+}
+fn splits_in(dir: &Path) -> Vec<Split> {
+    let now = now();
+    let mut found: Vec<Split> = fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_str()?.strip_suffix(".json")?.to_owned();
+            // A report being rewritten is `.tmp` until it is whole.
+            if !held(&dir.join(format!("{name}.lock"))) {
+                return None;
+            }
+            let mut split: Split = serde_json::from_slice(&fs::read(e.path()).ok()?).ok()?;
+            split.left = split.left(now);
+            Some(split)
+        })
+        .collect();
+    found.sort_by_key(|s| s.started);
+    found
+}
+/// Where a split says how it is going, for as long as this lives.
+pub struct Report {
+    lock: File,
+    json: PathBuf,
+    lock_path: PathBuf,
+    pub split: Split,
+}
+impl Report {
+    pub fn new(label: &str, pieces: usize) -> Option<Report> {
+        Report::new_in(&splits_dir(), label, pieces)
+    }
+    fn new_in(dir: &Path, label: &str, pieces: usize) -> Option<Report> {
+        fs::create_dir_all(dir).ok()?;
+        let id = uuid::Uuid::new_v4().to_string();
+        let lock_path = dir.join(format!("{id}.lock"));
+        let lock = File::create(&lock_path).ok()?;
+        lock.try_lock().ok()?;
+        let report = Report {
+            lock,
+            json: dir.join(format!("{id}.json")),
+            lock_path,
+            split: Split {
+                id,
+                label: label.to_owned(),
+                place: std::env::var("CORRAL_PLACE").unwrap_or_default(),
+                cwd: std::env::current_dir()
+                    .map(|d| d.display().to_string())
+                    .unwrap_or_default(),
+                pieces,
+                started: now(),
+                ..Split::default()
+            },
+        };
+        report.write();
+        Some(report)
+    }
+    pub fn write(&self) {
+        let temporary = self.json.with_extension("tmp");
+        if serde_json::to_vec(&self.split)
+            .ok()
+            .and_then(|b| fs::write(&temporary, b).ok())
+            .is_some()
+        {
+            let _ = fs::rename(temporary, &self.json);
+        }
+    }
+}
+impl Drop for Report {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.json);
+        let _ = self.lock.unlock();
+        let _ = fs::remove_file(&self.lock_path);
+    }
+}
 /// Seconds since a time as tickets write it (`2026-10-29T15:00:00.000Z`).
 pub fn seconds_since(time: &str) -> u64 {
     let field = |a: usize, b: usize| time.get(a..b).and_then(|f| f.parse::<i64>().ok());
@@ -371,6 +503,49 @@ pub fn say(line: &str) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_split_has_as_long_left_as_its_pieces_at_the_pace_of_those_done() {
+        let mut split = Split {
+            pieces: 10,
+            done: 2,
+            started: 1000,
+            running: vec![1500, 1550],
+            took: vec![400.0, 500.0],
+            ..Split::default()
+        };
+        // Nothing done yet: no guess.
+        assert_eq!(
+            Split {
+                took: vec![],
+                ..split.clone()
+            }
+            .left(1600),
+            None
+        );
+        // Two under way, 350 s and 400 s from done at 450 s a piece; six more, two at a time.
+        assert_eq!(split.left(1600), Some((350 + 400 + 6 * 450) / 2));
+        // The last pieces: as long as the slowest of them.
+        split.done = 8;
+        assert_eq!(split.left(1600), Some(400));
+        // Running over the pace counts as nearly done, never as negative.
+        assert_eq!(split.left(9000), Some(0));
+    }
+    #[test]
+    fn a_split_is_listed_while_its_report_lives() {
+        let dir = std::env::temp_dir().join(format!("render-queue-test-{}", uuid::Uuid::new_v4()));
+        let mut report = Report::new_in(&dir, "4K recut", 4).unwrap();
+        report.split.done = 1;
+        report.split.took.push(60.0);
+        report.write();
+        let listed = splits_in(&dir);
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].label, "4K recut");
+        assert!(listed[0].left.is_some());
+        drop(report);
+        assert!(splits_in(&dir).is_empty());
+        let _ = fs::remove_dir_all(dir);
+    }
+
     use super::*;
 
     #[test]

@@ -690,6 +690,19 @@
 .corral-at-work .corral-working {
   display: none;
 }
+.corral-split-bar {
+  display: block;
+  height: 4px;
+  margin: 4px 0 2px;
+  border-radius: 2px;
+  background: var(--theme-surface-raised);
+  overflow: hidden;
+}
+.corral-split-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--theme-accent);
+}
 .corral-work {
   flex: 1;
   min-height: 0;

@@ -297,7 +297,7 @@ pub(crate) fn run(render: Render) -> ExitCode {
     // another Mac. Once none is left, an idle Mac takes a copy of the oldest piece still under way
     // on another, and whichever copy finishes first is used, so one slow Mac does not hold up the
     // rest.
-    let board = Arc::new(Mutex::new(Board::new(pieces.clone())));
+    let board = Arc::new(Mutex::new(Board::new(pieces.clone(), &render.label)));
     let run = |place: &Place, piece: &Piece, stop: &std::sync::atomic::AtomicBool| match place {
         Place::Here => piece_here(&render, piece, &pieces_dir, stop),
         Place::Mac(m) => piece_there(m, &render, &rel, piece, &pieces_dir, stop),
@@ -404,15 +404,35 @@ pub(crate) struct Board {
     running: Vec<Running>,
     pub done: Vec<(usize, PathBuf, String)>,
     pub broken: Option<String>,
+    /// How it is going, for Corral's Renders to show with the time left.
+    report: Option<queue::Report>,
 }
 impl Board {
-    /// A board with every piece waiting.
-    pub fn new(pieces: Vec<Piece>) -> Board {
+    /// A board with every piece waiting, saying how it goes under `label`.
+    pub fn new(pieces: Vec<Piece>, label: &str) -> Board {
         Board {
             all: pieces.clone(),
+            report: queue::Report::new(label, pieces.len()),
             todo: pieces,
             ..Board::default()
         }
+    }
+    /// Writes how it is going: pieces done, and when each under way began (the first copy's).
+    fn publish(&mut self, took: Option<f64>) {
+        let Some(report) = self.report.as_mut() else {
+            return;
+        };
+        let mut running: Vec<(usize, u64)> = Vec::new();
+        for r in &self.running {
+            match running.iter_mut().find(|(n, _)| *n == r.n) {
+                Some(seen) => seen.1 = seen.1.min(r.at),
+                None => running.push((r.n, r.at)),
+            }
+        }
+        report.split.running = running.into_iter().map(|(_, at)| at).collect();
+        report.split.done = self.done.len();
+        report.split.took.extend(took);
+        report.write();
     }
 }
 /// A copy of a piece under way: where, since when, and a flag that stops it.
@@ -420,6 +440,8 @@ struct Running {
     n: usize,
     place: String,
     since: Instant,
+    /// The same, in seconds since 1970.
+    at: u64,
     stop: Arc<std::sync::atomic::AtomicBool>,
 }
 /// One of a machine's places for pieces: takes the next piece, or a copy of a slow one, until
@@ -453,11 +475,15 @@ pub(crate) fn work(board: &Mutex<Board>, place: &Place, count: usize, run: &Runn
                     n: p.n,
                     place: name.clone(),
                     since: Instant::now(),
+                    at: queue::now(),
                     stop: stop.clone(),
                 });
                 (p, stop)
             })
         };
+        if next.is_some() {
+            board.lock().unwrap().publish(None);
+        }
         let Some((piece, stop)) = next else {
             std::thread::sleep(Duration::from_secs(2));
             continue;
@@ -466,6 +492,7 @@ pub(crate) fn work(board: &Mutex<Board>, place: &Place, count: usize, run: &Runn
         let result = run(place, &piece, &stop);
         let mut b = board.lock().unwrap();
         b.running.retain(|r| !(r.n == piece.n && r.place == name));
+        b.publish(None);
         let others = b.running.iter().filter(|r| r.n == piece.n).count();
         match result {
             Ok(file) if b.done.iter().any(|(n, _, _)| *n == piece.n) => {
@@ -483,6 +510,7 @@ pub(crate) fn work(board: &Mutex<Board>, place: &Place, count: usize, run: &Runn
                     took(began.elapsed())
                 ));
                 b.done.push((piece.n, file, name.clone()));
+                b.publish(Some(began.elapsed().as_secs_f64()));
                 // The other copy, if any, is not needed now.
                 for r in b.running.iter().filter(|r| r.n == piece.n) {
                     r.stop.store(true, Ordering::Relaxed);

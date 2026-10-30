@@ -139,6 +139,8 @@ exit status, and its log's end), `GET …/files?paths=` (a tar stream out), and 
 
 ### Split renders
 
+While a split runs, `render-slot` keeps a note of it in `splits/` in the queue's folder (beside a lock it holds, so one that dies is not listed): its label, its place, how many pieces there are and how many are done, how long each done piece took, and when each piece under way began. Corral's Renders reads it and works out about how long is left: the pieces under way finish at the pace of those done, and the rest follow as many at a time as run now.
+
 A whole-video render from the house Chrome renderer (a `tools/render.mjs` that takes
 `--from`/`--to`, `--audio-only`, `--keep-audio`, and `--print-segments`) is spread across the farm
 by `render-slot` itself, with nothing asked of whoever runs it:
