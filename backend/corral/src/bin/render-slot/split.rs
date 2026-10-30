@@ -142,7 +142,7 @@ impl Piece {
 
 /// `count` pieces of a video, on whole seconds, each starting where the last ended; the last
 /// runs to the end, however long the renderer finds it to be.
-fn cut(duration: f64, count: usize) -> Vec<Piece> {
+pub(crate) fn cut(duration: f64, count: usize) -> Vec<Piece> {
     (0..count)
         .map(|n| Piece {
             n,
@@ -167,12 +167,35 @@ fn seconds(path: &Path) -> Option<f64> {
         .ok()?;
     String::from_utf8_lossy(&out.stdout).trim().parse().ok()
 }
+/// One kind of machine per video: macOS and Linux Chrome smooth text a shade differently, so the
+/// pieces all come from the Macs when two or more can take them, or all from here. Says which.
+fn one_kind(ready: Vec<(Place, usize)>) -> (Vec<(Place, usize)>, bool) {
+    let (macs, here): (Vec<_>, Vec<_>) = ready
+        .into_iter()
+        .partition(|(p, _)| matches!(p, Place::Mac(_)));
+    if macs.len() >= 2 {
+        (macs, true)
+    } else {
+        (here, false)
+    }
+}
 /// This machine's `render-slot`, for the runs a split render makes here, which are not split again.
-fn me() -> Command {
-    let mut command =
-        Command::new(std::env::current_exe().unwrap_or_else(|_| PathBuf::from("render-slot")));
+pub(crate) fn me() -> Command {
+    let mut command = Command::new(program());
     command.env("RENDER_SPLIT", "0");
     command
+}
+/// Where this program is. On Linux, one updated while a split render runs reads as
+/// `… (deleted)`, and the new one is at the same place.
+fn program() -> PathBuf {
+    std::env::current_exe()
+        .ok()
+        .map(|p| {
+            let path = p.to_string_lossy();
+            PathBuf::from(path.strip_suffix(" (deleted)").unwrap_or(&path).to_owned())
+        })
+        .filter(|p| p.is_file())
+        .unwrap_or_else(|| PathBuf::from("render-slot"))
 }
 
 /// Renders a whole video in pieces across the farm, and exits with how it went.
@@ -246,6 +269,7 @@ pub(crate) fn run(render: Render) -> ExitCode {
             .filter_map(|j| j.join().ok().flatten())
             .collect()
     });
+    let (ready, on_macs) = one_kind(ready);
     let slots: usize = ready.iter().map(|(_, n)| n).sum();
     // More pieces than places, so a machine that finishes early takes another.
     let count = ((duration / PIECE).floor() as usize).min(slots * 2).max(1);
@@ -269,9 +293,10 @@ pub(crate) fn run(render: Render) -> ExitCode {
     if let Err(e) = std::fs::create_dir_all(&pieces_dir) {
         return fail(&e.to_string());
     }
-    // Each machine takes the next piece whenever it has room; one that fails on a Mac runs here.
-    // Once none is left, an idle Mac takes a copy of the oldest piece still under way elsewhere,
-    // and whichever copy finishes first is used, so one slow machine does not hold up the rest.
+    // Each machine takes the next piece whenever it has room; one that fails on a Mac goes to
+    // another Mac. Once none is left, an idle Mac takes a copy of the oldest piece still under way
+    // on another, and whichever copy finishes first is used, so one slow Mac does not hold up the
+    // rest.
     let board = Arc::new(Mutex::new(Board::new(pieces.clone())));
     let run = |place: &Place, piece: &Piece, stop: &std::sync::atomic::AtomicBool| match place {
         Place::Here => piece_here(&render, piece, &pieces_dir, stop),
@@ -285,6 +310,12 @@ pub(crate) fn run(render: Render) -> ExitCode {
     }
     let mut done = board.done;
     done.sort_by_key(|(n, _, _)| *n);
+    // Every Mac gave up before the end: the whole video here, rather than a mix of the two.
+    if on_macs && done.len() < count {
+        let _ = std::fs::remove_dir_all(&pieces_dir);
+        queue::say("the Macs could not finish it; rendering it whole here");
+        return whole(&render);
+    }
     // The pictures in order, under the one mix.
     if done.len() != count || done.iter().any(|(_, f, _)| !f.is_file()) {
         let _ = std::fs::remove_dir_all(&pieces_dir);
@@ -476,7 +507,7 @@ fn work(board: &Mutex<Board>, place: &Place, count: usize, run: &Runner) {
         }
     }
 }
-fn took(d: Duration) -> String {
+pub(crate) fn took(d: Duration) -> String {
     let s = d.as_secs();
     if s < 60 {
         format!("{s} s")
@@ -575,25 +606,7 @@ fn piece_here(
         .stderr(errors)
         .spawn()
         .map_err(|e| e.to_string())?;
-    // It runs until it ends, or until the other copy of the piece has finished first.
-    let status = loop {
-        if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
-            break status;
-        }
-        if stop.load(std::sync::atomic::Ordering::Relaxed) {
-            // A polite stop, so the renderer closes its Chrome and encoders.
-            #[cfg(unix)]
-            // SAFETY: a signal to the piece's own process, which this one started.
-            unsafe {
-                libc::kill(child.id() as i32, libc::SIGTERM);
-            }
-            #[cfg(not(unix))]
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err("stopped".into());
-        }
-        std::thread::sleep(Duration::from_secs(1));
-    };
+    let status = finish(&mut child, stop)?;
     if !status.success() {
         let tail = std::fs::read_to_string(&log).unwrap_or_default();
         return Err(tail.lines().rev().take(3).collect::<Vec<_>>().join(" / "));
@@ -624,6 +637,31 @@ fn piece_here(
         })
         .map_err(|e| e.to_string())?;
     Ok(kept)
+}
+/// Waits for a piece's run here to end, or stops it once the other copy of the piece has
+/// finished first.
+pub(crate) fn finish(
+    child: &mut std::process::Child,
+    stop: &std::sync::atomic::AtomicBool,
+) -> Result<std::process::ExitStatus, String> {
+    loop {
+        if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
+            return Ok(status);
+        }
+        if stop.load(std::sync::atomic::Ordering::Relaxed) {
+            // A polite stop, so the renderer closes its Chrome and encoders.
+            #[cfg(unix)]
+            // SAFETY: a signal to the piece's own process, which this one started.
+            unsafe {
+                libc::kill(child.id() as i32, libc::SIGTERM);
+            }
+            #[cfg(not(unix))]
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("stopped".into());
+        }
+        std::thread::sleep(Duration::from_secs(1));
+    }
 }
 fn piece_there(
     machine: &Machine,
@@ -864,6 +902,29 @@ mod tests {
         }
         assert_eq!(pieces[13].to, None);
         assert_eq!(cut(30.0, 1)[0].to, None);
+    }
+
+    #[test]
+    fn a_video_is_made_on_the_macs_or_here_never_both() {
+        let mac = |name: &str| {
+            (
+                Place::Mac(Machine {
+                    name: name.into(),
+                    url: String::new(),
+                    key: String::new(),
+                }),
+                1,
+            )
+        };
+        let names = |places: &[(Place, usize)]| -> Vec<String> {
+            places.iter().map(|(p, _)| p.name()).collect()
+        };
+        let (two, on_macs) = one_kind(vec![(Place::Here, 4), mac("mini"), mac("studio")]);
+        assert!(on_macs);
+        assert_eq!(names(&two), ["mini", "studio"]);
+        let (one, on_macs) = one_kind(vec![(Place::Here, 4), mac("mini")]);
+        assert!(!on_macs);
+        assert_eq!(names(&one), [here()]);
     }
 
     #[test]

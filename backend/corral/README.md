@@ -144,22 +144,26 @@ A whole-video render from the house Chrome renderer (a `tools/render.mjs` that t
 by `render-slot` itself, with nothing asked of whoever runs it:
 
 1. The soundtrack is mixed once, here (`--audio-only`).
-2. The video is cut on whole seconds into pieces, about twice as many as there are places to run
-   them (tars takes four at once at 6 cores each; each Mac, one).
-3. Each machine is handed the next piece whenever it has room. Once none is left, an idle Mac
-   takes a copy of the oldest piece still under way elsewhere; whichever copy finishes first is
-   used and the other is stopped, so a slow or busy machine does not hold up the rest. Only Macs
-   take copies, so tars stays free for other jobs.
+2. Every piece of a video comes from one kind of machine, since macOS and Linux Chrome smooth
+   text a shade differently: the Macs when two or more of them can take pieces, otherwise tars
+   (four at once at 6 cores each).
+3. The video is cut on whole seconds into pieces, about twice as many as there are places to run
+   them, and each machine is handed the next piece whenever it has room. On the Macs, once none
+   is left, an idle Mac takes a copy of the oldest piece still under way on another; whichever
+   copy finishes first is used and the other is stopped, so a slow or busy Mac does not hold up
+   the rest.
 4. A Mac renders in its copy of the project (`~/.cache/corral-farm/projects/…`, synced with rsync,
    without `out/`, `.git/`, or `work/`), with Playwright's Chrome for macOS behind a shim at the
-   Linux path the renderer looks in; a piece that fails there runs on tars, and that Mac takes no
-   more. Copies unused for three days are removed.
+   Linux path the renderer looks in; a piece that fails there goes to another Mac, and that Mac
+   takes no more. If every Mac gives up, the whole video renders on tars instead. Copies unused
+   for three days are removed.
 5. The pieces' pictures are joined in order under the one mix, as the renderer joins its own
    workers'; a join that does not match the soundtrack's length fails.
 
 macOS and Linux Chrome draw a frame alike except for text anti-aliasing (a 340 s test: 99.9% of
-pixels identical, the rest at glyph edges), so text held across a seam may change by a shade for
-one frame. Seams fall on whole seconds. `RENDER_SPLIT=0` renders whole, here.
+pixels identical, the rest at glyph edges), so a video made on the Macs can differ from one made
+on tars by that shade, but never from piece to piece. Seams fall on whole seconds.
+`RENDER_SPLIT=0` renders whole, here.
 
 A Blender render of a frame range (`blender … -P script.py -- … --frames A-B`, at least 16
 frames) is spread the same way, but never across two kinds of GPU, since Eevee and Cycles do not
@@ -178,3 +182,12 @@ draw quite alike on each:
    project, where Blender would have written it. A group that renders nothing (a script that
    does not run on Windows, say) gives the whole job to the next group, which cuts it for its
    own machines; ranges no group could render run here.
+
+A documentary's whole picture from Moving Records' editor (`python tools/edit.py <ep>`, a copy in
+each project, which renders any stretch with `--range a,b` to the file `--out` names) is cut on
+whole seconds into pieces of at least 30 s, about twice as many as fit here at once (6 cores
+each), and they run side by side through this machine's queue. Each copy of the editor works out
+its length and file its own way, so `render-slot` asks it: the editor runs inside a small Python
+wrapper until it would start its encoder, and reports its length, frame rate, and file. One that
+ends before then (stills, a sheet, a report) runs as it is. The pieces are joined into that file,
+and each piece and the whole must have exactly the frames the editor would have rendered.

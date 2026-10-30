@@ -1,6 +1,7 @@
 //! `render-slot`: runs a heavy job (a Blender render, an ffmpeg encode or upscale, a headless
 //! Chrome render, Whisper) when this machine's render queue gives it a turn, and shows the queue.
 mod blender;
+mod edit;
 mod split;
 
 use corral::queue;
@@ -120,6 +121,9 @@ fn run(args: &[String]) -> ExitCode {
         if let Some(code) = blender::run(job) {
             return code;
         }
+    } else if let Some(edit) = edit::job(command, &label) {
+        // A documentary's whole picture: in pieces side by side here.
+        return edit::run(edit);
     }
     let place = match queue::take(queue::ticket(command, &label, cores, gpu), |ahead| {
         queue::say(&format!("waiting: {ahead} in line before this job"));

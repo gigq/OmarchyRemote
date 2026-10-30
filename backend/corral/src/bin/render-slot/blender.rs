@@ -331,8 +331,7 @@ pub(crate) fn run(job: Job) -> Option<ExitCode> {
     for piece in left.unwrap_or_default() {
         let mut args = job.args.clone();
         args[job.frames_at] = format!("{}-{}", piece.from, piece.to.unwrap_or(job.last));
-        let status = Command::new(std::env::current_exe().unwrap_or_else(|_| "render-slot".into()))
-            .env("RENDER_SPLIT", "0")
+        let status = super::split::me()
             .args(["run", "--gpu", "--cores", "4", "--label"])
             .arg(format!("{} · {}", job.label, piece.span()))
             .arg("--")
